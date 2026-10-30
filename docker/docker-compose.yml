@@ -162,6 +162,7 @@ services:
       JXF_ENV: ${JXF_ENV:-production}
       JXF_LOG_LEVEL: ${JXF_LOG_LEVEL:-info}
       JXF_VERSION: ${JXF_VERSION:-0.1.0-p0}
+      JXF_SITE_NAME: ${JXF_SITE_NAME:-Jxf-AI}
       JXF_TENANT_ID: ${JXF_TENANT_ID:?JXF_TENANT_ID 不能为空}
       # fail-closed：缺失 / 过短 / 弱值将拒绝启动
       JXF_AUTH_SECRET: ${JXF_AUTH_SECRET:?JXF_AUTH_SECRET 不能为空}

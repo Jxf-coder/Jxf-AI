@@ -1,7 +1,6 @@
 import { headers } from "next/headers";
 
-import { Sidebar } from "@/components/shell/Sidebar";
-import { Topbar } from "@/components/shell/Topbar";
+import { Shell } from "@/components/shell/Shell";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext } from "@/lib/db/user-context";
 import { errorMessage, log } from "@/lib/logger";
@@ -19,12 +18,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="app-shell">
-      <Sidebar />
-      <div className="app-body">
-        <Topbar email={user.email} name={user.name} accessLevel={accessLevel} />
-        <main className="app-main">{children}</main>
-      </div>
-    </div>
+    <Shell
+      email={user.email}
+      name={user.name}
+      accessLevel={accessLevel}
+      siteName={process.env.JXF_SITE_NAME?.trim() || "Jxf-AI"}
+    >
+      {children}
+    </Shell>
   );
 }
