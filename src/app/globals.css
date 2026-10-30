@@ -1134,6 +1134,11 @@ a.nav-item:hover {
     display: inline-flex;
   }
 
+  /* 平板与手机顶栏左侧都保留纯文字 Logo */
+  .topbar-logo {
+    display: inline-block;
+  }
+
   .topbar-inner {
     height: 3.25rem;
     padding: 0 1rem;
@@ -1172,9 +1177,5 @@ a.nav-item:hover {
 @media (max-width: 767px) {
   .search {
     display: none;
-  }
-
-  .topbar-logo {
-    display: inline-block;
   }
 }
