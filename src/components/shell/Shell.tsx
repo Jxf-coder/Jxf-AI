@@ -96,9 +96,9 @@ export function Shell({ email, name, accessLevel, siteName, children }: ShellPro
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <Link href="/org/positions" className="sidebar-brand">
+        <div className="sidebar-header">
           <span className="sidebar-brand-text">{siteName}</span>
-        </Link>
+        </div>
 
         <nav className="sidebar-nav" aria-label="主导航">
           {NAV_ITEMS.map((item) => renderNavItem(item))}

@@ -30,8 +30,8 @@
   --glass: rgba(255, 255, 255, 0.72);
   --glass-strong: rgba(255, 255, 255, 0.86);
   --sidebar-glass: rgba(246, 246, 248, 0.72);
-  --hover: rgba(120, 120, 128, 0.08);
-  --pressed: rgba(120, 120, 128, 0.14);
+  --hover: rgba(120, 120, 128, 0.05);
+  --active: rgba(0, 113, 227, 0.07);
 
   --ok: #1d8a45;
   --error: #c4372f;
@@ -63,14 +63,15 @@ body {
   padding: 0;
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 0.9375rem;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
+/* 正文基准字号相对流式根字号，不覆盖 html 的 clamp */
 body {
   min-height: 100vh;
+  font-size: 0.9375rem;
   background-color: var(--bg);
   background-image:
     radial-gradient(62rem 38rem at 12% -10%, rgba(0, 113, 227, 0.14), transparent 60%),
@@ -108,24 +109,22 @@ a {
   width: var(--sidebar-w);
   flex: 0 0 var(--sidebar-w);
   height: 100vh;
-  padding: 1.125rem 0.75rem 0.875rem;
+  padding: 0 0.75rem 0.875rem;
   background: var(--sidebar-glass);
   backdrop-filter: blur(30px) saturate(180%);
   -webkit-backdrop-filter: blur(30px) saturate(180%);
   border-right: 1px solid var(--separator);
 }
 
-/* 纯文字 Logo：后续由企业设置覆盖 JXF_SITE_NAME */
-.sidebar-brand {
+/* 品牌区与右侧 Top-Bar 同构：3.5rem 内容 + 1px 发丝线，边框 y 完全重合 */
+.sidebar-header {
   display: flex;
+  flex: 0 0 calc(3.5rem + 1px);
   align-items: center;
-  min-height: 2rem;
-  padding: 0.25rem 0.625rem 0.875rem;
-  color: var(--text);
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  text-decoration: none;
+  height: calc(3.5rem + 1px);
+  margin: 0 -0.75rem;
+  padding: 0 1.375rem;
+  border-bottom: 1px solid var(--separator);
 }
 
 .sidebar-brand-text {
@@ -139,6 +138,8 @@ a {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .nav-item {
@@ -154,17 +155,18 @@ a {
   transition: background-color 0.16s ease, color 0.16s ease;
 }
 
+/* 轻量高亮：极低饱和的半透明底 + 加粗文字 + 主色图标 */
 a.nav-item:hover {
   background: var(--hover);
   color: var(--text);
 }
 
 a.nav-item:active {
-  background: var(--pressed);
+  background: rgba(120, 120, 128, 0.09);
 }
 
 .nav-item.is-active {
-  background: var(--pressed);
+  background: var(--active);
   color: var(--text);
   font-weight: 600;
 }
@@ -543,7 +545,7 @@ a.nav-item:active {
   display: flex;
   flex-direction: column;
   width: 80vw;
-  padding: 1rem 0.75rem 1rem;
+  padding: 0 0.75rem 1rem;
   background: rgba(246, 246, 248, 0.9);
   backdrop-filter: blur(32px) saturate(180%);
   -webkit-backdrop-filter: blur(32px) saturate(180%);
@@ -553,9 +555,18 @@ a.nav-item:active {
 
 .drawer-header {
   display: flex;
+  flex: 0 0 calc(3.25rem + 1px);
   align-items: center;
   justify-content: space-between;
-  padding: 0.25rem 0.5rem 1rem;
+  height: calc(3.25rem + 1px);
+  margin: 0 -0.75rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--separator);
+}
+
+.drawer .sidebar-nav {
+  overflow-y: auto;
+  padding-top: 0.5rem;
 }
 
 .drawer-bottom {
