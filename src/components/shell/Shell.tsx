@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
+import { CommandPalette } from "@/components/shell/CommandPalette";
 import { ProfileMenu } from "@/components/shell/ProfileMenu";
 
 interface ShellProps {
@@ -36,21 +37,28 @@ function IconOrg() {
   );
 }
 
+function IconSearch() {
+  return (
+    <svg className="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <circle cx="9" cy="9" r="5.4" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M13.2 13.2l3.4 3.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /** 只放已经落地的入口；未开发的功能不占位，避免出现空壳项 */
 const NAV_ITEMS: NavItem[] = [{ label: "组织与岗位", href: "/org/positions", icon: <IconOrg /> }];
 
 export function Shell({ email, name, accessLevel, siteName, children }: ShellProps) {
   const pathname = usePathname();
-  const searchRef = useRef<HTMLInputElement>(null);
-  const [searchNotice, setSearchNotice] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        searchRef.current?.focus();
-        searchRef.current?.select();
+        setPaletteOpen(true);
       }
       if (event.key === "Escape") {
         setDrawerOpen(false);
@@ -112,55 +120,34 @@ export function Shell({ email, name, accessLevel, siteName, children }: ShellPro
       <div className="app-body">
         <header className="topbar">
           <div className="topbar-inner">
-            <div className="topbar-left">
-              <span className="topbar-logo">{siteName}</span>
-            </div>
+            <span className="topbar-logo">{siteName}</span>
 
-            <form
+            <button
+              type="button"
               className="search"
-              role="search"
-              onSubmit={(event: FormEvent<HTMLFormElement>) => {
-                event.preventDefault();
-                setSearchNotice("全局搜索将在 P3 随运行态上线，当前仅支持岗位与权限页面内浏览。");
-              }}
+              onClick={() => setPaletteOpen(true)}
+              aria-haspopup="dialog"
+              aria-label="打开全局搜索"
             >
-              <svg className="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <circle cx="9" cy="9" r="5.4" stroke="currentColor" strokeWidth="1.6" />
-                <path d="M13.2 13.2l3.4 3.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-              <input
-                ref={searchRef}
-                className="search-input"
-                type="search"
-                placeholder="搜索岗位、成员、审计"
-                aria-label="全局搜索"
-                onChange={() => setSearchNotice(null)}
-              />
+              <IconSearch />
+              <span className="search-label">搜索岗位、成员、审计</span>
               <kbd className="search-kbd" title="⌘K / Ctrl K">
                 ⌘K
               </kbd>
-            </form>
+            </button>
 
-            <div className="topbar-right">
-              <button
-                type="button"
-                className="burger"
-                onClick={() => setDrawerOpen(true)}
-                aria-label="打开导航菜单"
-                aria-expanded={drawerOpen}
-              >
-                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                  <path d="M3.2 6h13.6M3.2 10h13.6M3.2 14h13.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
+            <button
+              type="button"
+              className="burger"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="打开导航菜单"
+              aria-expanded={drawerOpen}
+            >
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M3.2 6h13.6M3.2 10h13.6M3.2 14h13.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
           </div>
-
-          {searchNotice ? (
-            <p className="search-notice" role="status">
-              {searchNotice}
-            </p>
-          ) : null}
         </header>
 
         <main className="app-main">{children}</main>
@@ -183,6 +170,21 @@ export function Shell({ email, name, accessLevel, siteName, children }: ShellPro
                 </svg>
               </button>
             </div>
+
+            <button
+              type="button"
+              className="drawer-search"
+              onClick={() => {
+                setDrawerOpen(false);
+                setPaletteOpen(true);
+              }}
+              aria-haspopup="dialog"
+              aria-label="打开全局搜索"
+            >
+              <IconSearch />
+              <span className="search-label">搜索岗位、成员或页面</span>
+            </button>
+
             <nav className="sidebar-nav" aria-label="主导航">
               {NAV_ITEMS.map((item) => renderNavItem(item))}
             </nav>
@@ -197,6 +199,8 @@ export function Shell({ email, name, accessLevel, siteName, children }: ShellPro
           </aside>
         </div>
       ) : null}
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }

@@ -235,45 +235,52 @@ a.nav-item:hover {
 .topbar-inner {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 72rem;
   height: 3.5rem;
-  padding: 0 1.5rem;
-}
-
-.topbar-left,
-.topbar-right {
-  flex: 1;
-  display: flex;
-  align-items: center;
-}
-
-.topbar-right {
-  justify-content: flex-end;
+  margin: 0 auto;
+  padding: 0 2rem;
 }
 
 .topbar-logo {
   display: none;
+  margin-right: auto;
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--text);
 }
 
+/* 搜索入口：外观像输入框，点击唤起 Command Palette */
 .search {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  width: min(27.5rem, 46vw);
+  width: min(22rem, 36vw);
+  margin-left: auto;
   padding: 0.4375rem 0.625rem;
+  border: 0;
   border-radius: var(--radius-sm);
   background: rgba(120, 120, 128, 0.1);
-  transition: background-color 0.16s ease, box-shadow 0.16s ease;
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.16s ease;
 }
 
-.search:focus-within {
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.18), 0 2px 10px rgba(0, 0, 0, 0.05);
+.search:hover {
+  background: rgba(120, 120, 128, 0.15);
+}
+
+.search-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .search-icon {
@@ -281,27 +288,6 @@ a.nav-item:hover {
   height: 1rem;
   flex: 0 0 1rem;
   color: var(--text-tertiary);
-}
-
-.search-input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  font-family: inherit;
-  font-size: 0.8125rem;
-  outline: none;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-.search-input::placeholder {
-  color: var(--text-tertiary);
-}
-
-.search-input::-webkit-search-cancel-button {
-  -webkit-appearance: none;
 }
 
 .search-kbd {
@@ -315,14 +301,6 @@ a.nav-item:hover {
   font-size: 0.65625rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-}
-
-.search-notice {
-  margin: 0;
-  padding: 0.5rem 1.5rem 0.625rem;
-  border-top: 1px solid var(--separator);
-  color: var(--text-secondary);
-  font-size: 0.75rem;
 }
 
 .burger {
@@ -562,7 +540,29 @@ a.nav-item:hover {
 
 .drawer .sidebar-nav {
   overflow-y: auto;
-  padding-top: 0.75rem;
+  padding-top: 0.25rem;
+}
+
+/* 抽屉顶部搜索入口 */
+.drawer-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0.75rem 0 0.25rem;
+  padding: 0.5rem 0.625rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: rgba(120, 120, 128, 0.1);
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.drawer-search:hover {
+  background: rgba(120, 120, 128, 0.15);
 }
 
 .drawer-bottom {
@@ -612,6 +612,124 @@ a.nav-item:hover {
   to {
     transform: translateX(0);
   }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Command Palette（⌘K）                                                       */
+/* ------------------------------------------------------------------------- */
+
+.palette-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 1rem 1rem;
+}
+
+.palette-backdrop {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  cursor: default;
+  animation: fade-in 0.16s ease;
+}
+
+.palette {
+  position: relative;
+  width: min(38rem, 100%);
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(36px) saturate(180%);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.22), var(--hairline);
+  animation: palette-in 0.18s cubic-bezier(0.25, 0.8, 0.3, 1);
+}
+
+@keyframes palette-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.palette-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--separator);
+}
+
+.palette-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1rem;
+  outline: none;
+}
+
+.palette-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.palette-list {
+  max-height: 18rem;
+  padding: 0.375rem;
+  overflow-y: auto;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 0;
+  border-radius: 0.625rem;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.palette-item.is-active {
+  background: rgba(0, 113, 227, 0.08);
+}
+
+.palette-item-hint {
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+}
+
+.palette-empty {
+  margin: 0;
+  padding: 1rem 0.75rem;
+  color: var(--text-tertiary);
+  font-size: 0.8125rem;
+}
+
+.palette-footer {
+  padding: 0.5rem 0.875rem;
+  border-top: 1px solid var(--separator);
+  color: var(--text-tertiary);
+  font-size: 0.6875rem;
 }
 
 .app-main {
@@ -1001,9 +1119,10 @@ a.nav-item:hover {
 }
 
 /* ------------------------------------------------------------------------- */
-/* 自适应：两套断点                                                           */
-/*  < 1024px  隐藏固定侧栏，顶栏文字 Logo + 汉堡 + 80vw 抽屉                    */
-/*  >= 1024px 15rem 毛玻璃侧栏（文字 Logo + 底部 Profile）                      */
+/* 自适应                                                                     */
+/*  <768     手机：Logo + 汉堡，搜索入口在抽屉内                                */
+/*  768-1023 平板：缩短搜索 + 汉堡                                             */
+/*  >=1024   桌面：完整搜索右对齐，与主卡片容器同宽                              */
 /* ------------------------------------------------------------------------- */
 
 @media (max-width: 1023px) {
@@ -1011,21 +1130,13 @@ a.nav-item:hover {
     display: none;
   }
 
-  .search {
-    display: none;
-  }
-
   .burger {
     display: inline-flex;
   }
 
-  .topbar-logo {
-    display: inline-block;
-  }
-
   .topbar-inner {
     height: 3.25rem;
-    padding: 0 0.875rem;
+    padding: 0 1rem;
   }
 
   .app-main {
@@ -1045,5 +1156,25 @@ a.nav-item:hover {
 
   .section-title {
     font-size: 1.3125rem;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .search {
+    width: 13rem;
+  }
+
+  .search-kbd {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .search {
+    display: none;
+  }
+
+  .topbar-logo {
+    display: inline-block;
   }
 }
