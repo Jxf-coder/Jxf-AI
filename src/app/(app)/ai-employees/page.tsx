@@ -169,15 +169,13 @@ export default async function AiEmployeesPage() {
             <label>
               类型
               <select name="kind" defaultValue="child">
-                <option value="root">root</option>
                 <option value="child">child</option>
                 <option value="seat">seat</option>
               </select>
             </label>
             <label>
-              上级岗位（root 可留空）
-              <select name="parentId" defaultValue="">
-                <option value="">（无 / root）</option>
+              上级岗位
+              <select name="parentId" required>
                 {data.roles.map((role) => (
                   <option key={role.id} value={role.id}>
                     {role.name} · {role.slug}

@@ -26,7 +26,7 @@ create policy roles_insert on roles
   with check (
     app.current_access_level() = 'L1'
     and tenant_id = app.current_tenant_id()
-    and (parent_id is null or app.can_write(parent_id))
+    and (parent_id is null or app.can_read(parent_id))
   );
 
 drop policy if exists roles_update on roles;
@@ -36,7 +36,7 @@ create policy roles_update on roles
   with check (
     app.current_access_level() = 'L1'
     and tenant_id = app.current_tenant_id()
-    and (parent_id is null or app.can_write(parent_id))
+    and (parent_id is null or app.can_read(parent_id))
   );
 
 drop policy if exists roles_delete on roles;

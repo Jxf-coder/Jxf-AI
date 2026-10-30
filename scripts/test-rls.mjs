@@ -4,6 +4,8 @@
  *
  * 运行：npm run test:rls
  */
+import { randomUUID } from "node:crypto";
+
 import { Client } from "pg";
 
 const TENANT = process.env.RLS_TEST_TENANT ?? "11111111-1111-4111-8111-111111111111";
@@ -236,21 +238,35 @@ async function main() {
   );
   check("seat 越权创建岗位被拒绝", deniedWrite.ok, deniedWrite.error ? `code=${deniedWrite.error.code}` : "未报错");
 
-  // 9. 删除最后一个 L1 → 事务回滚
+  // 9. L1 可在可读子树内创建岗位（root L1 在 child 下建 seat）
+  const createdRoleId = randomUUID();
+  await runAs(rootUser, (client) =>
+    client.query(
+      `insert into roles (id, tenant_id, parent_id, kind, slug, name)
+       values ($1, $2, $3, 'seat', 'rls-l1-created', 'L1 Created')`,
+      [createdRoleId, TENANT, fixtures.childId],
+    ),
+  );
+  const createdRole = await withClient(OWNER_URL, (client) =>
+    client.query("select id from roles where id = $1", [createdRoleId]),
+  );
+  check("L1 在子树内创建岗位", createdRole.rowCount === 1, `rowCount=${createdRole.rowCount}`);
+
+  // 10. 删除最后一个 L1 → 事务回滚
   const lastL1 = await expectError(
     () => runAs(rootUser, (client) => client.query("select app.remove_membership($1)", [fixtures.membershipOfU5])),
     "23514",
   );
   check("删除最后一个 L1 被拒绝", lastL1.ok, lastL1.error ? `code=${lastL1.error.code}` : "未报错");
 
-  // 10. L1 移除 L3 任用 → 成功，且对方立即失效
+  // 11. L1 移除 L3 任用 → 成功，且对方立即失效
   await runAs(rootUser, (client) =>
     client.query("select app.remove_membership($1)", [fixtures.membershipOfU1]),
   );
   const seatAAfterRemoval = await resolveRoles(fixtures.userIds["u1@rls.test"]);
   check("移除 L3 后 role_ids 为空", seatAAfterRemoval.roleIds.length === 0, JSON.stringify(seatAAfterRemoval));
 
-  // 11. 连接角色本身无特权
+  // 12. 连接角色本身无特权
   const roleInfo = await withClient(APP_URL, (client) =>
     client.query(
       "select current_user as name, (select rolsuper from pg_roles where rolname = current_user) as is_super, (select rolbypassrls from pg_roles where rolname = current_user) as bypass_rls",

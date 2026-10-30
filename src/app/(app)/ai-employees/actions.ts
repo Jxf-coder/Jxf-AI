@@ -1,5 +1,7 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 
@@ -7,7 +9,7 @@ import { auditInTx } from "@/lib/audit";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 
-const ROLE_KINDS = ["root", "child", "seat"] as const;
+const ROLE_KINDS = ["child", "seat"] as const;
 const ACCESS_LEVELS = ["L1", "L2", "L3"] as const;
 
 function readText(formData: FormData, key: string): string {
@@ -26,7 +28,7 @@ export async function createRole(formData: FormData): Promise<void> {
   const parentId = readText(formData, "parentId");
 
   if (!ROLE_KINDS.includes(kind as (typeof ROLE_KINDS)[number])) {
-    throw new Error("岗位类型非法");
+    throw new Error("岗位类型非法（根岗位由初始化种子创建）");
   }
   if (!name || name.length > 80) {
     throw new Error("岗位名称必填且不超过 80 字符");
@@ -34,24 +36,26 @@ export async function createRole(formData: FormData): Promise<void> {
   if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(slug)) {
     throw new Error("slug 只能包含小写字母、数字与中划线");
   }
-  if (kind !== "root" && !parentId) {
+  if (!parentId) {
     throw new Error("非根岗位必须选择上级岗位");
   }
 
+  const roleId = randomUUID();
+
   await withUserContext(context, async (client) => {
-    const { rows } = await client.query<{ id: string }>(
-      `insert into roles (tenant_id, parent_id, kind, slug, name)
-       values ($1, $2, $3, $4, $5)
-       returning id`,
-      [context.tenantId, kind === "root" ? null : parentId, kind, slug, name],
+    // 不使用 INSERT ... RETURNING：新岗位尚未进入闭包，RETURNING 会触发 SELECT 策略
+    await client.query(
+      `insert into roles (id, tenant_id, parent_id, kind, slug, name)
+       values ($1, $2, $3, $4, $5, $6)`,
+      [roleId, context.tenantId, parentId, kind, slug, name],
     );
 
     await auditInTx(client, context, {
       actorUserId: context.userId,
       action: "role.created",
       targetType: "role",
-      targetId: rows[0].id,
-      payload: { kind, slug, name, parentId: parentId || null },
+      targetId: roleId,
+      payload: { kind, slug, name, parentId },
     });
   });
 
