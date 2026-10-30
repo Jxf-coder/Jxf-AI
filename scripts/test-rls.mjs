@@ -284,7 +284,18 @@ async function main() {
     JSON.stringify(seatAAfterRemoval),
   );
 
-  // 13. 连接角色本身无特权
+  // 13. L1 删除子树内子部门 → 成功；根节点不可删除 → 0 行
+  const deletedChild = await runAs(ownerUser, (client) =>
+    client.query("delete from departments where id = $1", [fixtures.grandAId]),
+  );
+  check("L1 删除子树内子部门", deletedChild.rowCount === 1, `rowCount=${deletedChild.rowCount}`);
+
+  const deleteRoot = await runAs(ownerUser, (client) =>
+    client.query("delete from departments where id = $1", [fixtures.rootId]),
+  );
+  check("根节点不可删除", deleteRoot.rowCount === 0, `rowCount=${deleteRoot.rowCount}`);
+
+  // 14. 连接角色本身无特权
   const roleInfo = await withClient(APP_URL, (client) =>
     client.query(
       "select current_user as name, (select rolsuper from pg_roles where rolname = current_user) as is_super, (select rolbypassrls from pg_roles where rolname = current_user) as bypass_rls",

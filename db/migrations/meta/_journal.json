@@ -15,6 +15,13 @@
       "when": 1793365353716,
       "tag": "0001_p1_org_departments",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793367606977,
+      "tag": "0002_p1_identity_phone",
+      "breakpoints": true
     }
   ]
 }

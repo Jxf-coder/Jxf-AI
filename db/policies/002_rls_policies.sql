@@ -40,10 +40,16 @@ create policy departments_update on departments
     and (parent_id is null or app.can_read(parent_id))
   );
 
+-- 根节点（parent_id is null）是系统控制权入口，任何角色都不可删除；
+-- 其余部门：L1 可删除自己可读子树内的任意部门（新建时用的是 can_read(parent)，删除对称）
 drop policy if exists departments_delete on departments;
 create policy departments_delete on departments
   for delete
-  using (app.current_access_level() = 'L1' and app.can_write(id));
+  using (
+    app.current_access_level() = 'L1'
+    and parent_id is not null
+    and app.can_read(id)
+  );
 
 -- ---------------------------------------------------------------------------
 -- memberships：读可见部门成员（或本人条目）；写要求 L1

@@ -7,7 +7,6 @@ export const dynamic = "force-dynamic";
 
 interface DepartmentRow {
   id: string;
-  slug: string;
   name: string;
 }
 
@@ -24,7 +23,7 @@ export default async function PermissionsPage() {
 
   const data = await withUserContext(context, async (client) => {
     const departments = await client.query<DepartmentRow>(
-      "select id, name, slug from departments order by created_at",
+      "select id, name from departments order by created_at",
     );
     const audits = await client.query<AuditRow>(
       "select id, action, created_at from audit_events order by id desc limit 10",
@@ -86,14 +85,12 @@ export default async function PermissionsPage() {
               <thead>
                 <tr>
                   <th>名称</th>
-                  <th>slug</th>
                 </tr>
               </thead>
               <tbody>
                 {data.departments.map((department) => (
                   <tr key={department.id}>
                     <td>{department.name}</td>
-                    <td className="mono">{department.slug}</td>
                   </tr>
                 ))}
               </tbody>

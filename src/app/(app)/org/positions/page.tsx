@@ -4,7 +4,13 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 
-import { addMember, createDepartment, removeMember, updateDepartment } from "./actions";
+import {
+  addMember,
+  createDepartment,
+  deleteDepartment,
+  removeMember,
+  updateDepartment,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +18,6 @@ interface DepartmentRow {
   id: string;
   parent_id: string | null;
   name: string;
-  slug: string;
 }
 
 interface MemberRow {
@@ -20,7 +25,8 @@ interface MemberRow {
   department_id: string;
   access_level: "L1" | "L2" | "L3";
   title: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   name: string | null;
 }
 
@@ -40,8 +46,14 @@ function LevelBadge({ level }: { level: "L1" | "L2" | "L3" }) {
   );
 }
 
-function MemberCard({ member }: { member: MemberRow }) {
-  const displayName = member.name?.trim() || member.email;
+function MemberCard({
+  member,
+  canRemove,
+}: {
+  member: MemberRow;
+  canRemove: boolean;
+}) {
+  const displayName = member.name?.trim() || member.phone || member.email || "未命名成员";
 
   return (
     <li className="member-card">
@@ -50,12 +62,14 @@ function MemberCard({ member }: { member: MemberRow }) {
         <strong className="member-name">{displayName}</strong>
         <span className="member-title">· {member.title}</span>
       </span>
-      <form action={removeMember}>
-        <input type="hidden" name="membershipId" value={member.id} />
-        <button type="submit" className="link-danger">
-          移出
-        </button>
-      </form>
+      {canRemove ? (
+        <form action={removeMember}>
+          <input type="hidden" name="membershipId" value={member.id} />
+          <button type="submit" className="link-danger">
+            移出
+          </button>
+        </form>
+      ) : null}
     </li>
   );
 }
@@ -65,27 +79,41 @@ function DepartmentNode({
   departments,
   members,
   depth,
+  canManage,
 }: {
   department: DepartmentRow;
   departments: DepartmentRow[];
   members: MemberRow[];
   depth: number;
+  canManage: boolean;
 }) {
   const children = departments.filter((child) => child.parent_id === department.id);
   const departmentMembers = members.filter((member) => member.department_id === department.id);
+  const isRoot = department.parent_id === null;
 
   return (
     <li>
       <div className="dept-node">
         <span className="dept-name">{department.name}</span>
-        <span className="mono dept-slug">{department.slug}</span>
         <span className="dept-count">{departmentMembers.length} 人</span>
+        {canManage && !isRoot ? (
+          <form action={deleteDepartment}>
+            <input type="hidden" name="departmentId" value={department.id} />
+            <button type="submit" className="link-danger dept-delete">
+              删除部门
+            </button>
+          </form>
+        ) : null}
       </div>
 
       {departmentMembers.length > 0 ? (
         <ul className="member-cards">
           {departmentMembers.map((member) => (
-            <MemberCard key={member.id} member={member} />
+            <MemberCard
+              key={member.id}
+              member={member}
+              canRemove={member.access_level !== "L1"}
+            />
           ))}
         </ul>
       ) : (
@@ -101,6 +129,7 @@ function DepartmentNode({
               departments={departments}
               members={members}
               depth={depth + 1}
+              canManage={canManage}
             />
           ))}
         </ul>
@@ -116,10 +145,11 @@ export default async function OrgPositionsPage() {
 
   const data = await withUserContext(context, async (client) => {
     const departments = await client.query<DepartmentRow>(
-      "select id, parent_id, name, slug from departments order by created_at",
+      "select id, parent_id, name from departments order by created_at",
     );
     const members = await client.query<MemberRow>(
-      `select m.id, m.department_id, m.access_level, m.title, u.email, u.name
+      `select m.id, m.department_id, m.access_level, m.title,
+              u.email, u.phone, u.name
          from memberships m
          join users u on u.id = m.user_id
         where m.status = 'active'
@@ -144,6 +174,8 @@ export default async function OrgPositionsPage() {
       department.parent_id === null ||
       !data.departments.some((candidate) => candidate.id === department.parent_id),
   );
+  const defaultParentId = rootDepartments[0]?.id ?? "";
+  const canManage = context.accessLevel === "L1";
 
   const titleOptions = Array.from(
     new Set([...TITLE_SUGGESTIONS, ...data.members.map((member) => member.title)]),
@@ -153,10 +185,10 @@ export default async function OrgPositionsPage() {
     <section>
       <header className="section-header">
         <div>
-          <h1 className="section-title">组织与岗位 · 部门与成员</h1>
+          <h1 className="section-title">组织架构</h1>
           <p className="section-subtitle">
-            企业人员部门（不含 AI 员工）· 当前身份：{session.email} · 等级{" "}
-            {context.accessLevel ?? "无"} · 我的部门数 {context.departmentIds.length}
+            部门是数据权限与知识库隔离的物理边界 · 当前身份：{session.email || session.name} ·
+            等级 {context.accessLevel ?? "无"} · 我的部门数 {context.departmentIds.length}
           </p>
         </div>
         <Link className="button button-secondary" href="/me/permissions">
@@ -171,7 +203,7 @@ export default async function OrgPositionsPage() {
       ) : null}
 
       <div className="card">
-        <h2 className="card-title">部门树</h2>
+        <h2 className="card-title">组织架构</h2>
         {data.departments.length === 0 ? (
           <p className="hint">没有可见部门（可能是权限不足，或尚未创建）。</p>
         ) : (
@@ -183,6 +215,7 @@ export default async function OrgPositionsPage() {
                 departments={data.departments}
                 members={data.members}
                 depth={0}
+                canManage={canManage}
               />
             ))}
           </ul>
@@ -195,10 +228,10 @@ export default async function OrgPositionsPage() {
           <form action={createDepartment} className="form-grid">
             <label>
               上级部门
-              <select name="parentId" required>
+              <select name="parentId" required defaultValue={defaultParentId}>
                 {data.departments.map((department) => (
                   <option key={department.id} value={department.id}>
-                    {department.name} · {department.slug}
+                    {department.name}
                   </option>
                 ))}
               </select>
@@ -206,15 +239,6 @@ export default async function OrgPositionsPage() {
             <label>
               部门名称
               <input name="name" required maxLength={80} placeholder="例如：华东交付组" />
-            </label>
-            <label>
-              slug
-              <input
-                name="slug"
-                required
-                pattern="[a-z0-9][a-z0-9-]{1,63}"
-                placeholder="east-delivery"
-              />
             </label>
             <button type="submit" className="button">
               新建部门
@@ -230,7 +254,7 @@ export default async function OrgPositionsPage() {
               <select name="departmentId" required>
                 {data.departments.map((department) => (
                   <option key={department.id} value={department.id}>
-                    {department.name} · {department.slug}
+                    {department.name}
                   </option>
                 ))}
               </select>
@@ -239,20 +263,13 @@ export default async function OrgPositionsPage() {
               新名称
               <input name="name" required maxLength={80} placeholder="新的部门名称" />
             </label>
-            <label>
-              新 slug
-              <input
-                name="slug"
-                required
-                pattern="[a-z0-9][a-z0-9-]{1,63}"
-                placeholder="new-slug"
-              />
-            </label>
             <button type="submit" className="button button-secondary">
               保存修改
             </button>
           </form>
-          <p className="hint">仅 L1 可新建与改名；越权写入会被数据库策略直接拒绝。</p>
+          <p className="hint">
+            仅 L1 可新建、改名与删除；根节点为系统控制权入口，不可删除。越权写入会被数据库策略直接拒绝。
+          </p>
         </div>
 
         <div className="card">
@@ -260,7 +277,7 @@ export default async function OrgPositionsPage() {
           <form action={addMember} className="form-grid">
             <label>
               所属部门
-              <select name="departmentId" required>
+              <select name="departmentId" required defaultValue={defaultParentId}>
                 {data.departments.map((department) => (
                   <option key={department.id} value={department.id}>
                     {department.name}
@@ -269,8 +286,16 @@ export default async function OrgPositionsPage() {
               </select>
             </label>
             <label>
-              邮箱
-              <input name="email" type="email" required placeholder="user@example.com" />
+              姓名
+              <input name="name" required maxLength={40} placeholder="真实姓名" />
+            </label>
+            <label>
+              手机号
+              <input name="phone" required inputMode="tel" maxLength={20} placeholder="13800000000" />
+            </label>
+            <label>
+              邮箱（选填）
+              <input name="email" type="email" maxLength={254} placeholder="user@example.com" />
             </label>
             <label>
               业务岗位
@@ -299,7 +324,10 @@ export default async function OrgPositionsPage() {
               添加成员
             </button>
           </form>
-          <p className="hint">成员直接挂在部门下，岗位头衔为自由文本，权限等级独立选择。</p>
+          <p className="hint">
+            手机号是唯一主账号标识，用于员工后续手机号注册自动绑定；邮箱选填，用于系统内邮件收发与
+            CRM 消息同步，支持绑定多个。
+          </p>
         </div>
       </div>
 
