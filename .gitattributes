@@ -1,0 +1,9 @@
+# 统一使用 LF：容器内 shell / SQL / 配置文件不能被 CRLF 污染
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary

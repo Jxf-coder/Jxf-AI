@@ -173,3 +173,214 @@ a {
   background: #fff;
   color: var(--brand-500);
 }
+
+/* ------------------------------------------------------------------------- */
+/* P1：登录、导航、岗位树                                                     */
+/* ------------------------------------------------------------------------- */
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 24px;
+  background: var(--brand-900);
+  color: #fff;
+}
+
+.brand {
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+  letter-spacing: 0.02em;
+}
+
+.topnav {
+  display: flex;
+  gap: 18px;
+  flex: 1;
+}
+
+.topnav a {
+  color: #d6e2f2;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.topnav a:hover {
+  color: #fff;
+}
+
+.userbox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.userbox .link-danger {
+  color: #ffd5d1;
+}
+
+.app-main {
+  flex: 1;
+  max-width: 1080px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 32px 24px 72px;
+}
+
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 22px;
+  color: var(--brand-900);
+}
+
+.section-subtitle {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.two-column {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.form-grid label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.form-grid input,
+.form-grid select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  color: var(--text);
+  background: #fff;
+}
+
+.form-grid .button {
+  justify-self: start;
+}
+
+.link-danger {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--error);
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.role-tree {
+  list-style: none;
+  margin: 0;
+  padding-left: 0;
+}
+
+.role-tree-depth-1,
+.role-tree-depth-2,
+.role-tree-depth-3 {
+  padding-left: 20px;
+  border-left: 1px dashed var(--border);
+  margin-left: 6px;
+}
+
+.role-tree li {
+  margin: 8px 0;
+}
+
+.role-node {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.role-slug {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.badge-kind-root {
+  background: #e8eef6;
+  color: var(--brand-700);
+}
+
+.badge-kind-child {
+  background: #eef4e8;
+  color: var(--ok);
+}
+
+.badge-kind-seat {
+  background: #f3eefb;
+  color: #6a3fb5;
+}
+
+.member-list {
+  list-style: none;
+  margin: 4px 0 4px 8px;
+  padding: 0;
+}
+
+.member-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: 0 12px 32px rgb(11 37 69 / 8%);
+}
+
+.login-title {
+  margin: 0;
+  font-size: 24px;
+  color: var(--brand-900);
+}
+

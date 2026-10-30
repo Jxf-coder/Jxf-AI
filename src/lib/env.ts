@@ -14,6 +14,8 @@ export interface AppEnv {
   version: string;
   authSecret: string;
   databaseUrl: string;
+  /** 私有化交付下恒为单值；仅作未来 SaaS 预留 */
+  tenantId: string;
   s3: {
     endpoint: string;
     region: string;
@@ -87,6 +89,10 @@ export function loadEnv(): AppEnv {
 
   const authSecret = readSecret("JXF_AUTH_SECRET");
   const databaseUrl = readUrl("APP_DATABASE_URL", ["postgresql:", "postgres:"]);
+  const tenantId = readRequired("JXF_TENANT_ID");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId)) {
+    throw new Error(`JXF_TENANT_ID 必须是 UUID：${tenantId}`);
+  }
   const bucket = readRequired("S3_BUCKET");
   if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) {
     throw new Error(`S3_BUCKET 不符合对象存储桶命名规则：${bucket}`);
@@ -99,6 +105,7 @@ export function loadEnv(): AppEnv {
     version: process.env.JXF_VERSION ?? "0.1.0",
     authSecret,
     databaseUrl,
+    tenantId,
     s3: {
       endpoint: readUrl("S3_ENDPOINT", ["http:", "https:"]).replace(/\/+$/, ""),
       region: process.env.S3_REGION ?? "us-east-1",
