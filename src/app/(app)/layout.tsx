@@ -1,6 +1,5 @@
-import Link from "next/link";
-
-import { signOutAction } from "@/lib/auth/actions";
+import { Sidebar } from "@/components/shell/Sidebar";
+import { Topbar } from "@/components/shell/Topbar";
 import { requireSession } from "@/lib/auth/session";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -8,25 +7,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <Link href="/org/positions" className="brand">
-          Jxf-AI 工作台
-        </Link>
-        <nav className="topnav">
-          <Link href="/org/positions">组织与岗位</Link>
-          <Link href="/me/permissions">我的权限</Link>
-          <Link href="/health">健康</Link>
-        </nav>
-        <div className="userbox">
-          <span className="mono">{user.email}</span>
-          <form action={signOutAction}>
-            <button type="submit" className="link-danger">
-              退出
-            </button>
-          </form>
-        </div>
-      </header>
-      <main className="app-main">{children}</main>
+      <Sidebar />
+      <div className="app-body">
+        <Topbar email={user.email} name={user.name} />
+        <main className="app-main">{children}</main>
+      </div>
     </div>
   );
 }

@@ -101,7 +101,7 @@ export default async function PermissionsPage() {
           )}
         </div>
 
-        <div className="card">
+        <div className="card" id="audit">
           <h2 className="card-title">最近审计（仅 L1 可见）</h2>
           {data.audits.length === 0 ? (
             <p className="hint">0 行（无权限或尚无记录）。</p>
