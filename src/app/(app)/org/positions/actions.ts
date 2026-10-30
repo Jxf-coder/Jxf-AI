@@ -59,7 +59,7 @@ export async function createRole(formData: FormData): Promise<void> {
     });
   });
 
-  revalidatePath("/ai-employees");
+  revalidatePath("/org/positions");
 }
 
 export async function addMember(formData: FormData): Promise<void> {
@@ -112,7 +112,7 @@ export async function addMember(formData: FormData): Promise<void> {
     });
   });
 
-  revalidatePath("/ai-employees");
+  revalidatePath("/org/positions");
 }
 
 export async function removeMember(formData: FormData): Promise<void> {
@@ -135,5 +135,5 @@ export async function removeMember(formData: FormData): Promise<void> {
     });
   });
 
-  revalidatePath("/ai-employees");
+  revalidatePath("/org/positions");
 }

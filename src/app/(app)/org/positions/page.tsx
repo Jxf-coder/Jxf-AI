@@ -86,7 +86,7 @@ function RoleNodeView({
   );
 }
 
-export default async function AiEmployeesPage() {
+export default async function OrgPositionsPage() {
   const session = await requireSession();
   const requestId = (await headers()).get("x-request-id") ?? undefined;
   const context = await resolveUserContext(session.userId, requestId);
@@ -120,10 +120,10 @@ export default async function AiEmployeesPage() {
     <section>
       <header className="section-header">
         <div>
-          <h1 className="section-title">AI 员工 · 岗位树</h1>
+          <h1 className="section-title">组织与岗位 · 岗位树</h1>
           <p className="section-subtitle">
-            当前身份：{session.email} · 等级 {context.accessLevel ?? "无"} · 岗位数{" "}
-            {context.roleIds.length}
+            企业人员岗位（不含 AI 员工）· 当前身份：{session.email} · 等级{" "}
+            {context.accessLevel ?? "无"} · 岗位数 {context.roleIds.length}
           </p>
         </div>
         <Link className="button button-secondary" href="/me/permissions">

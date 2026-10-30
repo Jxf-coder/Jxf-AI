@@ -26,7 +26,7 @@ export default function LoginPage() {
       return;
     }
 
-    window.location.href = "/ai-employees";
+    window.location.href = "/org/positions";
   }
 
   return (

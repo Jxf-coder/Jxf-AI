@@ -9,11 +9,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="app-shell">
       <header className="topbar">
-        <Link href="/ai-employees" className="brand">
+        <Link href="/org/positions" className="brand">
           Jxf-AI 工作台
         </Link>
         <nav className="topnav">
-          <Link href="/ai-employees">AI 员工</Link>
+          <Link href="/org/positions">组织与岗位</Link>
           <Link href="/me/permissions">我的权限</Link>
           <Link href="/health">健康</Link>
         </nav>

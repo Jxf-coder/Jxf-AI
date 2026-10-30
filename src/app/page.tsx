@@ -6,5 +6,5 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const session = await auth();
-  redirect(session?.user?.id ? "/ai-employees" : "/login");
+  redirect(session?.user?.id ? "/org/positions" : "/login");
 }
