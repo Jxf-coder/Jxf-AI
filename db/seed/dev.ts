@@ -78,6 +78,27 @@ async function ensureRootDepartment(client: Client): Promise<string> {
   return inserted.rows[0].id;
 }
 
+/** 默认业务部门：销售部（挂在老板下） */
+async function ensureSalesDepartment(client: Client, parentId: string): Promise<string> {
+  const existing = await client.query<{ id: string }>(
+    `select id from departments
+      where tenant_id = $1 and parent_id = $2 and name = $3
+      limit 1`,
+    [TENANT_ID, parentId, "销售部"],
+  );
+  if (existing.rows.length > 0) {
+    return existing.rows[0].id;
+  }
+
+  const inserted = await client.query<{ id: string }>(
+    `insert into departments (tenant_id, parent_id, slug, name)
+     values ($1, $2, $3, $4)
+     returning id`,
+    [TENANT_ID, parentId, "xiao-shou-bu", "销售部"],
+  );
+  return inserted.rows[0].id;
+}
+
 async function ensureOwnership(
   client: Client,
   userId: string,
@@ -115,6 +136,7 @@ async function main(): Promise<void> {
     const rootUserId = await ensureRootUser(client, passwordHash);
     await ensureRootEmailIdentity(client, rootUserId);
     const rootDepartmentId = await ensureRootDepartment(client);
+    await ensureSalesDepartment(client, rootDepartmentId);
     await ensureOwnership(client, rootUserId, rootDepartmentId);
 
     await client.query("commit");
@@ -126,6 +148,7 @@ async function main(): Promise<void> {
         tenant_id: TENANT_ID,
         accounts: [ROOT_EMAIL],
         root_department: "老板",
+        default_departments: ["销售部"],
       }),
     );
   } catch (error) {

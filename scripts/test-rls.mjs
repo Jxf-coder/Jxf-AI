@@ -295,6 +295,11 @@ async function main() {
   );
   check("根节点不可删除", deleteRoot.rowCount === 0, `rowCount=${deleteRoot.rowCount}`);
 
+  const renameRoot = await runAs(ownerUser, (client) =>
+    client.query("update departments set name = 'Renamed' where id = $1", [fixtures.rootId]),
+  );
+  check("根节点不可改名", renameRoot.rowCount === 0, `rowCount=${renameRoot.rowCount}`);
+
   // 14. 连接角色本身无特权
   const roleInfo = await withClient(APP_URL, (client) =>
     client.query(

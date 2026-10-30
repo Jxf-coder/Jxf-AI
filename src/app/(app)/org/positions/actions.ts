@@ -79,14 +79,27 @@ export async function createDepartment(formData: FormData): Promise<void> {
   const departmentId = randomUUID();
 
   await withUserContext(context, async (client) => {
+    // 页面数据过期（例如数据库已重置）时，旧 parentId 会直接触发 RLS 失败，这里先给出可读提示
+    const parent = await client.query("select id from departments where id = $1", [parentId]);
+    if (parent.rows.length === 0) {
+      throw new Error("上级部门已失效，请刷新页面后重试");
+    }
+
     const slug = await generateUniqueSlug(client, context.tenantId, parentId, name);
 
     // 不使用 RETURNING：新部门尚未进入闭包，RETURNING 会触发 SELECT 策略
-    await client.query(
-      `insert into departments (id, tenant_id, parent_id, name, slug)
-       values ($1, $2, $3, $4, $5)`,
-      [departmentId, context.tenantId, parentId, name, slug],
-    );
+    try {
+      await client.query(
+        `insert into departments (id, tenant_id, parent_id, name, slug)
+         values ($1, $2, $3, $4, $5)`,
+        [departmentId, context.tenantId, parentId, name, slug],
+      );
+    } catch (error) {
+      if ((error as { code?: string }).code === "42501") {
+        throw new Error("无权限在该上级部门下新建部门");
+      }
+      throw error;
+    }
 
     await auditInTx(client, context, {
       actorUserId: context.userId,
@@ -114,6 +127,17 @@ export async function updateDepartment(formData: FormData): Promise<void> {
   assertName(name, "部门名称");
 
   await withUserContext(context, async (client) => {
+    const target = await client.query<{ parent_id: string | null }>(
+      "select parent_id from departments where id = $1",
+      [departmentId],
+    );
+    if (target.rows.length === 0) {
+      throw new Error("部门不存在或无权限修改");
+    }
+    if (target.rows[0].parent_id === null) {
+      throw new Error("根节点「老板」是系统控制权入口，不可改名");
+    }
+
     // slug 是内部标识，改名不重建，避免历史引用失效
     const updated = await client.query("update departments set name = $1 where id = $2", [
       name,
@@ -210,6 +234,13 @@ export async function addMember(formData: FormData): Promise<void> {
   }
 
   await withUserContext(context, async (client) => {
+    const department = await client.query("select id from departments where id = $1", [
+      departmentId,
+    ]);
+    if (department.rows.length === 0) {
+      throw new Error("所属部门已失效，请刷新页面后重试");
+    }
+
     const existing = await client.query<{ id: string }>(
       "select id from users where phone = $1",
       [phone],
@@ -272,6 +303,9 @@ export async function addMember(formData: FormData): Promise<void> {
     } catch (error) {
       if ((error as { code?: string }).code === "23505") {
         throw new Error("该成员已在此部门有有效任用");
+      }
+      if ((error as { code?: string }).code === "42501") {
+        throw new Error("无权限在该部门添加成员");
       }
       throw error;
     }

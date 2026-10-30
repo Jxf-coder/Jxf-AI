@@ -1050,10 +1050,10 @@ a.nav-item:hover {
   font-size: 0.6875rem;
 }
 
-/* 删除部门：默认隐藏，hover / 键盘聚焦时浮现，避免误触 */
+/* 删除部门：常驻低透明度，hover / 键盘聚焦时完全显现，兼顾可发现性与防误触 */
 .dept-delete {
   font-size: 0.6875rem;
-  opacity: 0;
+  opacity: 0.55;
   transition: opacity 0.16s ease;
 }
 

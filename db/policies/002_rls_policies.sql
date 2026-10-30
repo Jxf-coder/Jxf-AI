@@ -30,14 +30,20 @@ create policy departments_insert on departments
     and (parent_id is null or app.can_read(parent_id))
   );
 
+-- 根节点「老板」不可改名（parent_id is null）；其余部门 L1 在可读子树内可改
 drop policy if exists departments_update on departments;
 create policy departments_update on departments
   for update
-  using (app.current_access_level() = 'L1' and app.can_read(id))
+  using (
+    app.current_access_level() = 'L1'
+    and app.can_read(id)
+    and parent_id is not null
+  )
   with check (
     app.current_access_level() = 'L1'
     and tenant_id = app.current_tenant_id()
-    and (parent_id is null or app.can_read(parent_id))
+    and parent_id is not null
+    and app.can_read(parent_id)
   );
 
 -- 根节点（parent_id is null）是系统控制权入口，任何角色都不可删除；

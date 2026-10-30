@@ -176,6 +176,14 @@ export default async function OrgPositionsPage() {
   );
   const defaultParentId = rootDepartments[0]?.id ?? "";
   const canManage = context.accessLevel === "L1";
+  // 上级部门下拉把根节点「老板」放首位；管理部门只列出可改名的子部门
+  const orderedDepartments = [
+    ...data.departments.filter((department) => department.parent_id === null),
+    ...data.departments.filter((department) => department.parent_id !== null),
+  ];
+  const manageableDepartments = orderedDepartments.filter(
+    (department) => department.parent_id !== null,
+  );
 
   const titleOptions = Array.from(
     new Set([...TITLE_SUGGESTIONS, ...data.members.map((member) => member.title)]),
@@ -229,7 +237,7 @@ export default async function OrgPositionsPage() {
             <label>
               上级部门
               <select name="parentId" required defaultValue={defaultParentId}>
-                {data.departments.map((department) => (
+                {orderedDepartments.map((department) => (
                   <option key={department.id} value={department.id}>
                     {department.name}
                   </option>
@@ -252,7 +260,7 @@ export default async function OrgPositionsPage() {
             <label>
               选择部门
               <select name="departmentId" required>
-                {data.departments.map((department) => (
+                {manageableDepartments.map((department) => (
                   <option key={department.id} value={department.id}>
                     {department.name}
                   </option>
@@ -268,7 +276,7 @@ export default async function OrgPositionsPage() {
             </button>
           </form>
           <p className="hint">
-            仅 L1 可新建、改名与删除；根节点为系统控制权入口，不可删除。越权写入会被数据库策略直接拒绝。
+            仅 L1 可新建、改名与删除；根节点「老板」是系统控制权入口，不可改名、不可删除。越权写入会被数据库策略直接拒绝。
           </p>
         </div>
 
@@ -278,7 +286,7 @@ export default async function OrgPositionsPage() {
             <label>
               所属部门
               <select name="departmentId" required defaultValue={defaultParentId}>
-                {data.departments.map((department) => (
+                {orderedDepartments.map((department) => (
                   <option key={department.id} value={department.id}>
                     {department.name}
                   </option>
