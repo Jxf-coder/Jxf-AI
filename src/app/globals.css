@@ -255,8 +255,12 @@ a.nav-item:active {
   justify-content: flex-end;
 }
 
-.topbar-profile {
+.topbar-logo {
   display: none;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
 }
 
 .search {
@@ -545,7 +549,7 @@ a.nav-item:active {
   left: 0;
   display: flex;
   flex-direction: column;
-  width: min(17rem, 82vw);
+  width: 80vw;
   padding: 1rem 0.75rem 1rem;
   background: rgba(246, 246, 248, 0.9);
   backdrop-filter: blur(32px) saturate(180%);
@@ -559,6 +563,14 @@ a.nav-item:active {
   align-items: center;
   justify-content: space-between;
   padding: 0.25rem 0.5rem 1rem;
+}
+
+.drawer-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
 }
 
 .drawer-close {
@@ -1064,12 +1076,14 @@ a.nav-item:active {
     padding: 0.375rem;
   }
 
-  .profile-meta,
-  .profile-trigger .chevron {
+  /* 只作用于固定侧栏：抽屉内的 Profile 仍需完整显示姓名与等级 */
+  .sidebar .profile-meta,
+  .sidebar .profile-trigger .chevron {
     display: none;
   }
 
-  .menu-up {
+  /* 侧栏图标模式的弹出层向右飞出；抽屉内保持默认向上弹出 */
+  .sidebar .menu-up {
     width: 14rem;
     left: calc(100% + 0.5rem);
     bottom: 0;
@@ -1089,9 +1103,8 @@ a.nav-item:active {
     display: inline-flex;
   }
 
-  .topbar-profile {
-    display: block;
-    width: min(13rem, 62vw);
+  .topbar-logo {
+    display: inline-block;
   }
 
   .topbar-inner {
@@ -1105,6 +1118,13 @@ a.nav-item:active {
 
   .two-column {
     grid-template-columns: 1fr;
+  }
+
+  /* 窄屏表格内部横向滚动，避免整页横向溢出 */
+  .table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
   }
 
   .section-title {

@@ -114,9 +114,7 @@ export function Shell({ email, name, accessLevel, siteName, children }: ShellPro
         <header className="topbar">
           <div className="topbar-inner">
             <div className="topbar-left">
-              <div className="topbar-profile">
-                <ProfileMenu email={email} name={name} accessLevel={accessLevel} placement="down" />
-              </div>
+              <span className="topbar-logo">{siteName}</span>
             </div>
 
             <form
@@ -189,9 +187,13 @@ export function Shell({ email, name, accessLevel, siteName, children }: ShellPro
             <nav className="sidebar-nav" aria-label="主导航">
               {NAV_ITEMS.map((item) => renderNavItem(item, "drawer"))}
             </nav>
-            <div className="sidebar-footer">
-              <span className="sidebar-dot" aria-hidden="true" />
-              私有化部署
+
+            <div className="drawer-bottom">
+              <div className="sidebar-footer">
+                <span className="sidebar-dot" aria-hidden="true" />
+                私有化部署
+              </div>
+              <ProfileMenu email={email} name={name} accessLevel={accessLevel} placement="up" />
             </div>
           </aside>
         </div>
