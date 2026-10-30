@@ -8,9 +8,10 @@ import { signOutAction } from "@/lib/auth/actions";
 interface TopbarProps {
   email: string;
   name: string;
+  accessLevel: string | null;
 }
 
-export function Topbar({ email, name }: TopbarProps) {
+export function Topbar({ email, name, accessLevel }: TopbarProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
@@ -93,7 +94,10 @@ export function Topbar({ email, name }: TopbarProps) {
           {menuOpen ? (
             <div className="menu" role="menu">
               <div className="menu-header">
-                <span className="menu-name">{name || "未命名账号"}</span>
+                <div className="menu-identity">
+                  <span className="menu-name">{name || "未命名账号"}</span>
+                  {accessLevel ? <span className="badge badge-accent">{accessLevel}</span> : null}
+                </div>
                 <span className="menu-email">{email}</span>
               </div>
               <Link
@@ -121,7 +125,21 @@ export function Topbar({ email, name }: TopbarProps) {
               <div className="menu-sep" role="separator" />
               <form action={signOutAction} onSubmit={() => setMenuOpen(false)}>
                 <button type="submit" role="menuitem" className="menu-item menu-item-danger">
-                  <span aria-hidden="true">🚪</span>
+                  <svg className="menu-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path
+                      d="M11.2 3.4H6.1a1.9 1.9 0 0 0-1.9 1.9v9.4a1.9 1.9 0 0 0 1.9 1.9h5.1"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M13 7l3 3-3 3M16 10H8.6"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
                   退出登录
                 </button>
               </form>

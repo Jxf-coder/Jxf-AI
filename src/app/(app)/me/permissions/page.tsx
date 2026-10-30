@@ -92,7 +92,9 @@ export default async function PermissionsPage() {
                 {data.roles.map((role) => (
                   <tr key={role.id}>
                     <td>{role.name}</td>
-                    <td className="mono">{role.kind}</td>
+                    <td>
+                      <span className={`badge badge-kind-${role.kind}`}>{role.kind}</span>
+                    </td>
                     <td className="mono">{role.slug}</td>
                   </tr>
                 ))}

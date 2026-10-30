@@ -164,9 +164,9 @@ a.nav-item:active {
   color: var(--brand-500);
 }
 
-.nav-item.is-disabled {
-  color: var(--text-tertiary);
-  cursor: default;
+.nav-label {
+  flex: 1;
+  white-space: nowrap;
 }
 
 .nav-icon {
@@ -180,21 +180,6 @@ a.nav-item:active {
 .nav-icon svg {
   width: 20px;
   height: 20px;
-}
-
-.nav-label {
-  flex: 1;
-  white-space: nowrap;
-}
-
-.nav-tag {
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: rgba(120, 120, 128, 0.12);
-  color: var(--text-tertiary);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
 }
 
 .sidebar-footer {
@@ -386,6 +371,12 @@ a.nav-item:active {
   padding: 8px 10px 10px;
 }
 
+.menu-identity {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
 .menu-name {
   font-size: 13px;
   font-weight: 600;
@@ -404,21 +395,42 @@ a.nav-item:active {
   width: 100%;
   padding: 7px 10px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text);
   font-family: inherit;
   font-size: 13px;
   text-align: left;
   cursor: pointer;
+  transition: background-color 0.14s ease;
 }
 
 .menu-item:hover {
-  background: var(--hover);
+  background: rgba(241, 245, 249, 0.8);
+}
+
+.menu-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: currentColor;
+}
+
+.menu-item > span[aria-hidden="true"] {
+  display: inline-flex;
+  justify-content: center;
+  width: 16px;
+  flex: 0 0 16px;
+  font-size: 13px;
+  line-height: 1;
 }
 
 .menu-item-danger {
   color: var(--error);
+}
+
+.menu-item-danger:hover {
+  background: rgba(255, 59, 48, 0.08);
 }
 
 .menu-sep {
@@ -533,6 +545,11 @@ a.nav-item:active {
 .badge-kind-seat {
   background: rgba(175, 82, 222, 0.13);
   color: #8e44c8;
+}
+
+.badge-accent {
+  background: rgba(0, 113, 227, 0.12);
+  color: #0a63c4;
 }
 
 /* 键值信息 */
@@ -825,7 +842,6 @@ a.nav-item:active {
 
   .sidebar-brand-text,
   .nav-label,
-  .nav-tag,
   .sidebar-footer {
     display: none;
   }
