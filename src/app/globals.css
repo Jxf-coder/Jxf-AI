@@ -31,7 +31,6 @@
   --glass-strong: rgba(255, 255, 255, 0.86);
   --sidebar-glass: rgba(246, 246, 248, 0.72);
   --hover: rgba(120, 120, 128, 0.05);
-  --active: rgba(0, 113, 227, 0.07);
 
   --ok: #1d8a45;
   --error: #c4372f;
@@ -139,6 +138,7 @@ a {
   flex-direction: column;
   gap: 0.125rem;
   min-height: 0;
+  padding-top: 0.75rem;
   overflow-y: auto;
 }
 
@@ -148,25 +148,21 @@ a {
   gap: 0.625rem;
   padding: 0.5rem 0.625rem;
   border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-secondary);
   font-size: 0.875rem;
   font-weight: 500;
   text-decoration: none;
-  transition: background-color 0.16s ease, color 0.16s ease;
+  transition: color 0.16s ease, font-weight 0.16s ease;
 }
 
-/* 轻量高亮：极低饱和的半透明底 + 加粗文字 + 主色图标 */
+/* 无背景胶囊：仅靠文字与主色图标表达层级 */
 a.nav-item:hover {
-  background: var(--hover);
   color: var(--text);
 }
 
-a.nav-item:active {
-  background: rgba(120, 120, 128, 0.09);
-}
-
 .nav-item.is-active {
-  background: var(--active);
+  background: transparent;
   color: var(--text);
   font-weight: 600;
 }
@@ -566,7 +562,7 @@ a.nav-item:active {
 
 .drawer .sidebar-nav {
   overflow-y: auto;
-  padding-top: 0.5rem;
+  padding-top: 0.75rem;
 }
 
 .drawer-bottom {
