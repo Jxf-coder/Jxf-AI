@@ -4,22 +4,22 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 
-import { addMember, createRole, removeMember } from "./actions";
+import { addMember, createDepartment, removeMember, updateDepartment } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-interface RoleRow {
+interface DepartmentRow {
   id: string;
   parent_id: string | null;
-  kind: "root" | "child" | "seat";
-  slug: string;
   name: string;
+  slug: string;
 }
 
 interface MemberRow {
   id: string;
-  role_id: string;
-  access_level: string;
+  department_id: string;
+  access_level: "L1" | "L2" | "L3";
+  title: string;
   email: string;
   name: string | null;
 }
@@ -32,50 +32,73 @@ interface AuditRow {
   created_at: Date;
 }
 
-function RoleNodeView({
-  role,
-  roles,
+const TITLE_SUGGESTIONS = ["创始人", "交付经理", "架构师", "HRBP", "顾问", "工程师"];
+
+function LevelBadge({ level }: { level: "L1" | "L2" | "L3" }) {
+  return (
+    <span className={`badge level-${level.toLowerCase()}`}>{level === "L1" ? "老板" : level}</span>
+  );
+}
+
+function MemberCard({ member }: { member: MemberRow }) {
+  const displayName = member.name?.trim() || member.email;
+
+  return (
+    <li className="member-card">
+      <span className="member-identity">
+        <LevelBadge level={member.access_level} />
+        <strong className="member-name">{displayName}</strong>
+        <span className="member-title">· {member.title}</span>
+      </span>
+      <form action={removeMember}>
+        <input type="hidden" name="membershipId" value={member.id} />
+        <button type="submit" className="link-danger">
+          移出
+        </button>
+      </form>
+    </li>
+  );
+}
+
+function DepartmentNode({
+  department,
+  departments,
   members,
   depth,
 }: {
-  role: RoleRow;
-  roles: RoleRow[];
+  department: DepartmentRow;
+  departments: DepartmentRow[];
   members: MemberRow[];
   depth: number;
 }) {
-  const children = roles.filter((child) => child.parent_id === role.id);
-  const roleMembers = members.filter((member) => member.role_id === role.id);
+  const children = departments.filter((child) => child.parent_id === department.id);
+  const departmentMembers = members.filter((member) => member.department_id === department.id);
 
   return (
     <li>
-      <div className="role-node">
-        <span className={`badge badge-kind-${role.kind}`}>{role.kind}</span>
-        <strong>{role.name}</strong>
-        <span className="mono role-slug">{role.slug}</span>
+      <div className="dept-node">
+        <span className="dept-name">{department.name}</span>
+        <span className="mono dept-slug">{department.slug}</span>
+        <span className="dept-count">{departmentMembers.length} 人</span>
       </div>
-      {roleMembers.length > 0 ? (
-        <ul className="member-list">
-          {roleMembers.map((member) => (
-            <li key={member.id}>
-              <span className="mono">{member.access_level}</span>
-              <span>{member.email}</span>
-              <form action={removeMember}>
-                <input type="hidden" name="membershipId" value={member.id} />
-                <button type="submit" className="link-danger">
-                  移出
-                </button>
-              </form>
-            </li>
+
+      {departmentMembers.length > 0 ? (
+        <ul className="member-cards">
+          {departmentMembers.map((member) => (
+            <MemberCard key={member.id} member={member} />
           ))}
         </ul>
-      ) : null}
+      ) : (
+        <p className="dept-empty">暂无成员</p>
+      )}
+
       {children.length > 0 ? (
         <ul className={`role-tree role-tree-depth-${Math.min(depth + 1, 3)}`}>
           {children.map((child) => (
-            <RoleNodeView
+            <DepartmentNode
               key={child.id}
-              role={child}
-              roles={roles}
+              department={child}
+              departments={departments}
               members={members}
               depth={depth + 1}
             />
@@ -92,11 +115,11 @@ export default async function OrgPositionsPage() {
   const context = await resolveUserContext(session.userId, requestId);
 
   const data = await withUserContext(context, async (client) => {
-    const roles = await client.query<RoleRow>(
-      "select id, parent_id, kind, slug, name from roles order by created_at",
+    const departments = await client.query<DepartmentRow>(
+      "select id, parent_id, name, slug from departments order by created_at",
     );
     const members = await client.query<MemberRow>(
-      `select m.id, m.role_id, m.access_level, u.email, u.name
+      `select m.id, m.department_id, m.access_level, m.title, u.email, u.name
          from memberships m
          join users u on u.id = m.user_id
         where m.status = 'active'
@@ -110,20 +133,30 @@ export default async function OrgPositionsPage() {
     );
 
     return {
-      roles: roles.rows,
+      departments: departments.rows,
       members: members.rows,
       audits: audits.rows,
     };
   });
 
+  const rootDepartments = data.departments.filter(
+    (department) =>
+      department.parent_id === null ||
+      !data.departments.some((candidate) => candidate.id === department.parent_id),
+  );
+
+  const titleOptions = Array.from(
+    new Set([...TITLE_SUGGESTIONS, ...data.members.map((member) => member.title)]),
+  );
+
   return (
     <section>
       <header className="section-header">
         <div>
-          <h1 className="section-title">组织与岗位 · 岗位树</h1>
+          <h1 className="section-title">组织与岗位 · 部门与成员</h1>
           <p className="section-subtitle">
-            企业人员岗位（不含 AI 员工）· 当前身份：{session.email} · 等级{" "}
-            {context.accessLevel ?? "无"} · 岗位数 {context.roleIds.length}
+            企业人员部门（不含 AI 员工）· 当前身份：{session.email} · 等级{" "}
+            {context.accessLevel ?? "无"} · 我的部门数 {context.departmentIds.length}
           </p>
         </div>
         <Link className="button button-secondary" href="/me/permissions">
@@ -138,74 +171,99 @@ export default async function OrgPositionsPage() {
       ) : null}
 
       <div className="card">
-        <h2 className="card-title">岗位树</h2>
-        {data.roles.length === 0 ? (
-          <p className="hint">没有可见岗位（可能是权限不足，或尚未创建）。</p>
+        <h2 className="card-title">部门树</h2>
+        {data.departments.length === 0 ? (
+          <p className="hint">没有可见部门（可能是权限不足，或尚未创建）。</p>
         ) : (
           <ul className="role-tree">
-            {data.roles
-              .filter(
-                (role) =>
-                  role.parent_id === null ||
-                  !data.roles.some((candidate) => candidate.id === role.parent_id),
-              )
-              .map((role) => (
-                <RoleNodeView
-                  key={role.id}
-                  role={role}
-                  roles={data.roles}
-                  members={data.members}
-                  depth={0}
-                />
-              ))}
+            {rootDepartments.map((department) => (
+              <DepartmentNode
+                key={department.id}
+                department={department}
+                departments={data.departments}
+                members={data.members}
+                depth={0}
+              />
+            ))}
           </ul>
         )}
       </div>
 
       <div className="two-column">
         <div className="card">
-          <h2 className="card-title">新建岗位</h2>
-          <form action={createRole} className="form-grid">
+          <h2 className="card-title">新建部门</h2>
+          <form action={createDepartment} className="form-grid">
             <label>
-              类型
-              <select name="kind" defaultValue="child">
-                <option value="child">child</option>
-                <option value="seat">seat</option>
-              </select>
-            </label>
-            <label>
-              上级岗位
+              上级部门
               <select name="parentId" required>
-                {data.roles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name} · {role.slug}
+                {data.departments.map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name} · {department.slug}
                   </option>
                 ))}
               </select>
             </label>
             <label>
-              名称
+              部门名称
               <input name="name" required maxLength={80} placeholder="例如：华东交付组" />
             </label>
             <label>
               slug
-              <input name="slug" required pattern="[a-z0-9][a-z0-9-]{1,63}" placeholder="east-delivery" />
+              <input
+                name="slug"
+                required
+                pattern="[a-z0-9][a-z0-9-]{1,63}"
+                placeholder="east-delivery"
+              />
             </label>
             <button type="submit" className="button">
-              新建岗位
+              新建部门
             </button>
           </form>
+
+          <div className="card-divider" />
+
+          <h2 className="card-title">管理部门</h2>
+          <form action={updateDepartment} className="form-grid">
+            <label>
+              选择部门
+              <select name="departmentId" required>
+                {data.departments.map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name} · {department.slug}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              新名称
+              <input name="name" required maxLength={80} placeholder="新的部门名称" />
+            </label>
+            <label>
+              新 slug
+              <input
+                name="slug"
+                required
+                pattern="[a-z0-9][a-z0-9-]{1,63}"
+                placeholder="new-slug"
+              />
+            </label>
+            <button type="submit" className="button button-secondary">
+              保存修改
+            </button>
+          </form>
+          <p className="hint">仅 L1 可新建与改名；越权写入会被数据库策略直接拒绝。</p>
         </div>
 
         <div className="card">
           <h2 className="card-title">添加成员</h2>
           <form action={addMember} className="form-grid">
             <label>
-              岗位
-              <select name="roleId" required>
-                {data.roles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name} · {role.kind}
+              所属部门
+              <select name="departmentId" required>
+                {data.departments.map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name}
                   </option>
                 ))}
               </select>
@@ -215,18 +273,33 @@ export default async function OrgPositionsPage() {
               <input name="email" type="email" required placeholder="user@example.com" />
             </label>
             <label>
-              等级
+              业务岗位
+              <input
+                name="title"
+                required
+                maxLength={40}
+                list="title-suggestions"
+                placeholder="例如：交付经理、架构师、HRBP"
+              />
+              <datalist id="title-suggestions">
+                {titleOptions.map((title) => (
+                  <option key={title} value={title} />
+                ))}
+              </datalist>
+            </label>
+            <label>
+              权限等级
               <select name="accessLevel" defaultValue="L3">
-                <option value="L1">L1</option>
-                <option value="L2">L2</option>
-                <option value="L3">L3</option>
+                <option value="L1">L1 · 老板</option>
+                <option value="L2">L2 · 管理者</option>
+                <option value="L3">L3 · 普通成员</option>
               </select>
             </label>
             <button type="submit" className="button">
               添加成员
             </button>
           </form>
-          <p className="hint">只有 L1 能写入；越权写入会被数据库策略直接拒绝。</p>
+          <p className="hint">成员直接挂在部门下，岗位头衔为自由文本，权限等级独立选择。</p>
         </div>
       </div>
 

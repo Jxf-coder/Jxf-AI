@@ -8,24 +8,24 @@ export type AccessLevel = "L1" | "L2" | "L3";
 export interface UserContext {
   userId: string;
   tenantId: string;
-  roleIds: string[];
+  departmentIds: string[];
   accessLevel: AccessLevel | null;
   requestId?: string;
 }
 
 interface RawContextRow {
-  role_ids: string[] | null;
+  department_ids: string[] | null;
   access_level: string | null;
 }
 
-/** 请求入口解析一次身份：有效任用 → role_ids + 最高等级 */
+/** 请求入口解析一次身份：有效任用 → department_ids + 最高等级 */
 export async function resolveUserContext(userId: string, requestId?: string): Promise<UserContext> {
   const env = loadEnv();
   const client = await getPool().connect();
 
   try {
     const { rows } = await client.query<RawContextRow>(
-      "select app.user_role_ids($1) as role_ids, app.effective_access_level($1) as access_level",
+      "select app.user_department_ids($1) as department_ids, app.effective_access_level($1) as access_level",
       [userId],
     );
     const row = rows[0];
@@ -33,7 +33,7 @@ export async function resolveUserContext(userId: string, requestId?: string): Pr
     return {
       userId,
       tenantId: env.tenantId,
-      roleIds: row?.role_ids ?? [],
+      departmentIds: row?.department_ids ?? [],
       accessLevel: (row?.access_level as AccessLevel | null) ?? null,
       requestId,
     };
@@ -48,7 +48,7 @@ function toPgUuidArray(ids: string[]): string {
 
 /**
  * 每个请求一个事务，事务内注入 SET LOCAL 上下文。
- * 未登录 / 无有效任用时 access_level 为空、role_ids 为空 → 所有策略不命中（fail-closed）。
+ * 未登录 / 无有效任用时 access_level 为空、department_ids 为空 → 所有策略不命中（fail-closed）。
  */
 export async function withUserContext<T>(
   context: UserContext,
@@ -63,12 +63,12 @@ export async function withUserContext<T>(
          set_config('app.user_id', $1, true),
          set_config('app.tenant_id', $2, true),
          set_config('app.access_level', $3, true),
-         set_config('app.role_ids', $4, true)`,
+         set_config('app.department_ids', $4, true)`,
       [
         context.userId,
         context.tenantId,
         context.accessLevel ?? "",
-        toPgUuidArray(context.roleIds),
+        toPgUuidArray(context.departmentIds),
       ],
     );
 

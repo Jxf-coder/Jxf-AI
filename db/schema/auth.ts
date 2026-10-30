@@ -3,7 +3,7 @@ import { integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from
 /**
  * Auth.js v5 + Drizzle Adapter 所需表。
  * 这些是身份基础表，不承载业务数据，因此 P1 不对其启用 RLS；
- * 业务表（roles / memberships / role_packs / audit_events）全部强制 RLS。
+ * 业务表（departments / memberships / department_packs / audit_events）全部强制 RLS。
  */
 export const users = pgTable(
   "users",

@@ -1,5 +1,5 @@
 /**
- * 开发种子：最小岗位树 + 演示账号。
+ * 开发种子：最小部门树 + 演示账号。
  * 仅用于本地 / 演示环境，禁止在生产执行。
  *
  * 运行：npm run seed
@@ -46,15 +46,14 @@ async function ensureUser(
   return rows[0].id;
 }
 
-async function ensureRole(
+async function ensureDepartment(
   client: Client,
   parentId: string | null,
-  kind: "root" | "child" | "seat",
   slug: string,
   name: string,
 ): Promise<string> {
   const existing = await client.query<{ id: string }>(
-    `select id from roles
+    `select id from departments
       where tenant_id = $1 and slug = $2 and parent_id is not distinct from $3`,
     [TENANT_ID, slug, parentId],
   );
@@ -63,10 +62,10 @@ async function ensureRole(
   }
 
   const inserted = await client.query<{ id: string }>(
-    `insert into roles (tenant_id, parent_id, kind, slug, name)
-     values ($1, $2, $3, $4, $5)
+    `insert into departments (tenant_id, parent_id, slug, name)
+     values ($1, $2, $3, $4)
      returning id`,
-    [TENANT_ID, parentId, kind, slug, name],
+    [TENANT_ID, parentId, slug, name],
   );
   return inserted.rows[0].id;
 }
@@ -74,22 +73,28 @@ async function ensureRole(
 async function ensureMembership(
   client: Client,
   userId: string,
-  roleId: string,
+  departmentId: string,
   accessLevel: "L1" | "L2" | "L3",
+  title: string,
 ): Promise<void> {
   const existing = await client.query(
     `select 1 from memberships
-      where tenant_id = $1 and user_id = $2 and role_id = $3 and status = 'active'`,
-    [TENANT_ID, userId, roleId],
+      where tenant_id = $1 and user_id = $2 and department_id = $3 and status = 'active'`,
+    [TENANT_ID, userId, departmentId],
   );
   if (existing.rows.length > 0) {
+    await client.query(
+      `update memberships set title = $1, access_level = $2
+        where tenant_id = $3 and user_id = $4 and department_id = $5 and status = 'active'`,
+      [title, accessLevel, TENANT_ID, userId, departmentId],
+    );
     return;
   }
 
   await client.query(
-    `insert into memberships (tenant_id, user_id, role_id, access_level)
-     values ($1, $2, $3, $4)`,
-    [TENANT_ID, userId, roleId, accessLevel],
+    `insert into memberships (tenant_id, user_id, department_id, title, access_level)
+     values ($1, $2, $3, $4, $5)`,
+    [TENANT_ID, userId, departmentId, title, accessLevel],
   );
 }
 
@@ -101,22 +106,20 @@ async function main(): Promise<void> {
   try {
     await client.query("begin");
 
-    const adminId = await ensureUser(client, "admin@jxf.local", "系统管理员", passwordHash);
-    const leadId = await ensureUser(client, "lead@jxf.local", "交付组长", passwordHash);
-    const seatAId = await ensureUser(client, "seat-a@jxf.local", "席位 A", passwordHash);
-    const seatBId = await ensureUser(client, "seat-b@jxf.local", "席位 B", passwordHash);
+    const zhangId = await ensureUser(client, "admin@jxf.local", "张三", passwordHash);
+    const liId = await ensureUser(client, "lead@jxf.local", "李四", passwordHash);
+    const wangId = await ensureUser(client, "seat-a@jxf.local", "王五", passwordHash);
+    const zhaoId = await ensureUser(client, "seat-b@jxf.local", "赵六", passwordHash);
 
-    const rootId = await ensureRole(client, null, "root", "hq", "总部");
-    const delivery1Id = await ensureRole(client, rootId, "child", "delivery-1", "交付一组");
-    const delivery2Id = await ensureRole(client, rootId, "child", "delivery-2", "交付二组");
-    const alphaId = await ensureRole(client, delivery1Id, "seat", "alpha", "席位 Alpha");
-    const betaId = await ensureRole(client, delivery1Id, "seat", "beta", "席位 Beta");
-    await ensureRole(client, delivery2Id, "seat", "gamma", "席位 Gamma");
+    const hqId = await ensureDepartment(client, null, "hq", "总部");
+    const delivery1Id = await ensureDepartment(client, hqId, "delivery-1", "交付一组");
+    const delivery2Id = await ensureDepartment(client, hqId, "delivery-2", "交付二组");
+    await ensureDepartment(client, delivery1Id, "east-team", "华东小组");
 
-    await ensureMembership(client, adminId, rootId, "L1");
-    await ensureMembership(client, leadId, delivery1Id, "L2");
-    await ensureMembership(client, seatAId, alphaId, "L3");
-    await ensureMembership(client, seatBId, betaId, "L3");
+    await ensureMembership(client, zhangId, hqId, "L1", "创始人");
+    await ensureMembership(client, liId, delivery1Id, "L2", "交付经理");
+    await ensureMembership(client, wangId, delivery1Id, "L3", "交付顾问");
+    await ensureMembership(client, zhaoId, delivery2Id, "L3", "解决方案工程师");
 
     await client.query("commit");
 
@@ -126,7 +129,7 @@ async function main(): Promise<void> {
         msg: "seed_completed",
         tenant_id: TENANT_ID,
         accounts: ["admin@jxf.local", "lead@jxf.local", "seat-a@jxf.local", "seat-b@jxf.local"],
-        roles: ["hq", "delivery-1", "delivery-2", "alpha", "beta", "gamma"],
+        departments: ["hq", "delivery-1", "delivery-2", "east-team"],
       }),
     );
   } catch (error) {

@@ -5,9 +5,8 @@ import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 
 export const dynamic = "force-dynamic";
 
-interface RoleRow {
+interface DepartmentRow {
   id: string;
-  kind: string;
   slug: string;
   name: string;
 }
@@ -24,13 +23,13 @@ export default async function PermissionsPage() {
   const context = await resolveUserContext(session.userId, requestId);
 
   const data = await withUserContext(context, async (client) => {
-    const roles = await client.query<RoleRow>(
-      "select id, kind, slug, name from roles order by created_at",
+    const departments = await client.query<DepartmentRow>(
+      "select id, name, slug from departments order by created_at",
     );
     const audits = await client.query<AuditRow>(
       "select id, action, created_at from audit_events order by id desc limit 10",
     );
-    return { roles: roles.rows, audits: audits.rows };
+    return { departments: departments.rows, audits: audits.rows };
   });
 
   return (
@@ -61,8 +60,10 @@ export default async function PermissionsPage() {
             <div className="meta-value">{context.accessLevel ?? "(empty)"}</div>
           </div>
           <div>
-            <div className="meta-label">role_ids</div>
-            <div className="meta-value">{context.roleIds.length > 0 ? context.roleIds.join(", ") : "(empty)"}</div>
+            <div className="meta-label">department_ids</div>
+            <div className="meta-value">
+              {context.departmentIds.length > 0 ? context.departmentIds.join(", ") : "(empty)"}
+            </div>
           </div>
           <div>
             <div className="meta-label">request_id</div>
@@ -70,32 +71,29 @@ export default async function PermissionsPage() {
           </div>
         </dl>
         <p className="hint">
-          若 access_level 为空、role_ids 为空，所有 RLS 策略都不会命中，查询返回 0 行。
+          若 access_level 为空、department_ids 为空，所有 RLS 策略都不会命中，查询返回 0
+          行。
         </p>
       </div>
 
       <div className="two-column">
         <div className="card">
-          <h2 className="card-title">可见岗位（{data.roles.length}）</h2>
-          {data.roles.length === 0 ? (
+          <h2 className="card-title">可见部门（{data.departments.length}）</h2>
+          {data.departments.length === 0 ? (
             <p className="hint">0 行。</p>
           ) : (
             <table className="table">
               <thead>
                 <tr>
                   <th>名称</th>
-                  <th>类型</th>
                   <th>slug</th>
                 </tr>
               </thead>
               <tbody>
-                {data.roles.map((role) => (
-                  <tr key={role.id}>
-                    <td>{role.name}</td>
-                    <td>
-                      <span className={`badge badge-kind-${role.kind}`}>{role.kind}</span>
-                    </td>
-                    <td className="mono">{role.slug}</td>
+                {data.departments.map((department) => (
+                  <tr key={department.id}>
+                    <td>{department.name}</td>
+                    <td className="mono">{department.slug}</td>
                   </tr>
                 ))}
               </tbody>

@@ -1,5 +1,5 @@
 {
-  "id": "13060b97-df47-44b4-a57f-5af7658e5ecb",
+  "id": "badb3ba3-9c14-4608-8782-0085509bae86",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -382,8 +382,99 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.role_closure": {
-      "name": "role_closure",
+    "public.department_packs": {
+      "name": "department_packs",
+      "schema": "",
+      "columns": {
+        "department_id": {
+          "name": "department_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "skill_ids": {
+          "name": "skill_ids",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "pipeline_ids": {
+          "name": "pipeline_ids",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "department_packs_skills_idx": {
+          "name": "department_packs_skills_idx",
+          "columns": [
+            {
+              "expression": "skill_ids",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "department_packs_pipelines_idx": {
+          "name": "department_packs_pipelines_idx",
+          "columns": [
+            {
+              "expression": "pipeline_ids",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "department_packs_department_id_departments_id_fk": {
+          "name": "department_packs_department_id_departments_id_fk",
+          "tableFrom": "department_packs",
+          "tableTo": "departments",
+          "columnsFrom": [
+            "department_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.department_closure": {
+      "name": "department_closure",
       "schema": "",
       "columns": {
         "ancestor_id": {
@@ -406,8 +497,8 @@
         }
       },
       "indexes": {
-        "role_closure_desc_idx": {
-          "name": "role_closure_desc_idx",
+        "department_closure_desc_idx": {
+          "name": "department_closure_desc_idx",
           "columns": [
             {
               "expression": "descendant_id",
@@ -423,10 +514,10 @@
         }
       },
       "foreignKeys": {
-        "role_closure_ancestor_id_roles_id_fk": {
-          "name": "role_closure_ancestor_id_roles_id_fk",
-          "tableFrom": "role_closure",
-          "tableTo": "roles",
+        "department_closure_ancestor_id_departments_id_fk": {
+          "name": "department_closure_ancestor_id_departments_id_fk",
+          "tableFrom": "department_closure",
+          "tableTo": "departments",
           "columnsFrom": [
             "ancestor_id"
           ],
@@ -436,10 +527,10 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "role_closure_descendant_id_roles_id_fk": {
-          "name": "role_closure_descendant_id_roles_id_fk",
-          "tableFrom": "role_closure",
-          "tableTo": "roles",
+        "department_closure_descendant_id_departments_id_fk": {
+          "name": "department_closure_descendant_id_departments_id_fk",
+          "tableFrom": "department_closure",
+          "tableTo": "departments",
           "columnsFrom": [
             "descendant_id"
           ],
@@ -451,8 +542,8 @@
         }
       },
       "compositePrimaryKeys": {
-        "role_closure_ancestor_id_descendant_id_pk": {
-          "name": "role_closure_ancestor_id_descendant_id_pk",
+        "department_closure_ancestor_id_descendant_id_pk": {
+          "name": "department_closure_ancestor_id_descendant_id_pk",
           "columns": [
             "ancestor_id",
             "descendant_id"
@@ -464,8 +555,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.roles": {
-      "name": "roles",
+    "public.departments": {
+      "name": "departments",
       "schema": "",
       "columns": {
         "id": {
@@ -487,21 +578,14 @@
           "primaryKey": false,
           "notNull": false
         },
-        "kind": {
-          "name": "kind",
-          "type": "role_kind",
-          "typeSchema": "public",
+        "name": {
+          "name": "name",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
         "slug": {
           "name": "slug",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -515,8 +599,8 @@
         }
       },
       "indexes": {
-        "roles_slug_unique": {
-          "name": "roles_slug_unique",
+        "departments_slug_unique": {
+          "name": "departments_slug_unique",
           "columns": [
             {
               "expression": "tenant_id",
@@ -542,8 +626,8 @@
           "method": "btree",
           "with": {}
         },
-        "roles_parent_idx": {
-          "name": "roles_parent_idx",
+        "departments_parent_idx": {
+          "name": "departments_parent_idx",
           "columns": [
             {
               "expression": "parent_id",
@@ -557,8 +641,8 @@
           "method": "btree",
           "with": {}
         },
-        "roles_tenant_idx": {
-          "name": "roles_tenant_idx",
+        "departments_tenant_idx": {
+          "name": "departments_tenant_idx",
           "columns": [
             {
               "expression": "tenant_id",
@@ -574,10 +658,10 @@
         }
       },
       "foreignKeys": {
-        "roles_parent_fk": {
-          "name": "roles_parent_fk",
-          "tableFrom": "roles",
-          "tableTo": "roles",
+        "departments_parent_fk": {
+          "name": "departments_parent_fk",
+          "tableFrom": "departments",
+          "tableTo": "departments",
           "columnsFrom": [
             "parent_id"
           ],
@@ -591,12 +675,7 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "roles_parent_shape": {
-          "name": "roles_parent_shape",
-          "value": "(kind = 'root' and parent_id is null) or (kind <> 'root' and parent_id is not null)"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.memberships": {
@@ -622,11 +701,18 @@
           "primaryKey": false,
           "notNull": true
         },
-        "role_id": {
-          "name": "role_id",
+        "department_id": {
+          "name": "department_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'成员'"
         },
         "access_level": {
           "name": "access_level",
@@ -676,7 +762,7 @@
               "nulls": "last"
             },
             {
-              "expression": "role_id",
+              "expression": "department_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -703,11 +789,11 @@
           "method": "btree",
           "with": {}
         },
-        "memberships_role_idx": {
-          "name": "memberships_role_idx",
+        "memberships_department_idx": {
+          "name": "memberships_department_idx",
           "columns": [
             {
-              "expression": "role_id",
+              "expression": "department_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -733,12 +819,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "memberships_role_id_roles_id_fk": {
-          "name": "memberships_role_id_roles_id_fk",
+        "memberships_department_id_departments_id_fk": {
+          "name": "memberships_department_id_departments_id_fk",
           "tableFrom": "memberships",
-          "tableTo": "roles",
+          "tableTo": "departments",
           "columnsFrom": [
-            "role_id"
+            "department_id"
           ],
           "columnsTo": [
             "id"
@@ -756,97 +842,6 @@
           "value": "(status = 'active' and removed_at is null) or (status = 'removed' and removed_at is not null)"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.role_packs": {
-      "name": "role_packs",
-      "schema": "",
-      "columns": {
-        "role_id": {
-          "name": "role_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "skill_ids": {
-          "name": "skill_ids",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "pipeline_ids": {
-          "name": "pipeline_ids",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::text[]"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_by": {
-          "name": "updated_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "role_packs_skills_idx": {
-          "name": "role_packs_skills_idx",
-          "columns": [
-            {
-              "expression": "skill_ids",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "gin",
-          "with": {}
-        },
-        "role_packs_pipelines_idx": {
-          "name": "role_packs_pipelines_idx",
-          "columns": [
-            {
-              "expression": "pipeline_ids",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "gin",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "role_packs_role_id_roles_id_fk": {
-          "name": "role_packs_role_id_roles_id_fk",
-          "tableFrom": "role_packs",
-          "tableTo": "roles",
-          "columnsFrom": [
-            "role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     }
   },
@@ -866,15 +861,6 @@
       "values": [
         "active",
         "removed"
-      ]
-    },
-    "public.role_kind": {
-      "name": "role_kind",
-      "schema": "public",
-      "values": [
-        "root",
-        "child",
-        "seat"
       ]
     }
   },

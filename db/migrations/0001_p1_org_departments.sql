@@ -1,6 +1,5 @@
 CREATE TYPE "public"."access_level" AS ENUM('L1', 'L2', 'L3');--> statement-breakpoint
 CREATE TYPE "public"."membership_status" AS ENUM('active', 'removed');--> statement-breakpoint
-CREATE TYPE "public"."role_kind" AS ENUM('root', 'child', 'seat');--> statement-breakpoint
 CREATE TABLE "audit_events" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"tenant_id" uuid NOT NULL,
@@ -51,29 +50,36 @@ CREATE TABLE "verification_tokens" (
 	CONSTRAINT "verification_tokens_identifier_token_pk" PRIMARY KEY("identifier","token")
 );
 --> statement-breakpoint
-CREATE TABLE "role_closure" (
+CREATE TABLE "department_packs" (
+	"department_id" uuid PRIMARY KEY NOT NULL,
+	"skill_ids" text[] DEFAULT '{}'::text[] NOT NULL,
+	"pipeline_ids" text[] DEFAULT '{}'::text[] NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_by" uuid
+);
+--> statement-breakpoint
+CREATE TABLE "department_closure" (
 	"ancestor_id" uuid NOT NULL,
 	"descendant_id" uuid NOT NULL,
 	"depth" integer NOT NULL,
-	CONSTRAINT "role_closure_ancestor_id_descendant_id_pk" PRIMARY KEY("ancestor_id","descendant_id")
+	CONSTRAINT "department_closure_ancestor_id_descendant_id_pk" PRIMARY KEY("ancestor_id","descendant_id")
 );
 --> statement-breakpoint
-CREATE TABLE "roles" (
+CREATE TABLE "departments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"parent_id" uuid,
-	"kind" "role_kind" NOT NULL,
-	"slug" text NOT NULL,
 	"name" text NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "roles_parent_shape" CHECK ((kind = 'root' and parent_id is null) or (kind <> 'root' and parent_id is not null))
+	"slug" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "memberships" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"tenant_id" uuid NOT NULL,
 	"user_id" uuid NOT NULL,
-	"role_id" uuid NOT NULL,
+	"department_id" uuid NOT NULL,
+	"title" text DEFAULT '成员' NOT NULL,
 	"access_level" "access_level" DEFAULT 'L3' NOT NULL,
 	"status" "membership_status" DEFAULT 'active' NOT NULL,
 	"ssh_enabled" boolean DEFAULT false NOT NULL,
@@ -82,32 +88,24 @@ CREATE TABLE "memberships" (
 	CONSTRAINT "memberships_removed_shape" CHECK ((status = 'active' and removed_at is null) or (status = 'removed' and removed_at is not null))
 );
 --> statement-breakpoint
-CREATE TABLE "role_packs" (
-	"role_id" uuid PRIMARY KEY NOT NULL,
-	"skill_ids" text[] DEFAULT '{}'::text[] NOT NULL,
-	"pipeline_ids" text[] DEFAULT '{}'::text[] NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_by" uuid
-);
---> statement-breakpoint
 ALTER TABLE "audit_events" ADD CONSTRAINT "audit_events_actor_user_id_users_id_fk" FOREIGN KEY ("actor_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "role_closure" ADD CONSTRAINT "role_closure_ancestor_id_roles_id_fk" FOREIGN KEY ("ancestor_id") REFERENCES "public"."roles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "role_closure" ADD CONSTRAINT "role_closure_descendant_id_roles_id_fk" FOREIGN KEY ("descendant_id") REFERENCES "public"."roles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "roles" ADD CONSTRAINT "roles_parent_fk" FOREIGN KEY ("parent_id") REFERENCES "public"."roles"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "department_packs" ADD CONSTRAINT "department_packs_department_id_departments_id_fk" FOREIGN KEY ("department_id") REFERENCES "public"."departments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "department_closure" ADD CONSTRAINT "department_closure_ancestor_id_departments_id_fk" FOREIGN KEY ("ancestor_id") REFERENCES "public"."departments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "department_closure" ADD CONSTRAINT "department_closure_descendant_id_departments_id_fk" FOREIGN KEY ("descendant_id") REFERENCES "public"."departments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "departments" ADD CONSTRAINT "departments_parent_fk" FOREIGN KEY ("parent_id") REFERENCES "public"."departments"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "memberships" ADD CONSTRAINT "memberships_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "memberships" ADD CONSTRAINT "memberships_role_id_roles_id_fk" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "role_packs" ADD CONSTRAINT "role_packs_role_id_roles_id_fk" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "memberships" ADD CONSTRAINT "memberships_department_id_departments_id_fk" FOREIGN KEY ("department_id") REFERENCES "public"."departments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "audit_events_tenant_created_idx" ON "audit_events" USING btree ("tenant_id","created_at");--> statement-breakpoint
 CREATE INDEX "audit_events_actor_idx" ON "audit_events" USING btree ("actor_user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "users_email_unique" ON "users" USING btree ("email");--> statement-breakpoint
-CREATE INDEX "role_closure_desc_idx" ON "role_closure" USING btree ("descendant_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "roles_slug_unique" ON "roles" USING btree ("tenant_id","parent_id","slug");--> statement-breakpoint
-CREATE INDEX "roles_parent_idx" ON "roles" USING btree ("parent_id");--> statement-breakpoint
-CREATE INDEX "roles_tenant_idx" ON "roles" USING btree ("tenant_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "memberships_active_unique" ON "memberships" USING btree ("user_id","role_id") WHERE status = 'active';--> statement-breakpoint
+CREATE INDEX "department_packs_skills_idx" ON "department_packs" USING gin ("skill_ids");--> statement-breakpoint
+CREATE INDEX "department_packs_pipelines_idx" ON "department_packs" USING gin ("pipeline_ids");--> statement-breakpoint
+CREATE INDEX "department_closure_desc_idx" ON "department_closure" USING btree ("descendant_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "departments_slug_unique" ON "departments" USING btree ("tenant_id","parent_id","slug");--> statement-breakpoint
+CREATE INDEX "departments_parent_idx" ON "departments" USING btree ("parent_id");--> statement-breakpoint
+CREATE INDEX "departments_tenant_idx" ON "departments" USING btree ("tenant_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "memberships_active_unique" ON "memberships" USING btree ("user_id","department_id") WHERE status = 'active';--> statement-breakpoint
 CREATE INDEX "memberships_user_idx" ON "memberships" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "memberships_role_idx" ON "memberships" USING btree ("role_id");--> statement-breakpoint
-CREATE INDEX "role_packs_skills_idx" ON "role_packs" USING gin ("skill_ids");--> statement-breakpoint
-CREATE INDEX "role_packs_pipelines_idx" ON "role_packs" USING gin ("pipeline_ids");
+CREATE INDEX "memberships_department_idx" ON "memberships" USING btree ("department_id");

@@ -1,11 +1,14 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, index, pgTable, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { users } from "./auth";
+import { departments } from "./departments";
 import { accessLevel, membershipStatus } from "./enums";
-import { roles } from "./roles";
 
-/** 任用：user ↔ role，携带 L1/L2/L3 */
+/**
+ * 成员：直接挂在部门下，不再有中间「岗位」层。
+ * title 为业务岗位头衔（自由文本），accessLevel 为独立选择的 L1/L2/L3。
+ */
 export const memberships = pgTable(
   "memberships",
   {
@@ -14,9 +17,10 @@ export const memberships = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    roleId: uuid("role_id")
+    departmentId: uuid("department_id")
       .notNull()
-      .references(() => roles.id, { onDelete: "cascade" }),
+      .references(() => departments.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("成员"),
     accessLevel: accessLevel("access_level").notNull().default("L3"),
     status: membershipStatus("status").notNull().default("active"),
     sshEnabled: boolean("ssh_enabled").notNull().default(false),
@@ -25,10 +29,10 @@ export const memberships = pgTable(
   },
   (table) => [
     uniqueIndex("memberships_active_unique")
-      .on(table.userId, table.roleId)
+      .on(table.userId, table.departmentId)
       .where(sql`status = 'active'`),
     index("memberships_user_idx").on(table.userId),
-    index("memberships_role_idx").on(table.roleId),
+    index("memberships_department_idx").on(table.departmentId),
     check(
       "memberships_removed_shape",
       sql`(status = 'active' and removed_at is null) or (status = 'removed' and removed_at is not null)`,
