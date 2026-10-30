@@ -9,8 +9,6 @@ interface ProfileMenuProps {
   email: string;
   name: string;
   accessLevel: string | null;
-  /** up：侧边栏底部向上弹出；down：手机顶栏向下弹出 */
-  placement: "up" | "down";
 }
 
 function IconSettings() {
@@ -69,7 +67,7 @@ function IconLogOut() {
   );
 }
 
-export function ProfileMenu({ email, name, accessLevel, placement }: ProfileMenuProps) {
+export function ProfileMenu({ email, name, accessLevel }: ProfileMenuProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
 
@@ -116,7 +114,7 @@ export function ProfileMenu({ email, name, accessLevel, placement }: ProfileMenu
       </button>
 
       {open ? (
-        <div className={`menu menu-${placement}`} role="menu">
+        <div className="menu menu-up" role="menu">
           <div className="menu-header">
             <span className="menu-name">{name || "未命名账号"}</span>
             <span className="menu-email">{email}</span>

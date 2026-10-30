@@ -76,7 +76,7 @@ export function Shell({ email, name, accessLevel, siteName, children }: ShellPro
     return pathname === href || pathname.startsWith(`${href}/`);
   }
 
-  function renderNavItem(item: NavItem, variant: "sidebar" | "drawer") {
+  function renderNavItem(item: NavItem) {
     const active = isActive(item.href);
     return (
       <Link
@@ -85,7 +85,6 @@ export function Shell({ email, name, accessLevel, siteName, children }: ShellPro
         className={`nav-item${active ? " is-active" : ""}`}
         aria-label={item.label}
         aria-current={active ? "page" : undefined}
-        data-tip={variant === "sidebar" ? item.label : undefined}
         onClick={() => setDrawerOpen(false)}
       >
         <span className="nav-icon">{item.icon}</span>
@@ -102,11 +101,11 @@ export function Shell({ email, name, accessLevel, siteName, children }: ShellPro
         </Link>
 
         <nav className="sidebar-nav" aria-label="主导航">
-          {NAV_ITEMS.map((item) => renderNavItem(item, "sidebar"))}
+          {NAV_ITEMS.map((item) => renderNavItem(item))}
         </nav>
 
         <div className="sidebar-profile">
-          <ProfileMenu email={email} name={name} accessLevel={accessLevel} placement="up" />
+          <ProfileMenu email={email} name={name} accessLevel={accessLevel} />
         </div>
       </aside>
 
@@ -185,7 +184,7 @@ export function Shell({ email, name, accessLevel, siteName, children }: ShellPro
               </button>
             </div>
             <nav className="sidebar-nav" aria-label="主导航">
-              {NAV_ITEMS.map((item) => renderNavItem(item, "drawer"))}
+              {NAV_ITEMS.map((item) => renderNavItem(item))}
             </nav>
 
             <div className="drawer-bottom">
@@ -193,7 +192,7 @@ export function Shell({ email, name, accessLevel, siteName, children }: ShellPro
                 <span className="sidebar-dot" aria-hidden="true" />
                 私有化部署
               </div>
-              <ProfileMenu email={email} name={name} accessLevel={accessLevel} placement="up" />
+              <ProfileMenu email={email} name={name} accessLevel={accessLevel} />
             </div>
           </aside>
         </div>

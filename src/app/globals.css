@@ -38,7 +38,6 @@
 
   /* 布局尺寸（rem，随根字号流式缩放） */
   --sidebar-w: 15rem;
-  --sidebar-w-compact: 4rem;
 
   --radius-xl: 1.25rem;
   --radius-lg: 1rem;
@@ -143,7 +142,6 @@ a {
 }
 
 .nav-item {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 0.625rem;
@@ -437,11 +435,6 @@ a.nav-item:active {
 
 .menu-up {
   bottom: calc(100% + 0.5rem);
-  left: 0;
-}
-
-.menu-down {
-  top: calc(100% + 0.5rem);
   left: 0;
 }
 
@@ -1001,96 +994,12 @@ a.nav-item:active {
 }
 
 /* ------------------------------------------------------------------------- */
-/* 自适应：平板图标模式 / 手机抽屉                                              */
+/* 自适应：两套断点                                                           */
+/*  < 1024px  隐藏固定侧栏，顶栏文字 Logo + 汉堡 + 80vw 抽屉                    */
+/*  >= 1024px 15rem 毛玻璃侧栏（文字 Logo + 底部 Profile）                      */
 /* ------------------------------------------------------------------------- */
 
 @media (max-width: 1023px) {
-  .sidebar {
-    width: var(--sidebar-w-compact);
-    flex-basis: var(--sidebar-w-compact);
-    align-items: center;
-    padding: 1rem 0.5rem 0.75rem;
-  }
-
-  .sidebar-brand {
-    justify-content: center;
-    padding: 0.25rem 0 1rem;
-    font-size: 0;
-    letter-spacing: 0;
-  }
-
-  /* 图标模式下隐藏完整文字 Logo，改用首字母标记 */
-  .sidebar .sidebar-brand-text {
-    display: none;
-  }
-
-  .sidebar-brand::before {
-    content: "J";
-    font-size: 1rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-  }
-
-  /* 只折叠固定侧边栏的标签，抽屉内仍显示文字 */
-  .sidebar .nav-label {
-    display: none;
-  }
-
-  .nav-item {
-    justify-content: center;
-    padding: 0.5625rem;
-  }
-
-  /* 图标模式 Tooltip */
-  .nav-item[data-tip]::after {
-    content: attr(data-tip);
-    position: absolute;
-    top: 50%;
-    left: calc(100% + 0.5rem);
-    z-index: 50;
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.375rem;
-    background: rgba(29, 29, 31, 0.92);
-    color: #fff;
-    font-size: 0.71875rem;
-    font-weight: 500;
-    white-space: nowrap;
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(-50%) scale(0.96);
-    transition: opacity 0.14s ease, transform 0.14s ease;
-  }
-
-  .nav-item[data-tip]:hover::after,
-  .nav-item[data-tip]:focus-visible::after {
-    opacity: 1;
-    transform: translateY(-50%) scale(1);
-  }
-
-  .sidebar-profile {
-    width: 100%;
-  }
-
-  .profile-trigger {
-    justify-content: center;
-    padding: 0.375rem;
-  }
-
-  /* 只作用于固定侧栏：抽屉内的 Profile 仍需完整显示姓名与等级 */
-  .sidebar .profile-meta,
-  .sidebar .profile-trigger .chevron {
-    display: none;
-  }
-
-  /* 侧栏图标模式的弹出层向右飞出；抽屉内保持默认向上弹出 */
-  .sidebar .menu-up {
-    width: 14rem;
-    left: calc(100% + 0.5rem);
-    bottom: 0;
-  }
-}
-
-@media (max-width: 767px) {
   .sidebar {
     display: none;
   }
