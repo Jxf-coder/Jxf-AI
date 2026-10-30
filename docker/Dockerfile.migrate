@@ -1,0 +1,26 @@
+# ---------------------------------------------------------------------------
+# 一次性迁移容器：drizzle migrate + db/policies/*.sql（幂等）
+# 使用迁移角色 jxf_owner，禁止使用超级用户
+# 不使用外部 buildkit 前端（# syntax），避免离线构建额外拉取镜像
+# ---------------------------------------------------------------------------
+FROM node:22-alpine
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+# 可通过构建参数切换 registry（内网/镜像源），并加大重试以适配不稳定网络
+ARG NPM_REGISTRY=https://registry.npmjs.org
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --registry="${NPM_REGISTRY}" \
+      --fetch-retries=5 \
+      --fetch-retry-mintimeout=20000 \
+      --fetch-retry-maxtimeout=120000 \
+      --fetch-timeout=600000
+
+COPY docker/migrate/entrypoint.mjs ./entrypoint.mjs
+COPY db ./db
+
+USER node
+
+ENTRYPOINT ["node", "entrypoint.mjs"]

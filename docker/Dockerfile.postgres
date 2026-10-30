@@ -1,0 +1,50 @@
+# ---------------------------------------------------------------------------
+# Jxf-AI 自建 PostgreSQL 镜像（PG 16）
+# 官方镜像不含中文检索扩展，这里从源码编译：
+#   - pgvector  向量检索（M2 知识库）
+#   - pg_bigm   中文二元分词（M2 混合检索）
+#   - pg_trgm   官方 contrib，随镜像自带
+# 构建上下文为仓库根目录（见 docker/docker-compose.yml）
+# 不使用外部 buildkit 前端（# syntax），避免离线构建额外拉取镜像
+# ---------------------------------------------------------------------------
+FROM postgres:16-bookworm AS extension-builder
+
+ARG PGVECTOR_VERSION=v0.8.7
+ARG PG_BIGM_VERSION=v1.2-20250903
+
+# 使用 Debian 变体而非 Alpine：pg_bigm 在 musl 上的兼容性缺少上游保证
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential git ca-certificates postgresql-server-dev-16 \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /tmp/extensions \
+ && cd /tmp/extensions \
+ && git clone --depth 1 --branch "${PGVECTOR_VERSION}" https://github.com/pgvector/pgvector.git \
+ && make -C pgvector -j2 \
+ && make -C pgvector install \
+ && git clone --depth 1 --branch "${PG_BIGM_VERSION}" https://github.com/pgbigm/pg_bigm.git \
+ && make -C pg_bigm USE_PGXS=1 -j2 \
+ && make -C pg_bigm USE_PGXS=1 install
+
+FROM postgres:16-bookworm
+
+ARG PGVECTOR_VERSION=v0.8.7
+ARG PG_BIGM_VERSION=v1.2-20250903
+
+LABEL org.opencontainers.image.title="jxf-ai-postgres" \
+      org.opencontainers.image.description="PostgreSQL 16 with pgvector ${PGVECTOR_VERSION} and pg_bigm ${PG_BIGM_VERSION}"
+
+# Debian 官方镜像的 PG 走 PGDG 包：pkglibdir=/usr/lib/postgresql/16/lib，
+# sharedir=/usr/share/postgresql/16（与 Alpine 变体的 /usr/local 前缀不同）
+COPY --from=extension-builder /usr/lib/postgresql/16/lib/vector.so /usr/lib/postgresql/16/lib/vector.so
+COPY --from=extension-builder /usr/lib/postgresql/16/lib/pg_bigm.so /usr/lib/postgresql/16/lib/pg_bigm.so
+COPY --from=extension-builder /usr/share/postgresql/16/extension/vector* /usr/share/postgresql/16/extension/
+COPY --from=extension-builder /usr/share/postgresql/16/extension/pg_bigm* /usr/share/postgresql/16/extension/
+
+COPY docker/postgres/00-init.sh /docker-entrypoint-initdb.d/00-init.sh
+COPY docker/postgres/healthcheck.sh /usr/local/bin/pg-healthcheck.sh
+
+RUN chmod 0755 /docker-entrypoint-initdb.d/00-init.sh /usr/local/bin/pg-healthcheck.sh
+
+# fail-closed：数据目录为空时初始化角色与扩展；已有数据卷时不会重跑
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["postgres"]

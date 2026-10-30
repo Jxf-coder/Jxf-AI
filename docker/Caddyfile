@@ -1,0 +1,43 @@
+{
+	admin 127.0.0.1:2019
+
+	log {
+		format json
+		level INFO
+	}
+}
+
+# 默认监听 :80；私有化交付时把 JXF_SITE_ADDRESS 设为域名并启用 TLS（见下）
+{$JXF_SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	# 访问日志：单行 JSON 到 stdout，由 Docker json-file 驱动收集
+	log {
+		output stdout
+		format json
+	}
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+	}
+
+	reverse_proxy web:3000 {
+		health_uri /api/health/live
+		health_interval 15s
+		health_timeout 3s
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+# ---------------------------------------------------------------------------
+# 生产启用 HTTPS 时，把上面的站点地址改为域名（JXF_SITE_ADDRESS=jxf.example.com），
+# 并在该站点块内加入：
+#   tls internal            # 内网自签 CA（客户需信任该 CA）
+#   # 或 tls you@example.com  # ACME 公网证书
+# 同时 docker-compose.yml 需保留 80/443 端口映射。
+# ---------------------------------------------------------------------------
