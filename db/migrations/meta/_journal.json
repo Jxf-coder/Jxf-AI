@@ -50,6 +50,13 @@
       "when": 1793796517091,
       "tag": "0006_pending_removal_shape",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793803809470,
+      "tag": "0007_bitter_nighthawk",
+      "breakpoints": true
     }
   ]
 }

@@ -196,6 +196,17 @@ begin
           and m2.status = 'active'
      );
 
+  -- 离职权限清理：账号不再拥有任何有效任用时，清空个人特例授权并递增权限版本
+  if not exists (
+    select 1 from memberships m2
+     where m2.user_id = v_user_id
+       and m2.status = 'active'
+  ) then
+    delete from user_permission_grants
+     where user_id = v_user_id;
+    perform app.bump_permission_revision(v_user_id);
+  end if;
+
   update approval_requests
      set status = 'approved',
          decided_at = now(),

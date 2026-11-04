@@ -28,7 +28,8 @@ export const auditEvents = pgTable(
     targetId: uuid("target_id"),
     requestId: text("request_id"),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** 毫秒级时间戳：并发写入时用于精确排序，前端按 ISO 8601 (.SSS) 展示 */
+    createdAt: timestamp("created_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(),
   },
   (table) => [
     index("audit_events_tenant_created_idx").on(table.tenantId, table.createdAt),

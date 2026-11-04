@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { users } from "./auth";
 import { departments } from "./departments";
@@ -21,6 +21,12 @@ export const memberships = pgTable(
       .notNull()
       .references(() => departments.id, { onDelete: "cascade" }),
     title: text("title").notNull().default("成员"),
+    /** 工号（HR 档案，选填；留空时由系统按序列自动生成） */
+    employeeNo: text("employee_no"),
+    /** 入职日期（用于动态计算司龄，不落库冗余值） */
+    hireDate: date("hire_date"),
+    /** 岗位/职位（HR 档案；与 title 同步，兼容旧展示） */
+    position: text("position"),
     accessLevel: accessLevel("access_level").notNull().default("L3"),
     status: membershipStatus("status").notNull().default("active"),
     sshEnabled: boolean("ssh_enabled").notNull().default(false),
@@ -33,6 +39,9 @@ export const memberships = pgTable(
       .where(sql`status = 'active'`),
     index("memberships_user_idx").on(table.userId),
     index("memberships_department_idx").on(table.departmentId),
+    uniqueIndex("memberships_tenant_employee_no_unique")
+      .on(table.tenantId, table.employeeNo)
+      .where(sql`employee_no is not null`),
     // 用 ::text 比较：新库首次迁移时 0005 刚新增 pending_removal，
     // 同一事务内直接使用该枚举值会触发 "unsafe use of new value"
     check(

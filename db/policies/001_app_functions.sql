@@ -98,13 +98,14 @@ declare
   v_department_id uuid;
   v_level access_level;
   v_tenant_id uuid;
+  v_user_id uuid;
 begin
   if coalesce(app.current_access_level(), '') <> 'L1' then
     raise exception 'permission denied' using errcode = '42501';
   end if;
 
-  select m.department_id, m.access_level, m.tenant_id
-    into v_department_id, v_level, v_tenant_id
+  select m.department_id, m.access_level, m.tenant_id, m.user_id
+    into v_department_id, v_level, v_tenant_id, v_user_id
     from memberships m
    where m.id = p_membership_id
      and m.status = 'active'
@@ -133,6 +134,18 @@ begin
   update memberships
      set status = 'removed', removed_at = now()
    where id = p_membership_id;
+
+  -- 离职权限清理：账号不再拥有任何有效任用时，清空其个人特例授权并递增权限版本，
+  -- 避免离职账号的权限残留（恢复账号后仅继承角色模板默认权限）。
+  if not exists (
+    select 1 from memberships m2
+     where m2.user_id = v_user_id
+       and m2.status = 'active'
+  ) then
+    delete from user_permission_grants
+     where user_id = v_user_id;
+    perform app.bump_permission_revision(v_user_id);
+  end if;
 end
 $fn$;
 

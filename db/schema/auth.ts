@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { userStatus } from "./enums";
 
@@ -20,6 +20,8 @@ export const users = pgTable(
     phone: text("phone"),
     // 邮箱选填：无邮箱的成员暂不可用邮箱口令登录，等手机号注册绑定
     email: text("email"),
+    /** 生日（HR 档案，选填；仅用于资料展示与生日提醒） */
+    birthday: date("birthday"),
     emailVerified: timestamp("email_verified", { withTimezone: true }),
     image: text("image"),
     // 仅 Credentials 登录使用；OAuth 用户可为空
