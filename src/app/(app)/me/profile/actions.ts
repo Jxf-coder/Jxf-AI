@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -244,7 +244,7 @@ export async function updateCoreProfile(formData: FormData): Promise<ActionResul
     });
 
     revalidatePath("/me/profile");
-    revalidatePath("/org/positions");
+    revalidatePath("/admin/organization");
     return { ok: true };
   } catch (error) {
     return { ok: false, message: toActionMessage(error) };
@@ -606,7 +606,7 @@ export async function updateMembershipAssignment(formData: FormData): Promise<Ac
     });
 
     revalidatePath("/me/profile");
-    revalidatePath("/org/positions");
+    revalidatePath("/admin/organization");
     return { ok: true };
   } catch (error) {
     return { ok: false, message: toActionMessage(error) };

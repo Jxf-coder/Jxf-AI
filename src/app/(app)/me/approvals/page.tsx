@@ -120,14 +120,14 @@ export default async function ApprovalsPage() {
       id: row.id,
       membershipId: row.membership_id,
       memberName: row.member_name ?? row.phone ?? "未命名成员",
-      departmentName: row.department_name,
-      title: row.title,
-      level: row.access_level,
+      departmentName: row.department_name ?? "未知部门",
+      title: row.title ?? "—",
+      level: row.access_level ?? "L3",
       requesterName: row.requester_name ?? "系统",
       submittedAt: formatTime(row.created_at),
-      assetCount: row.asset_count,
+      assetCount: row.asset_count ?? 0,
       items: (itemsByApproval.get(row.id) ?? []).map((item) => ({
-        assetType: item.asset_type,
+        assetType: item.asset_type ?? "资产",
         assetId: item.asset_id,
         toName: item.to_name ?? "未知接收人",
       })),
@@ -152,8 +152,12 @@ export default async function ApprovalsPage() {
   return (
     <div className="page">
       <header className="page-header">
-        <h1 className="page-title">审批中心</h1>
-        <p className="page-subtitle">离职交接审批：通过后资产完成转移并停用账号，驳回或撤回则恢复在职。</p>
+        <div>
+          <h1 className="page-title">审批中心</h1>
+          <p className="page-subtitle">
+            离职交接审批：通过后资产完成转移并停用账号，驳回或撤回则恢复在职。
+          </p>
+        </div>
       </header>
 
       {!data.canApprove ? (

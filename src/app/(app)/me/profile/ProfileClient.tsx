@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 
 import { NoticeBar } from "@/components/ui/notice-bar";
+import { Select } from "@/components/ui/select";
 import type {
   AccessLevel,
   ProfilePermissions,
@@ -338,22 +339,20 @@ export function ProfileClient({
                     <span className="settings-label">所属部门</span>
                     <div className="settings-value">
                       {permissions.canEditOrg ? (
-                        <select
-                          className="settings-select"
+                        <Select
+                          className="settings-select-wrap"
                           value={departmentValue}
-                          onChange={(event) =>
+                          options={departments.map((department) => ({
+                            value: department.id,
+                            label: department.name,
+                          }))}
+                          onValueChange={(next) =>
                             setDeptDraft((current) => ({
                               ...current,
-                              [membership.id]: event.target.value,
+                              [membership.id]: next,
                             }))
                           }
-                        >
-                          {departments.map((department) => (
-                            <option key={department.id} value={department.id}>
-                              {department.name}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       ) : (
                         <span className="settings-static">
                           {membership.departmentName} <span className="lock-tag">🔒</span>
@@ -390,20 +389,21 @@ export function ProfileClient({
                     <span className="settings-label">权限等级</span>
                     <div className="settings-value">
                       {permissions.canEditOrg ? (
-                        <select
-                          className="settings-select"
+                        <Select
+                          className="settings-select-wrap"
                           value={levelValue}
-                          onChange={(event) =>
+                          options={[
+                            { value: "L1", label: "L1 · 老板" },
+                            { value: "L2", label: "L2 · 管理者" },
+                            { value: "L3", label: "L3 · 普通成员" },
+                          ]}
+                          onValueChange={(next) =>
                             setLevelDraft((current) => ({
                               ...current,
-                              [membership.id]: event.target.value,
+                              [membership.id]: next,
                             }))
                           }
-                        >
-                          <option value="L1">L1 · 老板</option>
-                          <option value="L2">L2 · 管理者</option>
-                          <option value="L3">L3 · 普通成员</option>
-                        </select>
+                        />
                       ) : (
                         <span className="settings-static">
                           <LevelBadge level={membership.accessLevel} />

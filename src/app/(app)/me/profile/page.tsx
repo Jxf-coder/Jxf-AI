@@ -133,7 +133,7 @@ export default async function ProfilePage({
           </p>
         </div>
         {data.permissions.isSelf ? (
-          <Link className="button button-secondary" href="/org/positions">
+          <Link className="button button-secondary" href="/admin/organization">
             返回组织架构
           </Link>
         ) : (

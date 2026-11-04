@@ -139,7 +139,7 @@ async function runDecision(
     });
 
     revalidatePath("/me/approvals");
-    revalidatePath("/org/positions");
+    revalidatePath("/admin/organization");
     revalidatePath("/", "layout");
 
     const message =
