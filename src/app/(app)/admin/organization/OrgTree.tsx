@@ -5,7 +5,6 @@ import type { DragEvent, ReactNode } from "react";
 import Link from "next/link";
 
 import { usePermission } from "@/components/permissions/usePermission";
-import { CollapsibleSection } from "@/components/ui/collapsible";
 import { NoticeBar } from "@/components/ui/notice-bar";
 import { Select } from "@/components/ui/select";
 
@@ -16,7 +15,6 @@ import {
   removeMember,
   reorderDepartments,
   requestMemberRemoval,
-  restoreMember,
 } from "./actions";
 
 export interface OrgDepartment {
@@ -35,17 +33,6 @@ export interface OrgMember {
   email: string | null;
   phone: string | null;
   name: string | null;
-}
-
-export interface ArchivedMember {
-  id: string;
-  department_id: string;
-  access_level: "L1" | "L2" | "L3";
-  title: string;
-  email: string | null;
-  phone: string | null;
-  name: string | null;
-  removed_at: Date | null;
 }
 
 type DragItem =
@@ -87,6 +74,13 @@ interface Notice {
   text: string;
 }
 
+/** 树形渲染防爆：默认最多渲染 4 层，超深层级需手动展开 */
+const MAX_TREE_DEPTH = 4;
+/** 单次渲染的部门总量上限，防止极端数据量导致 DOM 过载 */
+const MAX_DEPARTMENTS = 400;
+/** 单个部门默认展示的成员上限 */
+const MAX_MEMBERS_PER_DEPARTMENT = 50;
+
 function LevelBadge({ level }: { level: "L1" | "L2" | "L3" }) {
   return (
     <span className={`badge level-${level.toLowerCase()}`}>{level === "L1" ? "老板" : level}</span>
@@ -96,11 +90,9 @@ function LevelBadge({ level }: { level: "L1" | "L2" | "L3" }) {
 export function OrgTree({
   departments,
   members,
-  archivedMembers,
 }: {
   departments: OrgDepartment[];
   members: OrgMember[];
-  archivedMembers: ArchivedMember[];
 }) {
   const { can, check } = usePermission();
   const canManageOrg = can("org:manage");
@@ -117,9 +109,8 @@ export function OrgTree({
   const [handoverTargets, setHandoverTargets] = useState<Record<string, string>>({});
   const [pendingDepartmentDelete, setPendingDepartmentDelete] =
     useState<PendingDepartmentDelete | null>(null);
-  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
-  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [expandedDeepIds, setExpandedDeepIds] = useState<ReadonlySet<string>>(new Set());
 
   const departmentNames = useMemo(
     () => new Map(departments.map((department) => [department.id, department.name])),
@@ -413,29 +404,23 @@ export function OrgTree({
     })();
   }
 
-  function handleRestore(member: ArchivedMember) {
-    if (restoringId) {
-      return;
-    }
-    const displayName = member.name?.trim() || member.phone || member.email || "未命名成员";
-    setRestoringId(member.id);
-    void (async () => {
-      try {
-        const result = await restoreMember(member.id);
-        if (result.ok) {
-          setNotice({ kind: "info", text: `已恢复「${displayName}」为有效成员` });
-        } else {
-          setNotice({ kind: "error", text: result.message });
-        }
-      } finally {
-        setRestoringId(null);
-      }
-    })();
-  }
+  // 每次渲染重置预算，防止超宽树一次性挂载过多节点
+  const renderBudget = { departments: 0 };
 
   function renderDepartment(department: OrgDepartment, depth: number): ReactNode {
+    if (renderBudget.departments >= MAX_DEPARTMENTS) {
+      return null;
+    }
+    renderBudget.departments += 1;
+
     const departmentMembers = membersOf.get(department.id) ?? [];
     const children = childrenOf.get(department.id) ?? [];
+    const visibleMembers = departmentMembers.slice(0, MAX_MEMBERS_PER_DEPARTMENT);
+    const hiddenMemberCount = departmentMembers.length - visibleMembers.length;
+    const deeperLocked =
+      depth + 1 >= MAX_TREE_DEPTH &&
+      children.length > 0 &&
+      !expandedDeepIds.has(department.id);
     const isRoot = department.parent_id === null;
     const droppable =
       dragging !== null &&
@@ -505,8 +490,9 @@ export function OrgTree({
         </div>
 
         {departmentMembers.length > 0 ? (
-          <ul className="member-cards">
-            {departmentMembers.map((member) => {
+          <>
+            <ul className="member-cards">
+              {visibleMembers.map((member) => {
               const displayName = member.name?.trim() || member.phone || member.email || "未命名成员";
               return (
                 <li
@@ -543,7 +529,7 @@ export function OrgTree({
                     ) : (
                       <strong className="member-name">{displayName}</strong>
                     )}
-                    <span className="member-title">· {member.title}</span>
+                    <span className="member-title">· {member.title || "—"}</span>
                   </span>
                   {canManageMembers && member.access_level !== "L1" ? (
                     <button
@@ -555,17 +541,45 @@ export function OrgTree({
                     </button>
                   ) : null}
                 </li>
-              );
+                );
             })}
-          </ul>
+            </ul>
+            {hiddenMemberCount > 0 ? (
+              <p className="dept-empty">
+                另有 {hiddenMemberCount} 名成员未展示（单部门最多展示 {MAX_MEMBERS_PER_DEPARTMENT} 人，
+                可在「员工管理」中筛选查看）
+              </p>
+            ) : null}
+          </>
         ) : (
           <p className="dept-empty">{droppable ? "暂无成员 · 可拖入成员" : "暂无成员"}</p>
         )}
 
         {children.length > 0 ? (
-          <ul className={`role-tree role-tree-depth-${Math.min(depth + 1, 3)}`}>
-            {children.map((child) => renderDepartment(child, depth + 1))}
-          </ul>
+          deeperLocked ? (
+            <div className="dept-more">
+              <span>
+                还有 {children.length} 个下级部门已折叠（最多渲染 {MAX_TREE_DEPTH} 层）
+              </span>
+              <button
+                type="button"
+                className="button button-ghost"
+                onClick={() =>
+                  setExpandedDeepIds((current) => {
+                    const next = new Set(current);
+                    next.add(department.id);
+                    return next;
+                  })
+                }
+              >
+                展开本级
+              </button>
+            </div>
+          ) : (
+            <ul className={`role-tree role-tree-depth-${Math.min(depth + 1, 3)}`}>
+              {children.map((child) => renderDepartment(child, depth + 1))}
+            </ul>
+          )
         ) : null}
       </li>
     );
@@ -592,48 +606,10 @@ export function OrgTree({
         {roots.map((department) => renderDepartment(department, 0))}
       </ul>
 
-      {canManageMembers ? (
-        <CollapsibleSection
-          className="archive-panel"
-          open={archiveOpen}
-          onToggle={() => setArchiveOpen((current) => !current)}
-          title="已停用成员"
-          meta={`${archivedMembers.length} 人`}
-        >
-          {archivedMembers.length === 0 ? (
-            <p className="hint">暂无已停用成员。</p>
-          ) : (
-            <ul className="archive-list">
-              {archivedMembers.map((member) => {
-                const displayName =
-                  member.name?.trim() || member.phone || member.email || "未命名成员";
-                const removedOn = member.removed_at
-                  ? new Date(member.removed_at).toISOString().slice(0, 10)
-                  : null;
-                return (
-                  <li key={member.id} className="archive-item">
-                    <span className="archive-identity">
-                      <strong className="member-name">{displayName}</strong>
-                      <span className="member-title">· {member.title}</span>
-                      <span className="archive-meta">
-                        {departmentNames.get(member.department_id) ?? "未知部门"}
-                        {removedOn ? ` · 停用于 ${removedOn}` : ""}
-                      </span>
-                    </span>
-                    <button
-                      type="button"
-                      className="button button-secondary archive-restore"
-                      onClick={() => handleRestore(member)}
-                      disabled={restoringId === member.id}
-                    >
-                      {restoringId === member.id ? "恢复中…" : "恢复"}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </CollapsibleSection>
+      {departments.length > MAX_DEPARTMENTS ? (
+        <p className="hint">
+          部门数量超过 {MAX_DEPARTMENTS}，已仅渲染前 {MAX_DEPARTMENTS} 个；可通过「员工管理」按部门筛选查看。
+        </p>
       ) : null}
 
       {pendingMove ? (

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import type { PoolClient } from "pg";
 
 import { auditInTx } from "@/lib/audit";
 import { requireSession } from "@/lib/auth/session";
@@ -61,6 +62,54 @@ function normalizeEmail(input: string): string {
     throw new Error("邮箱格式不正确");
   }
   return email;
+}
+
+/** 仅接受 YYYY-MM-DD（date 类型入参）；空字符串表示不设置 */
+function normalizeDate(input: string, label: string): string | null {
+  const value = input.trim();
+  if (!value) {
+    return null;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+    throw new Error(`${label}格式不正确，应为 YYYY-MM-DD`);
+  }
+  return value;
+}
+
+/** 留空工号时按数据库序列生成 JXF-0001 形式工号（并发安全） */
+async function nextEmployeeNo(client: PoolClient): Promise<string> {
+  const { rows } = await client.query<{ employee_no: string }>(
+    "select 'JXF-' || lpad(nextval('employee_no_seq')::text, 4, '0') as employee_no",
+  );
+  return rows[0]?.employee_no ?? `JXF-${Date.now()}`;
+}
+
+interface PendingApprovalItem {
+  id: string;
+  type: string;
+  created_at: Date;
+}
+
+/** 该成员名下待处理审批单（作为申请人，或以该任用为主体） */
+async function listPendingApprovals(
+  client: PoolClient,
+  tenantId: string,
+  userId: string,
+  membershipId: string,
+): Promise<PendingApprovalItem[]> {
+  const { rows } = await client.query<PendingApprovalItem>(
+    `select ar.id, ar.type, ar.created_at
+       from approval_requests ar
+      where ar.tenant_id = $1
+        and ar.status = 'pending'
+        and (
+          ar.requester_id = $2
+          or (ar.subject_type = 'membership' and ar.subject_id = $3)
+        )
+      order by ar.created_at asc, ar.id asc`,
+    [tenantId, userId, membershipId],
+  );
+  return rows;
 }
 
 /** 拖拽类动作由客户端直接调用，需要把数据库错误翻译成可读提示而不是整页报错 */
@@ -162,7 +211,7 @@ export async function createDepartment(formData: FormData): Promise<void> {
     });
   });
 
-  revalidatePath("/org/positions");
+  revalidatePath("/admin/organization");
 }
 
 export async function updateDepartment(formData: FormData): Promise<void> {
@@ -217,7 +266,7 @@ export async function updateDepartment(formData: FormData): Promise<void> {
     });
   });
 
-  revalidatePath("/org/positions");
+  revalidatePath("/admin/organization");
 }
 
 /** 删除部门：由客户端二次确认后调用，删除前仍需保证部门下没有子部门与成员 */
@@ -275,15 +324,18 @@ export async function deleteDepartment(
       });
     });
 
-    revalidatePath("/org/positions");
+    revalidatePath("/admin/organization");
     return { ok: true };
   } catch (error) {
     return { ok: false, message: toActionMessage(error) };
   }
 }
 
-export async function addMember(formData: FormData): Promise<void> {
-  const session = await requireSession();
+export async function addMember(
+  formData: FormData,
+): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
+  try {
+    const session = await requireSession();
   const requestId = (await headers()).get("x-request-id") ?? undefined;
   const context = await resolveUserContext(session.userId, requestId);
 
@@ -292,7 +344,10 @@ export async function addMember(formData: FormData): Promise<void> {
   const phone = normalizePhone(readText(formData, "phone"));
   const emailInput = readText(formData, "email");
   const email = emailInput ? normalizeEmail(emailInput) : null;
-  const title = readText(formData, "title");
+  const employeeNoInput = readText(formData, "employeeNo");
+  const hireDateInput = readText(formData, "hireDate");
+  const birthdayInput = readText(formData, "birthday");
+  const position = readText(formData, "position");
   const accessLevel = readText(formData, "accessLevel");
 
   if (!departmentId) {
@@ -301,9 +356,16 @@ export async function addMember(formData: FormData): Promise<void> {
   if (!name || name.length > 40) {
     throw new Error("姓名必填且不超过 40 字符");
   }
-  if (!title || title.length > 40) {
-    throw new Error("业务岗位必填且不超过 40 字符");
+  if (position.length > 40) {
+    throw new Error("岗位/职位不超过 40 字符");
   }
+  if (employeeNoInput.length > 32) {
+    throw new Error("工号不超过 32 字符");
+  }
+  const hireDate = normalizeDate(hireDateInput, "入职日期");
+  const birthday = normalizeDate(birthdayInput, "生日");
+  // 岗位为 HR 主字段；title 同步保存，兼容组织架构与审批中心的既有展示
+  const title = position || "成员";
   if (!ACCESS_LEVELS.includes(accessLevel as (typeof ACCESS_LEVELS)[number])) {
     throw new Error("权限等级非法");
   }
@@ -339,13 +401,16 @@ export async function addMember(formData: FormData): Promise<void> {
     let userId: string;
     if (existing.rows.length > 0) {
       userId = existing.rows[0].id;
-      await client.query("update users set name = $1 where id = $2", [name, userId]);
+      await client.query(
+        "update users set name = $1, birthday = coalesce($3::date, birthday) where id = $2",
+        [name, userId, birthday],
+      );
     } else {
       const created = await client.query<{ id: string }>(
-        `insert into users (name, phone, email)
-         values ($1, $2, $3)
+        `insert into users (name, phone, email, birthday)
+         values ($1, $2, $3, $4::date)
          returning id`,
-        [name, phone, email],
+        [name, phone, email, birthday],
       );
       userId = created.rows[0].id;
     }
@@ -383,17 +448,31 @@ export async function addMember(formData: FormData): Promise<void> {
       ]);
     }
 
+    const employeeNo = employeeNoInput || (await nextEmployeeNo(client));
     let membershipId: string;
     try {
       const inserted = await client.query<{ id: string }>(
-        `insert into memberships (tenant_id, user_id, department_id, title, access_level)
-         values ($1, $2, $3, $4, $5)
+        `insert into memberships
+           (tenant_id, user_id, department_id, title, employee_no, hire_date, position, access_level)
+         values ($1, $2, $3, $4, $5, $6::date, $7, $8)
          returning id`,
-        [context.tenantId, userId, departmentId, title, accessLevel],
+        [
+          context.tenantId,
+          userId,
+          departmentId,
+          title,
+          employeeNo,
+          hireDate,
+          position || null,
+          accessLevel,
+        ],
       );
       membershipId = inserted.rows[0].id;
     } catch (error) {
       if ((error as { code?: string }).code === "23505") {
+        if ((error as { constraint?: string }).constraint === "memberships_tenant_employee_no_unique") {
+          throw new Error("该工号已被占用，请更换后重试");
+        }
         throw new Error("该成员已在此部门有有效任用");
       }
       if ((error as { code?: string }).code === "42501") {
@@ -408,20 +487,176 @@ export async function addMember(formData: FormData): Promise<void> {
       action: "membership.created",
       targetType: "membership",
       targetId: membershipId,
-      payload: { departmentId, departmentName, userId, phone, email, title, accessLevel },
+      payload: {
+        departmentId,
+        departmentName,
+        userId,
+        phone,
+        email,
+        title,
+        employeeNo,
+        hireDate,
+        position,
+        accessLevel,
+      },
     });
-  });
+    });
 
-  revalidatePath("/org/positions");
+    revalidatePath("/admin/organization");
+    return { ok: true, message: "员工已添加" };
+  } catch (error) {
+    return { ok: false, message: toActionMessage(error) };
+  }
 }
 
+/** 员工管理行内编辑：只改基础行政资料（姓名 / 手机 / 部门 / 工号 / 入职日期 / 生日 / 岗位），不涉及权限开关 */
+export async function updateMemberBasics(input: {
+  membershipId: string;
+  name: string;
+  phone: string;
+  departmentId: string;
+  employeeNo: string;
+  hireDate: string;
+  birthday: string;
+  position: string;
+}): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
+  try {
+    const session = await requireSession();
+    const requestId = (await headers()).get("x-request-id") ?? undefined;
+    const context = await resolveUserContext(session.userId, requestId);
+
+    const name = input.name.trim();
+    const position = input.position.trim();
+    const employeeNo = input.employeeNo.trim();
+    const phone = normalizePhone(input.phone);
+    if (!name || name.length > 40) {
+      throw new Error("姓名必填且不超过 40 字符");
+    }
+    if (position.length > 40) {
+      throw new Error("岗位/职位不超过 40 字符");
+    }
+    if (employeeNo.length > 32) {
+      throw new Error("工号不超过 32 字符");
+    }
+    if (!input.departmentId) {
+      throw new Error("请选择所属部门");
+    }
+    const hireDate = normalizeDate(input.hireDate, "入职日期");
+    const birthday = normalizeDate(input.birthday, "生日");
+    const title = position || "成员";
+
+    await withUserContext(context, async (client) => {
+      const current = await client.query<{
+        department_id: string;
+        department_name: string;
+        user_id: string;
+        member_name: string | null;
+      }>(
+        `select m.department_id, d.name as department_name, m.user_id, u.name as member_name
+           from memberships m
+           join departments d on d.id = m.department_id
+           join users u on u.id = m.user_id
+          where m.id = $1
+            and m.status = 'active'`,
+        [input.membershipId],
+      );
+      const row = current.rows[0];
+      if (!row) {
+        throw new Error("成员任用不存在或已失效");
+      }
+
+      await requireContextPermission(client, context, "member:manage", {
+        kind: "membership",
+        id: input.membershipId,
+        departmentId: row.department_id,
+      });
+      if (input.departmentId !== row.department_id) {
+        await requireContextPermission(client, context, "member:manage", {
+          kind: "department",
+          id: input.departmentId,
+          departmentId: input.departmentId,
+        });
+      }
+
+      try {
+        await client.query(
+          "update users set name = $1, phone = $2, birthday = coalesce($4::date, birthday) where id = $3",
+          [name, phone, row.user_id, birthday],
+        );
+      } catch (error) {
+        if ((error as { code?: string }).code === "23505") {
+          throw new Error("该手机号已被其他账号使用");
+        }
+        throw error;
+      }
+
+      // 复用数据库函数：仅 L1 可改所属部门；岗位 / 工号 / 入职日期走 HR 档案函数
+      await client.query("select app.update_membership_profile($1, null, $2, null)", [
+        input.membershipId,
+        input.departmentId,
+      ]);
+      try {
+        await client.query("select app.update_member_hr_profile($1, $2, $3::date, $4)", [
+          input.membershipId,
+          employeeNo,
+          hireDate,
+          position,
+        ]);
+      } catch (error) {
+        if ((error as { code?: string }).code === "23505") {
+          throw new Error("该工号已被占用，请更换后重试");
+        }
+        throw error;
+      }
+
+      const targetDepartment = await client.query<{ name: string }>(
+        "select name from departments where id = $1",
+        [input.departmentId],
+      );
+
+      await auditInTx(client, context, {
+        actorUserId: context.userId,
+        departmentId: input.departmentId,
+        action: "member.basics_updated",
+        targetType: "membership",
+        targetId: input.membershipId,
+        payload: {
+          memberName: name,
+          departmentName: targetDepartment.rows[0]?.name ?? null,
+          previousDepartmentName: row.department_name,
+          employeeNo,
+          hireDate,
+          birthday,
+          position,
+        },
+      });
+    });
+
+    revalidatePath("/admin/organization");
+    return { ok: true, message: "员工资料已更新" };
+  } catch (error) {
+    return { ok: false, message: toActionMessage(error) };
+  }
+}
+
+export type RemoveMemberResult =
+  | { ok: true; reassigned: number }
+  | {
+      ok: false;
+      code?: "PENDING_APPROVALS";
+      pendingCount?: number;
+      message: string;
+    };
+
 /**
- * 移出成员：只做软删除（status = 'removed'），
- * 由数据库函数 app.remove_membership 保证权限、保留最后一位 L1、且绝不物理删除。
+ * 移出成员：只做软删除（status = 'removed'）。
+ * 停用前必须处理该成员的待审批单据：未指定转交人时返回 PENDING_APPROVALS 供前端二次确认，
+ * 指定转交人后先把待处理审批单转交，再执行移出，避免审批流悬挂。
  */
 export async function removeMember(
   membershipId: string,
-): Promise<{ ok: true } | { ok: false; message: string }> {
+  options?: { reassignToUserId?: string },
+): Promise<RemoveMemberResult> {
   if (!membershipId) {
     return { ok: false, message: "任用 ID 缺失" };
   }
@@ -431,14 +666,15 @@ export async function removeMember(
     const requestId = (await headers()).get("x-request-id") ?? undefined;
     const context = await resolveUserContext(session.userId, requestId);
 
-    await withUserContext(context, async (client) => {
-      const target = await client.query<{ department_id: string }>(
-        "select department_id from memberships where id = $1 and status = 'active'",
+    const outcome = await withUserContext(context, async (client) => {
+      const target = await client.query<{ department_id: string; user_id: string }>(
+        "select department_id, user_id from memberships where id = $1 and status = 'active'",
         [membershipId],
       );
       if (target.rows.length === 0) {
         throw new Error("成员任用不存在或已失效");
       }
+      const targetUserId = target.rows[0].user_id;
 
       await requireContextPermission(client, context, "member:manage", {
         kind: "membership",
@@ -454,8 +690,44 @@ export async function removeMember(
       const blockers = blockerRows.rows[0]?.blockers;
       if (blockers && (blockers.open_work > 0 || blockers.assets > 0)) {
         throw new Error(
-          `该成员还有${describeBlockers(blockers)}未交接，请使用「交接并移出」发起审批`,
+          `该成员还有${describeBlockers(blockers)}未交接，请到「组织架构」Tab 使用「交接并移出」发起审批`,
         );
+      }
+
+      // 审批流悬挂保护：存在待处理单据时必须先指定转交人
+      const pending = await listPendingApprovals(
+        client,
+        context.tenantId,
+        targetUserId,
+        membershipId,
+      );
+      const reassignTo = options?.reassignToUserId?.trim() ?? "";
+      if (pending.length > 0 && !reassignTo) {
+        return { kind: "blocked" as const, pendingCount: pending.length, reassigned: 0 };
+      }
+
+      let reassigned = 0;
+      if (pending.length > 0) {
+        if (reassignTo === targetUserId) {
+          throw new Error("转交人不能是即将停用的成员");
+        }
+        const transferred = await client.query<{ count: number | string }>(
+          "select app.reassign_pending_approvals($1, $2) as count",
+          [targetUserId, reassignTo],
+        );
+        reassigned = Number(transferred.rows[0]?.count ?? 0);
+        await auditInTx(client, context, {
+          actorUserId: context.userId,
+          departmentId: target.rows[0].department_id,
+          action: "approval.reassigned",
+          targetType: "user",
+          targetId: targetUserId,
+          payload: {
+            fromUserId: targetUserId,
+            toUserId: reassignTo,
+            count: reassigned,
+          },
+        });
       }
 
       const infoResult = await client.query<{
@@ -488,12 +760,80 @@ export async function removeMember(
           title: info?.title ?? null,
           memberName: info?.member_name ?? null,
           memberPhone: info?.member_phone ?? null,
+          reassignedApprovals: reassigned,
         },
       });
+
+      return { kind: "removed" as const, pendingCount: pending.length, reassigned };
     });
 
-    revalidatePath("/org/positions");
-    return { ok: true };
+    if (outcome.kind === "blocked") {
+      return {
+        ok: false,
+        code: "PENDING_APPROVALS",
+        pendingCount: outcome.pendingCount,
+        message: `该成员还有 ${outcome.pendingCount} 条待处理审批单，请先指定转交人再停用`,
+      };
+    }
+
+    revalidatePath("/admin/organization");
+    revalidatePath("/me/approvals");
+    return { ok: true, reassigned: outcome.reassigned };
+  } catch (error) {
+    return { ok: false, message: toActionMessage(error) };
+  }
+}
+
+/** 停用前预检：该成员名下是否存在待处理审批单，用于前端二次确认与转交引导 */
+export async function checkMemberPendingApprovals(membershipId: string): Promise<
+  | {
+      ok: true;
+      count: number;
+      items: Array<{ id: string; type: string; createdAt: string }>;
+    }
+  | { ok: false; message: string }
+> {
+  if (!membershipId) {
+    return { ok: false, message: "任用 ID 缺失" };
+  }
+
+  try {
+    const session = await requireSession();
+    const requestId = (await headers()).get("x-request-id") ?? undefined;
+    const context = await resolveUserContext(session.userId, requestId);
+
+    return await withUserContext(context, async (client) => {
+      const target = await client.query<{ department_id: string; user_id: string }>(
+        "select department_id, user_id from memberships where id = $1 and status = 'active'",
+        [membershipId],
+      );
+      if (target.rows.length === 0) {
+        return { ok: false as const, message: "成员任用不存在或已失效" };
+      }
+
+      await requireContextPermission(client, context, "member:manage", {
+        kind: "membership",
+        id: membershipId,
+        departmentId: target.rows[0].department_id,
+      });
+
+      const pending = await listPendingApprovals(
+        client,
+        context.tenantId,
+        target.rows[0].user_id,
+        membershipId,
+      );
+
+      return {
+        ok: true as const,
+        count: pending.length,
+        items: pending.map((item) => ({
+          id: item.id,
+          type: item.type,
+          createdAt: item.created_at.toISOString(),
+        })),
+      };
+    });
   } catch (error) {
     return { ok: false, message: toActionMessage(error) };
   }
@@ -550,6 +890,17 @@ export async function requestMemberRemoval(
         id: membershipId,
         departmentId: info.department_id,
       });
+
+      // 审批流悬挂保护：先处理该成员的待处理审批单，再发起离职交接
+      const pendingApprovals = await listPendingApprovals(
+        client,
+        context.tenantId,
+        info.user_id,
+        membershipId,
+      );
+      if (pendingApprovals.length > 0) {
+        throw new Error("该成员还有待处理审批单，请先在「员工管理」中指定转交人后再发起交接");
+      }
 
       const assets = await listHandoverAssets(client, info.user_id);
       if (assets.length === 0) {
@@ -614,7 +965,7 @@ export async function requestMemberRemoval(
       return newApprovalId;
     });
 
-    revalidatePath("/org/positions");
+    revalidatePath("/admin/organization");
     revalidatePath("/me/approvals");
     return { ok: true, approvalId };
   } catch (error) {
@@ -732,7 +1083,7 @@ export async function restoreMember(
       });
     });
 
-    revalidatePath("/org/positions");
+    revalidatePath("/admin/organization");
     return { ok: true };
   } catch (error) {
     return { ok: false, message: toActionMessage(error) };
@@ -823,7 +1174,7 @@ export async function reorderDepartments(
       });
     });
 
-    revalidatePath("/org/positions");
+    revalidatePath("/admin/organization");
     return { ok: true };
   } catch (error) {
     return { ok: false, message: toActionMessage(error) };
@@ -908,7 +1259,7 @@ export async function moveMember(
       });
     });
 
-    revalidatePath("/org/positions");
+    revalidatePath("/admin/organization");
     return { ok: true };
   } catch (error) {
     return { ok: false, message: toActionMessage(error) };
