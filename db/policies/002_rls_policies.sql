@@ -81,7 +81,8 @@ create policy memberships_insert on memberships
 revoke update, delete on memberships from jxf_app;
 
 -- ---------------------------------------------------------------------------
--- department_packs：子树可读；只能改自身部门的包
+-- department_packs：子树可读；写入收紧为 L1（P4）
+-- 说明：能力包影响全部门可用技能/产线，属于组织治理动作，不再允许 L2 直接写。
 -- ---------------------------------------------------------------------------
 drop policy if exists department_packs_read on department_packs;
 create policy department_packs_read on department_packs
@@ -96,13 +97,13 @@ create policy department_packs_insert on department_packs
 drop policy if exists department_packs_update on department_packs;
 create policy department_packs_update on department_packs
   for update
-  using (app.can_write(department_id))
-  with check (app.can_write(department_id));
+  using (app.current_access_level() = 'L1' and app.can_write(department_id))
+  with check (app.current_access_level() = 'L1' and app.can_write(department_id));
 
 drop policy if exists department_packs_delete on department_packs;
 create policy department_packs_delete on department_packs
   for delete
-  using (app.can_write(department_id));
+  using (app.current_access_level() = 'L1' and app.can_write(department_id));
 
 -- ---------------------------------------------------------------------------
 -- department_closure：应用角色不可直接读写；仅能通过 SECURITY DEFINER 函数间接使用

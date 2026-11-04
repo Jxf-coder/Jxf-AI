@@ -21,6 +21,8 @@ export const auditEvents = pgTable(
     id: bigserial("id", { mode: "number" }).primaryKey(),
     tenantId: uuid("tenant_id").notNull(),
     actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    /** 事件发生的部门上下文：用于 L2 的「本部门及下级」审计可见性；顶层/登录事件可为空 */
+    departmentId: uuid("department_id"),
     action: text("action").notNull(),
     targetType: text("target_type"),
     targetId: uuid("target_id"),
@@ -31,5 +33,6 @@ export const auditEvents = pgTable(
   (table) => [
     index("audit_events_tenant_created_idx").on(table.tenantId, table.createdAt),
     index("audit_events_actor_idx").on(table.actorUserId),
+    index("audit_events_department_idx").on(table.departmentId),
   ],
 );

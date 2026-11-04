@@ -3,17 +3,52 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { usePermission } from "@/components/permissions/usePermission";
+import { SearchIcon } from "@/components/ui/icons";
+import type { PermissionKey } from "@/types/permission";
+import type { AccessLevel } from "@/types/profile";
+
 interface CommandItem {
   label: string;
   hint: string;
   href: string;
   keywords: string[];
+  /** 无该权限时不出现在搜索结果里 */
+  permission?: PermissionKey;
+  /** 仅指定等级可见（L1 专属的权限管理） */
+  requiresLevel?: AccessLevel;
 }
 
 const ITEMS: CommandItem[] = [
-  { label: "组织与岗位", hint: "岗位树 · 成员", href: "/org/positions", keywords: ["org", "position", "role", "岗位", "组织"] },
+  {
+    label: "组织架构",
+    hint: "部门树 · 成员",
+    href: "/org/positions",
+    keywords: ["org", "position", "role", "岗位", "组织"],
+    permission: "org:view",
+  },
   { label: "我的权限", hint: "请求上下文", href: "/me/permissions", keywords: ["permission", "权限", "角色"] },
-  { label: "安全审计", hint: "最近审计事件", href: "/me/permissions#audit", keywords: ["audit", "审计", "日志"] },
+  {
+    label: "审批中心",
+    hint: "离职交接 · 待审批",
+    href: "/me/approvals",
+    keywords: ["approval", "handover", "审批", "交接"],
+    permission: "member:manage",
+  },
+  {
+    label: "权限管理",
+    hint: "角色模板 · 成员授权 · 变更记录",
+    href: "/settings/permissions",
+    keywords: ["permission", "admin", "权限", "模板", "授权"],
+    requiresLevel: "L1",
+  },
+  {
+    label: "审计日志",
+    hint: "组织与资料变更记录",
+    href: "/me/audit",
+    keywords: ["audit", "审计", "日志"],
+    permission: "audit:read",
+  },
   { label: "系统状态", hint: "依赖与健康检查", href: "/health", keywords: ["health", "status", "健康", "系统"] },
 ];
 
@@ -25,22 +60,28 @@ interface CommandPaletteProps {
 /** macOS 风格 Command Palette：当前提供页面级跳转，数据检索待 P3 接入 */
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const router = useRouter();
+  const { can, level } = usePermission();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
 
   const items = useMemo(() => {
+    const allowed = ITEMS.filter(
+      (item) =>
+        (!item.permission || can(item.permission)) &&
+        (!item.requiresLevel || item.requiresLevel === level),
+    );
     const keyword = query.trim().toLowerCase();
     if (!keyword) {
-      return ITEMS;
+      return allowed;
     }
-    return ITEMS.filter(
+    return allowed.filter(
       (item) =>
         item.label.toLowerCase().includes(keyword) ||
         item.hint.toLowerCase().includes(keyword) ||
         item.keywords.some((word) => word.includes(keyword)),
     );
-  }, [query]);
+  }, [query, can]);
 
   useEffect(() => {
     if (!open) {
@@ -93,10 +134,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       <button type="button" className="palette-backdrop" aria-label="关闭全局搜索" onClick={onClose} />
       <div className="palette" role="dialog" aria-modal="true" aria-label="全局搜索">
         <div className="palette-input-row">
-          <svg className="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <circle cx="9" cy="9" r="5.4" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M13.2 13.2l3.4 3.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
+          <SearchIcon className="search-icon" />
           <input
             ref={inputRef}
             className="palette-input"

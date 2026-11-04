@@ -22,6 +22,34 @@
       "when": 1793367606977,
       "tag": "0002_p1_identity_phone",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793370600000,
+      "tag": "0003_p1_org_sort_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793376600000,
+      "tag": "0004_p1_audit_department",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793629618809,
+      "tag": "0005_permissions_and_handover",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793796517091,
+      "tag": "0006_pending_removal_shape",
+      "breakpoints": true
     }
   ]
 }

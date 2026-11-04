@@ -11,8 +11,24 @@ out/
 
 # 运行时数据与日志
 data/
+logs/
 *.log
 npm-debug.log*
+
+# 本地数据库与转储（数据库跑在 Docker 卷里，不进入版本库）
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+pgdata/
+backup/
+
+# 本地设计 / 推进文档：仅保留在工作区，不进入版本库
+docs/development/P1-progress.md
+docs/development/P6-*.md
+docs/architecture/permission-model.md
+docs/architecture/权限系统与UI落地实施计划.md
+docs/architecture/原项目权限体系分析报告.md
 
 # 系统文件
 .DS_Store

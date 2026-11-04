@@ -10,14 +10,16 @@ export interface AuditEvent {
   action: string;
   targetType?: string | null;
   targetId?: string | null;
+  /** 事件发生的部门上下文：用于 L2 审计可见性；登录等全局事件可为空 */
+  departmentId?: string | null;
   requestId?: string | null;
   payload?: Record<string, unknown>;
 }
 
 const INSERT_AUDIT = `
   insert into audit_events
-    (tenant_id, actor_user_id, action, target_type, target_id, request_id, payload)
-  values ($1, $2, $3, $4, $5, $6, $7::jsonb)
+    (tenant_id, actor_user_id, department_id, action, target_type, target_id, request_id, payload)
+  values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
 `;
 
 /** 在已注入上下文的业务事务内写审计（与业务写入同生共死） */
@@ -29,6 +31,7 @@ export async function auditInTx(
   await client.query(INSERT_AUDIT, [
     context.tenantId,
     event.actorUserId,
+    event.departmentId ?? null,
     event.action,
     event.targetType ?? null,
     event.targetId ?? null,
@@ -48,6 +51,7 @@ export async function auditStandalone(event: AuditEvent): Promise<void> {
     await client.query(INSERT_AUDIT, [
       env.tenantId,
       event.actorUserId,
+      event.departmentId ?? null,
       event.action,
       event.targetType ?? null,
       event.targetId ?? null,

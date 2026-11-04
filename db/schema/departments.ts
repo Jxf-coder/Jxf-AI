@@ -9,6 +9,8 @@ export const departments = pgTable(
     parentId: uuid("parent_id"),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    /** 同级部门的拖拽排序位；越小越靠前 */
+    sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

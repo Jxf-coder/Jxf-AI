@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { boolean, integer, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
+import { userStatus } from "./enums";
+
 /**
  * Auth.js v5 + Drizzle Adapter 所需表。
  * 这些是身份基础表，不承载业务数据，因此 P1 不对其启用 RLS；
@@ -22,6 +24,8 @@ export const users = pgTable(
     image: text("image"),
     // 仅 Credentials 登录使用；OAuth 用户可为空
     passwordHash: text("password_hash"),
+    /** 账号状态：pending_handover 期间拒绝登录，disabled 为正式停用 */
+    status: userStatus("status").notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

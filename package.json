@@ -12,11 +12,19 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "seed": "node --env-file=.env --import tsx db/seed/dev.ts",
-    "test:rls": "node --env-file=.env scripts/test-rls.mjs"
+    "test:rls": "node --env-file=.env scripts/test-rls.mjs",
+    "test:permissions": "node --import tsx scripts/test-permissions.mjs",
+    "test:permission-core": "node --import tsx scripts/test-permission-core.mjs",
+    "test:snapshot": "node --import tsx scripts/test-permission-snapshot.mjs",
+    "test:context": "node --env-file=.env scripts/test-active-context.mjs",
+    "test:permission-admin-db": "node --env-file=.env scripts/test-permission-admin.mjs",
+    "test:handover": "node --env-file=.env scripts/test-pending-handover.mjs",
+    "verify:guards": "node scripts/verify-permission-guards.mjs"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",
     "drizzle-orm": "^0.44.5",
+    "lucide-react": "^1.68.0",
     "next": "^15.5.4",
     "next-auth": "^5.0.0-beta.32",
     "pg": "^8.16.3",

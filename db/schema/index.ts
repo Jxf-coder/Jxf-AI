@@ -4,3 +4,5 @@ export * from "./departments";
 export * from "./memberships";
 export * from "./department-packs";
 export * from "./audit-events";
+export * from "./permission-grants";
+export * from "./approvals";

@@ -35,7 +35,7 @@ export const memberships = pgTable(
     index("memberships_department_idx").on(table.departmentId),
     check(
       "memberships_removed_shape",
-      sql`(status = 'active' and removed_at is null) or (status = 'removed' and removed_at is not null)`,
+      sql`(status = 'active' and removed_at is null) or (status = 'pending_removal' and removed_at is null) or (status = 'removed' and removed_at is not null)`,
     ),
   ],
 );
