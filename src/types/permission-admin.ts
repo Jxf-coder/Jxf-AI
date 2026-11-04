@@ -59,15 +59,6 @@ export interface AdminMember {
   grants: AdminGrantMap;
 }
 
-export interface AdminAuditEvent {
-  id: number;
-  action: string;
-  targetName: string | null;
-  actorName: string | null;
-  occurredAt: string;
-  payload: Record<string, unknown>;
-}
-
 export interface AdminPayloadGrant {
   permissionKey: PermissionKey;
   scope: PermissionScope;

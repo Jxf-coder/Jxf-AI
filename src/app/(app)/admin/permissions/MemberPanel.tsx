@@ -58,9 +58,9 @@ export function MemberPanel({
     }
     return members.filter(
       (member) =>
-        member.name.toLowerCase().includes(keyword) ||
+        (member.name ?? "").toLowerCase().includes(keyword) ||
         (member.phone ?? "").includes(keyword) ||
-        member.departmentName.toLowerCase().includes(keyword),
+        (member.departmentName ?? "").toLowerCase().includes(keyword),
     );
   }, [memberSearch, members]);
 
@@ -94,11 +94,11 @@ export function MemberPanel({
                   <span className="perm-member-meta">
                     <span className="perm-member-name">
                       {member.name || member.phone || "未命名成员"}
-                      <span className={`badge level-${member.level.toLowerCase()}`}>
-                        {member.level === "L1" ? "老板" : member.level}
+                      <span className={`badge level-${(member.level ?? "L3").toLowerCase()}`}>
+                        {member.level === "L1" ? "老板" : member.level || "—"}
                       </span>
                     </span>
-                    <span className="perm-member-dept">{member.departmentName}</span>
+                    <span className="perm-member-dept">{member.departmentName || "—"}</span>
                   </span>
                 </button>
               );
@@ -116,12 +116,12 @@ export function MemberPanel({
               <div>
                 <h2 className="perm-panel-title">
                   {selected.name || selected.phone || "未命名成员"}
-                  <span className={`badge level-${selected.level.toLowerCase()}`}>
-                    {selected.level === "L1" ? "老板" : selected.level}
+                  <span className={`badge level-${(selected.level ?? "L3").toLowerCase()}`}>
+                    {selected.level === "L1" ? "老板" : selected.level || "—"}
                   </span>
                 </h2>
                 <p className="perm-panel-subtitle">
-                  {selected.departmentName}
+                  {selected.departmentName || "—"}
                   {selected.phone ? ` · ${selected.phone}` : ""} · 模板 {templateCount} 项 · 个人覆盖{" "}
                   {overrideCount} 项
                 </p>
@@ -157,9 +157,9 @@ export function MemberPanel({
                     return true;
                   }
                   return (
-                    node.nameZh.toLowerCase().includes(keyword) ||
-                    node.key.toLowerCase().includes(keyword) ||
-                    node.description.toLowerCase().includes(keyword)
+                    (node.nameZh ?? "").toLowerCase().includes(keyword) ||
+                    (node.key ?? "").toLowerCase().includes(keyword) ||
+                    (node.description ?? "").toLowerCase().includes(keyword)
                   );
                 });
                 if (nodes.length === 0) {

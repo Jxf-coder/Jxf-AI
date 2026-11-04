@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -105,8 +105,7 @@ async function loadTargetMembership(
 }
 
 function refreshPermissionViews(): void {
-  revalidatePath("/settings/permissions");
-  revalidatePath("/me/permissions");
+  revalidatePath("/admin/permissions");
   revalidatePath("/", "layout");
 }
 

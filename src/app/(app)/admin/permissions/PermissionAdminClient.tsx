@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { NoticeBar } from "@/components/ui/notice-bar";
 import type {
-  AdminAuditEvent,
   AdminGrant,
   AdminGrantMap,
   AdminMember,
@@ -15,19 +15,18 @@ import type {
 import type { PermissionKey, PermissionScope } from "@/types/permission";
 import type { AccessLevel } from "@/types/profile";
 
-import { AuditPanel } from "./AuditPanel";
 import { MemberPanel } from "./MemberPanel";
 import { TemplatePanel } from "./TemplatePanel";
 import { defaultScope } from "./parts";
 import { resetMemberGrants, saveMemberGrants, saveTemplateGrants } from "./actions";
 
-type Tab = "templates" | "members" | "log";
+type AdminMode = "roles" | "grants";
 
-const TAB_LABEL: Record<Tab, string> = {
-  templates: "角色模板",
-  members: "成员授权",
-  log: "变更记录",
-};
+type PendingConfirm =
+  | { kind: "template"; level: AccessLevel }
+  | { kind: "member"; userId: string }
+  | { kind: "reset" }
+  | null;
 
 function buildTemplateMap(templates: AdminTemplate[]): Record<AccessLevel, AdminGrantMap> {
   const find = (level: AccessLevel) => {
@@ -59,22 +58,21 @@ function grantsEqual(a: AdminGrantMap, b: AdminGrantMap): boolean {
 }
 
 export function PermissionAdminClient({
+  mode,
   modules,
   templates,
   members,
-  auditEvents,
   currentUserId,
   ceilings,
 }: {
+  mode: AdminMode;
   modules: AdminModule[];
   templates: AdminTemplate[];
   members: AdminMember[];
-  auditEvents: AdminAuditEvent[];
   currentUserId: string;
   ceilings: Record<AccessLevel, readonly PermissionKey[]>;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("templates");
   const [templateLevel, setTemplateLevel] = useState<AccessLevel>("L2");
   const [templateSearch, setTemplateSearch] = useState("");
   const [collapsedModules, setCollapsedModules] = useState<ReadonlySet<string>>(new Set());
@@ -98,6 +96,7 @@ export function PermissionAdminClient({
 
   const [pending, setPending] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [confirming, setConfirming] = useState<PendingConfirm>(null);
   const [notice, setNotice] = useState<{ kind: "info" | "error"; text: string } | null>(null);
 
   const selectedMember = members.find((member) => member.userId === selectedMemberId) ?? null;
@@ -110,7 +109,7 @@ export function PermissionAdminClient({
 
   const templateDirty = !grantsEqual(templateDraft, savedTemplateDraft);
   const memberDirty = !grantsEqual(memberDraft, savedMemberDraft);
-  const dirty = tab === "templates" ? templateDirty : tab === "members" ? memberDirty : false;
+  const dirty = mode === "roles" ? templateDirty : memberDirty;
 
   const nodesByKey = useMemo(() => {
     const map = new Map<PermissionKey, AdminModule["nodes"][number]>();
@@ -134,26 +133,12 @@ export function PermissionAdminClient({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [dirty]);
 
-  function confirmLeave(message: string): boolean {
-    return !dirty || window.confirm(message);
-  }
-
-  function changeTab(next: Tab) {
-    if (next === tab) {
-      return;
-    }
-    if (!confirmLeave("当前页有未保存的更改，确定离开？")) {
-      return;
-    }
-    setTab(next);
-    setNotice(null);
-  }
-
   function changeTemplateLevel(level: AccessLevel) {
     if (level === templateLevel) {
       return;
     }
-    if (templateDirty && !window.confirm("当前模板有未保存的更改，确定切换等级？")) {
+    if (templateDirty) {
+      setConfirming({ kind: "template", level });
       return;
     }
     setTemplateLevel(level);
@@ -164,7 +149,8 @@ export function PermissionAdminClient({
     if (userId === selectedMemberId) {
       return;
     }
-    if (memberDirty && !window.confirm("当前成员有未保存的授权更改，确定切换？")) {
+    if (memberDirty) {
+      setConfirming({ kind: "member", userId });
       return;
     }
     setSelectedMemberId(userId);
@@ -262,7 +248,10 @@ export function PermissionAdminClient({
         ) as AdminGrantMap;
         setSavedTemplates((current) => ({ ...current, [templateLevel]: savedMap }));
         setTemplateDrafts((current) => ({ ...current, [templateLevel]: savedMap }));
-        setNotice({ kind: "info", text: result.message });
+        setNotice({
+          kind: "info",
+          text: "角色权限已更新，已登录的相关用户将在下一次页面刷新或重新加载时生效",
+        });
         router.refresh();
       } else {
         setNotice({ kind: "error", text: result.message });
@@ -310,15 +299,15 @@ export function PermissionAdminClient({
     }
   }
 
-  async function handleResetMember() {
+  function requestResetMember() {
     if (!selectedMember || selectedMember.level === "L1" || resetting) {
       return;
     }
-    if (
-      !window.confirm(
-        `确定恢复「${selectedMember.name || selectedMember.phone || "该成员"}」为角色模板默认权限吗？`,
-      )
-    ) {
+    setConfirming({ kind: "reset" });
+  }
+
+  async function performResetMember() {
+    if (!selectedMember || selectedMember.level === "L1" || resetting) {
       return;
     }
 
@@ -339,12 +328,12 @@ export function PermissionAdminClient({
   }
 
   function discardChanges() {
-    if (tab === "templates") {
+    if (mode === "roles") {
       setTemplateDrafts((current) => ({
         ...current,
         [templateLevel]: { ...savedTemplates[templateLevel] },
       }));
-    } else if (tab === "members") {
+    } else {
       setMemberDrafts((current) => ({
         ...current,
         [selectedMemberId]: { ...savedMemberGrants[selectedMemberId] },
@@ -354,37 +343,62 @@ export function PermissionAdminClient({
   }
 
   function saveActiveTab() {
-    if (tab === "templates") {
+    if (mode === "roles") {
       void handleSaveTemplate();
-    } else if (tab === "members") {
+    } else {
       void handleSaveMember();
     }
   }
 
+  const confirmCopy =
+    confirming?.kind === "template"
+      ? {
+          title: "放弃未保存的模板更改？",
+          description: "当前角色模板有未保存的更改，切换等级后将丢失这些更改。",
+          confirmLabel: "放弃并切换",
+        }
+      : confirming?.kind === "member"
+        ? {
+            title: "放弃未保存的授权更改？",
+            description: "当前成员有未保存的授权更改，切换成员后将丢失这些更改。",
+            confirmLabel: "放弃并切换",
+          }
+        : confirming?.kind === "reset"
+          ? {
+              title: "恢复默认权限？",
+              description: `确定恢复「${selectedMember?.name?.trim() || selectedMember?.phone || "该成员"}」为角色模板默认权限吗？`,
+              confirmLabel: "恢复默认",
+            }
+          : null;
+
+  function handleConfirm() {
+    const current = confirming;
+    setConfirming(null);
+    if (!current) {
+      return;
+    }
+    if (current.kind === "template") {
+      setTemplateLevel(current.level);
+      setNotice(null);
+      return;
+    }
+    if (current.kind === "member") {
+      setSelectedMemberId(current.userId);
+      setNotice(null);
+      return;
+    }
+    void performResetMember();
+  }
+
   return (
     <div className="perm-root">
-      <div className="perm-tabs" role="tablist" aria-label="权限管理">
-        {(Object.keys(TAB_LABEL) as Tab[]).map((key) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={tab === key}
-            className={`perm-tab${tab === key ? " is-active" : ""}`}
-            onClick={() => changeTab(key)}
-          >
-            {TAB_LABEL[key]}
-          </button>
-        ))}
-      </div>
-
       {notice ? (
         <NoticeBar kind={notice.kind} onClose={() => setNotice(null)}>
           {notice.text}
         </NoticeBar>
       ) : null}
 
-      {tab === "templates" ? (
+      {mode === "roles" ? (
         <>
           <div className="perm-toolbar">
             <div className="perm-segmented" role="group" aria-label="角色等级">
@@ -429,9 +443,7 @@ export function PermissionAdminClient({
             onScopeChange={changeTemplateScope}
           />
         </>
-      ) : null}
-
-      {tab === "members" ? (
+      ) : (
         <MemberPanel
           modules={modules}
           ceilings={ceilings}
@@ -446,19 +458,17 @@ export function PermissionAdminClient({
           onSelectMember={selectMember}
           onModeChange={changeMemberMode}
           onScopeChange={changeMemberScope}
-          onReset={() => void handleResetMember()}
+          onReset={requestResetMember}
           resetting={resetting}
         />
-      ) : null}
-
-      {tab === "log" ? <AuditPanel events={auditEvents} /> : null}
+      )}
 
       {dirty ? (
         <div className="perm-savebar">
           <div className="perm-savebar-text">
             <strong>未保存的更改</strong>
             <span>
-              {tab === "templates"
+              {mode === "roles"
                 ? `角色模板 ${templateLevel}`
                 : `成员「${selectedMember?.name || selectedMember?.phone || ""}」`}
             </span>
@@ -471,13 +481,24 @@ export function PermissionAdminClient({
               type="button"
               className="button"
               onClick={saveActiveTab}
-              disabled={pending !== null || (tab === "templates" && templateLevel === "L1")}
+              disabled={pending !== null || (mode === "roles" && templateLevel === "L1")}
             >
               {pending === "template" || pending === "member" ? "保存中…" : "保存更改"}
             </button>
           </div>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={confirming !== null}
+        title={confirmCopy?.title ?? ""}
+        description={confirmCopy?.description}
+        confirmLabel={confirmCopy?.confirmLabel}
+        danger={confirming?.kind === "reset"}
+        pending={resetting}
+        onConfirm={handleConfirm}
+        onCancel={() => setConfirming(null)}
+      />
     </div>
   );
 }

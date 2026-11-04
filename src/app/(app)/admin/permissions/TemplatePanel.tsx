@@ -60,9 +60,9 @@ export function TemplatePanel({
             return true;
           }
           return (
-            node.nameZh.toLowerCase().includes(keyword) ||
-            node.key.toLowerCase().includes(keyword) ||
-            node.description.toLowerCase().includes(keyword)
+            (node.nameZh ?? "").toLowerCase().includes(keyword) ||
+            (node.key ?? "").toLowerCase().includes(keyword) ||
+            (node.description ?? "").toLowerCase().includes(keyword)
           );
         });
 
