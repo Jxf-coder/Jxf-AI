@@ -1,6 +1,7 @@
 "use client";
 
 import { switchActiveDepartment } from "@/app/(app)/actions";
+import { ChevronIcon } from "@/components/ui/icons";
 
 export interface DepartmentOption {
   departmentId: string;
@@ -28,22 +29,25 @@ export function DepartmentSwitcher({
       <label className="dept-switcher-label" htmlFor="active-department">
         当前部门
       </label>
-      <select
-        id="active-department"
-        name="departmentId"
-        key={activeDepartmentId ?? "none"}
-        className="dept-switcher-select"
-        defaultValue={activeDepartmentId ?? memberships[0]?.departmentId ?? ""}
-        onChange={(event) => {
-          event.currentTarget.form?.requestSubmit();
-        }}
-      >
-        {memberships.map((membership) => (
-          <option key={membership.departmentId} value={membership.departmentId}>
-            {membership.departmentName} · {membership.level}
-          </option>
-        ))}
-      </select>
+      <span className="dept-switcher-field">
+        <select
+          id="active-department"
+          name="departmentId"
+          key={activeDepartmentId ?? "none"}
+          className="dept-switcher-select"
+          defaultValue={activeDepartmentId ?? memberships[0]?.departmentId ?? ""}
+          onChange={(event) => {
+            event.currentTarget.form?.requestSubmit();
+          }}
+        >
+          {memberships.map((membership) => (
+            <option key={membership.departmentId} value={membership.departmentId}>
+              {membership.departmentName} · {membership.level}
+            </option>
+          ))}
+        </select>
+        <ChevronIcon className="dept-switcher-chevron" size={13} />
+      </span>
       <noscript>
         <button type="submit" className="button button-secondary">
           切换

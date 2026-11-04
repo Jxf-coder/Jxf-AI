@@ -26,7 +26,7 @@ export function LoginForm() {
       return;
     }
 
-    window.location.href = "/org/positions";
+    window.location.href = "/admin/organization";
   }
 
   return (

@@ -23,11 +23,10 @@ const ITEMS: CommandItem[] = [
   {
     label: "组织架构",
     hint: "部门树 · 成员",
-    href: "/org/positions",
+    href: "/admin/organization",
     keywords: ["org", "position", "role", "岗位", "组织"],
     permission: "org:view",
   },
-  { label: "我的权限", hint: "请求上下文", href: "/me/permissions", keywords: ["permission", "权限", "角色"] },
   {
     label: "审批中心",
     hint: "离职交接 · 待审批",
@@ -37,17 +36,9 @@ const ITEMS: CommandItem[] = [
   },
   {
     label: "权限管理",
-    hint: "角色模板 · 成员授权 · 变更记录",
-    href: "/settings/permissions",
-    keywords: ["permission", "admin", "权限", "模板", "授权"],
-    requiresLevel: "L1",
-  },
-  {
-    label: "审计日志",
-    hint: "组织与资料变更记录",
-    href: "/me/audit",
-    keywords: ["audit", "审计", "日志"],
-    permission: "audit:read",
+    hint: "我的权限 · 角色管理 · 审计日志",
+    href: "/admin/permissions",
+    keywords: ["permission", "admin", "权限", "模板", "授权", "审计", "audit"],
   },
   { label: "系统状态", hint: "依赖与健康检查", href: "/health", keywords: ["health", "status", "健康", "系统"] },
 ];

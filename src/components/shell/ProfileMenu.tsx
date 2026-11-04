@@ -6,8 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { usePermission } from "@/components/permissions/usePermission";
 import {
   ChevronIcon,
-  InboxIcon,
   LogoutIcon,
+  OrgIcon,
   SettingsIcon,
   ShieldIcon,
   UserIcon,
@@ -22,13 +22,11 @@ interface ProfileMenuProps {
 
 export function ProfileMenu({ email, name, accessLevel }: ProfileMenuProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const { can, level } = usePermission();
+  const { can } = usePermission();
   const [open, setOpen] = useState(false);
 
   const canViewProfile = can("profile:view_self");
-  const canReadAudit = can("audit:read");
-  const canManageMembers = can("member:manage");
-  const canManagePermissions = level === "L1";
+  const canViewOrg = can("org:view");
 
   useEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -76,48 +74,26 @@ export function ProfileMenu({ email, name, accessLevel }: ProfileMenuProps) {
             <span className="menu-name">{name || "未命名账号"}</span>
             <span className="menu-email">{email}</span>
           </div>
-          <Link href="/health" role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
-            <SettingsIcon className="menu-icon" />
-            设置
-          </Link>
           {canViewProfile ? (
             <Link href="/me/profile" role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
               <UserIcon className="menu-icon" />
               个人资料
             </Link>
           ) : null}
-          {canManageMembers ? (
-            <Link
-              href="/me/approvals"
-              role="menuitem"
-              className="menu-item"
-              onClick={() => setOpen(false)}
-            >
-              <InboxIcon className="menu-icon" />
-              审批中心
-            </Link>
-          ) : null}
-          {canManagePermissions ? (
-            <Link
-              href="/settings/permissions"
-              role="menuitem"
-              className="menu-item"
-              onClick={() => setOpen(false)}
-            >
-              <ShieldIcon className="menu-icon" />
-              权限管理
-            </Link>
-          ) : null}
-          <Link href="/me/permissions" role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
-            <UserIcon className="menu-icon" />
-            权限
+          <Link href="/health" role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
+            <SettingsIcon className="menu-icon" />
+            设置
           </Link>
-          {canReadAudit ? (
-            <Link href="/me/audit" role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
-              <ShieldIcon className="menu-icon" />
-              审计日志
+          {canViewOrg ? (
+            <Link href="/admin/organization" role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
+              <OrgIcon className="menu-icon" />
+              组织架构
             </Link>
           ) : null}
+          <Link href="/admin/permissions" role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
+            <ShieldIcon className="menu-icon" />
+            权限管理
+          </Link>
           <div className="menu-sep" role="separator" />
           <form action={signOutAction} onSubmit={() => setOpen(false)}>
             <button type="submit" role="menuitem" className="menu-item menu-item-danger">
