@@ -56,4 +56,6 @@ export interface ProfilePermissions {
   canEditTitle: boolean;
   /** 所属部门 / 权限等级：仅 L1 */
   canEditOrg: boolean;
+  /** 生日：允许本人在个人资料页自助修改 */
+  canEditBirthday: boolean;
 }

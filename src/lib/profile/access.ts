@@ -123,6 +123,7 @@ export function computeProfilePermissions(
       actor.accessLevel === "L1" ||
       (actor.accessLevel === "L2" && !isSelf && targetLevel === "L3"),
     canEditOrg: actor.accessLevel === "L1",
+    canEditBirthday: isSelf,
   };
 }
 
@@ -152,6 +153,7 @@ export function computeProfilePermissionsFromActor(
       canEditCore: false,
       canEditTitle: false,
       canEditOrg: false,
+      canEditBirthday: false,
     };
   }
 
@@ -197,5 +199,9 @@ export function computeProfilePermissionsFromActor(
     authorize(actor, "member:level", targetResource).allowed &&
     authorize(actor, "member:manage", targetResource).allowed;
 
-  return { isSelf, canView, canEditCore, canEditTitle, canEditOrg };
+  // 生日只允许本人自助修改；他人档案仍走员工管理的编辑入口
+  const canEditBirthday =
+    isSelf && authorize(actor, "profile:edit_self", ownedResource).allowed;
+
+  return { isSelf, canView, canEditCore, canEditTitle, canEditOrg, canEditBirthday };
 }

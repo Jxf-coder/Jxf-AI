@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -464,6 +464,53 @@ export async function removeEmailIdentity(formData: FormData): Promise<ActionRes
         targetId: targetUserId,
         payload: {
           email: identity.email,
+          departmentName: department?.name ?? null,
+        },
+      });
+    });
+
+    revalidatePath("/me/profile");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: toActionMessage(error) };
+  }
+}
+
+/** 生日自助修改：仅本人；数据库函数再次强制校验 actor = target */
+export async function updateSelfBirthday(formData: FormData): Promise<ActionResult> {
+  try {
+    const session = await requireSession();
+    const requestId = (await headers()).get("x-request-id") ?? undefined;
+    const context = await resolveUserContext(session.userId, requestId);
+
+    const birthdayInput = readText(formData, "birthday");
+    if (birthdayInput && !/^\d{4}-\d{2}-\d{2}$/.test(birthdayInput)) {
+      throw new Error("生日格式不正确");
+    }
+
+    await withUserContext(context, async (client) => {
+      await requireContextPermission(client, context, "profile:edit_self", {
+        kind: "user",
+        id: context.userId,
+        departmentId: context.activeDepartmentId,
+        ownerUserId: context.userId,
+      });
+
+      await client.query("select app.update_self_birthday($1, $2)", [
+        context.userId,
+        birthdayInput || null,
+      ]);
+
+      const department = await loadPrimaryDepartment(client, context.userId);
+
+      await auditInTx(client, context, {
+        actorUserId: context.userId,
+        departmentId: department?.id ?? null,
+        action: "profile.birthday_updated",
+        targetType: "user",
+        targetId: context.userId,
+        payload: {
+          birthday: birthdayInput || null,
           departmentName: department?.name ?? null,
         },
       });

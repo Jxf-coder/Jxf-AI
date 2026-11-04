@@ -113,6 +113,8 @@ function describeAudit(row: AuditRow): { label: string; detail: string } {
     }
     case "profile.email_added":
       return { label: "添加邮箱", detail: text(payload, "email") ?? "—" };
+    case "profile.birthday_updated":
+      return { label: "修改生日", detail: text(payload, "birthday") ?? "已清空" };
     case "profile.primary_email_changed":
       return { label: "切换默认主邮箱", detail: text(payload, "email") ?? "—" };
     case "profile.email_removed":

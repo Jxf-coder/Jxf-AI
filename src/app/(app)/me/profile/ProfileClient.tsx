@@ -18,6 +18,7 @@ import {
   setPrimaryEmailIdentity,
   updateCoreProfile,
   updateMembershipAssignment,
+  updateSelfBirthday,
 } from "./actions";
 
 interface DepartmentOption {
@@ -90,6 +91,7 @@ export function ProfileClient({
   const [titleDraft, setTitleDraft] = useState<Record<string, string>>({});
   const [deptDraft, setDeptDraft] = useState<Record<string, string>>({});
   const [levelDraft, setLevelDraft] = useState<Record<string, string>>({});
+  const [birthdayDraft, setBirthdayDraft] = useState(profile.birthday ?? "");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [pending, setPending] = useState<string | null>(null);
 
@@ -151,6 +153,24 @@ export function ProfileClient({
       } else {
         setNotice({ kind: "error", text: result.message });
       }
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function handleBirthdaySubmit() {
+    if (!permissions.canEditBirthday) {
+      return;
+    }
+    const formData = new FormData();
+    formData.set("birthday", birthdayDraft);
+    setPending("birthday");
+    try {
+      const result = await updateSelfBirthday(formData);
+      setNotice({
+        kind: result.ok ? "info" : "error",
+        text: result.ok ? "生日已更新" : result.message,
+      });
     } finally {
       setPending(null);
     }
@@ -505,16 +525,39 @@ export function ProfileClient({
               <div className="settings-row">
                 <span className="settings-label">生日</span>
                 <div className="settings-value">
-                  <span className="settings-static">{formatDate(profile.birthday)}</span>
+                  {permissions.canEditBirthday ? (
+                    <input
+                      className="settings-input"
+                      type="date"
+                      value={birthdayDraft}
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={(event) => setBirthdayDraft(event.target.value)}
+                      aria-label="生日"
+                    />
+                  ) : (
+                    <span className="settings-static">{formatDate(profile.birthday)}</span>
+                  )}
                 </div>
               </div>
+              {permissions.canEditBirthday ? (
+                <div className="settings-actions">
+                  <button
+                    type="button"
+                    className="button button-secondary"
+                    onClick={() => void handleBirthdaySubmit()}
+                    disabled={pending === "birthday" || birthdayDraft === (profile.birthday ?? "")}
+                  >
+                    {pending === "birthday" ? "保存中…" : "保存生日"}
+                  </button>
+                </div>
+              ) : null}
             </>
           ) : (
             <p className="settings-empty">暂无有效任用</p>
           )}
         </div>
         <p className="settings-group-hint">
-          人事档案由「组织架构 → 员工管理 → 编辑」维护；司龄按入职日期自动计算，不落库。
+          人事档案由「组织架构 → 员工管理 → 编辑」维护；生日可由本人自助修改；司龄按入职日期自动计算，不落库。
           {profile.memberships.length > 1 && primaryMembership
             ? ` 当前展示「${primaryMembership.departmentName}」这条任用的档案。`
             : ""}
