@@ -16,13 +16,19 @@ export interface UserEmailIdentity {
   createdAt: string;
 }
 
-/** 成员的有效任用（部门 + 业务岗位 + 权限等级） */
+/** 成员的有效任用（部门 + 业务岗位 + 权限等级 + HR 档案） */
 export interface UserMembershipSummary {
   id: string;
   departmentId: string;
   departmentName: string;
   title: string;
   accessLevel: AccessLevel;
+  /** 工号：留空时由组织架构自动生成 JXF-0001 */
+  employeeNo: string | null;
+  /** 入职日期（YYYY-MM-DD） */
+  hireDate: string | null;
+  /** HR 岗位字段，与 title 同步 */
+  position: string | null;
 }
 
 /** 个人资料聚合：核心身份 + 多邮箱 + 全部有效任用 */
@@ -33,6 +39,8 @@ export interface UserProfile {
   phone: string | null;
   /** 头像：目前以 data URL 存储，后续可迁移到对象存储 */
   avatarUrl: string | null;
+  /** 生日（YYYY-MM-DD） */
+  birthday: string | null;
   createdAt: string;
   emails: UserEmailIdentity[];
   memberships: UserMembershipSummary[];

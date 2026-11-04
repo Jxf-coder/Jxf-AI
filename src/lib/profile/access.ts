@@ -15,6 +15,20 @@ export interface ProfileActor {
 
 const LEVEL_RANK: Record<AccessLevel, number> = { L1: 3, L2: 2, L3: 1 };
 
+/** pg 的 date 可能以 Date 或字符串返回，统一规范成 YYYY-MM-DD */
+function toDateOnly(value: Date | string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+  return value.slice(0, 10);
+}
+
 /**
  * 读取目标成员的有效任用。
  * memberships 受 RLS 约束：L1 可读全租户，L2 可读自己子树，L3 只能读自己。
@@ -30,8 +44,12 @@ export async function loadTargetMemberships(
     department_name: string;
     title: string;
     access_level: AccessLevel;
+    employee_no: string | null;
+    hire_date: Date | string | null;
+    position: string | null;
   }>(
-    `select m.id, m.department_id, d.name as department_name, m.title, m.access_level
+    `select m.id, m.department_id, d.name as department_name, m.title, m.access_level,
+            m.employee_no, m.hire_date, m.position
        from memberships m
        join departments d on d.id = m.department_id
       where m.user_id = $1
@@ -46,6 +64,9 @@ export async function loadTargetMemberships(
     departmentName: row.department_name,
     title: row.title,
     accessLevel: row.access_level,
+    employeeNo: row.employee_no,
+    hireDate: toDateOnly(row.hire_date),
+    position: row.position,
   }));
 }
 

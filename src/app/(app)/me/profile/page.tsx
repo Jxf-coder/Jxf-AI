@@ -18,6 +18,7 @@ interface UserRow {
   name: string | null;
   phone: string | null;
   image: string | null;
+  birthday: Date | string | null;
   created_at: Date;
 }
 
@@ -35,6 +36,20 @@ interface DepartmentOption {
   parentId: string | null;
 }
 
+/** pg 的 date 可能以 Date 或字符串返回，统一规范成 YYYY-MM-DD */
+function toDateOnly(value: Date | string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+  return value.slice(0, 10);
+}
+
 export default async function ProfilePage({
   searchParams,
 }: {
@@ -50,7 +65,7 @@ export default async function ProfilePage({
 
   const data = await withUserContext(context, async (client) => {
     const userResult = await client.query<UserRow>(
-      "select id, name, phone, image, created_at from users where id = $1",
+      "select id, name, phone, image, birthday, created_at from users where id = $1",
       [targetUserId],
     );
     const user = userResult.rows[0];
@@ -102,6 +117,7 @@ export default async function ProfilePage({
       name: user.name ?? "",
       phone: user.phone,
       avatarUrl: user.image,
+      birthday: toDateOnly(user.birthday),
       createdAt: user.created_at.toISOString(),
       emails,
       memberships,
@@ -153,6 +169,7 @@ export default async function ProfilePage({
           profile={data.profile}
           permissions={data.permissions}
           departments={data.departments}
+          activeDepartmentId={context.activeDepartmentId}
         />
       )}
     </section>

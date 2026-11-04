@@ -37,14 +37,50 @@ function LevelBadge({ level }: { level: AccessLevel }) {
   );
 }
 
+/** date 统一按 YYYY-MM-DD 展示，空值用占位符 */
+function formatDate(value: string | null): string {
+  return value ? value.slice(0, 10) : "—";
+}
+
+/** 司龄：按入职日期动态计算，不落库 */
+function formatTenure(hireDate: string | null): string {
+  if (!hireDate) {
+    return "—";
+  }
+  const start = new Date(`${hireDate.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(start.getTime())) {
+    return "—";
+  }
+  const now = new Date();
+  let months =
+    (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+  if (now.getDate() < start.getDate()) {
+    months -= 1;
+  }
+  if (months < 0) {
+    return "—";
+  }
+  const years = Math.floor(months / 12);
+  const restMonths = months % 12;
+  if (years > 0) {
+    return `${years} 年 ${restMonths} 个月`;
+  }
+  if (restMonths > 0) {
+    return `${restMonths} 个月`;
+  }
+  return "不足 1 个月";
+}
+
 export function ProfileClient({
   profile,
   permissions,
   departments,
+  activeDepartmentId,
 }: {
   profile: UserProfile;
   permissions: ProfilePermissions;
   departments: DepartmentOption[];
+  activeDepartmentId: string | null;
 }) {
   const [name, setName] = useState(profile.name);
   const [phone, setPhone] = useState(profile.phone ?? "");
@@ -60,6 +96,11 @@ export function ProfileClient({
   const avatarSrc = avatarDraft === undefined ? profile.avatarUrl : avatarDraft;
   const initial = (name || profile.phone || "J").trim().charAt(0).toUpperCase();
   const phoneChanged = phone.replace(/[\s-]/g, "") !== (profile.phone ?? "");
+  // 人事档案按「当前部门」的任用展示，多任用用户切部门后会跟着变
+  const primaryMembership =
+    profile.memberships.find((membership) => membership.departmentId === activeDepartmentId) ??
+    profile.memberships[0] ??
+    null;
 
   function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -435,6 +476,48 @@ export function ProfileClient({
         </div>
         <p className="settings-group-hint">
           业务岗位：L1 可改所有人，L2 仅可改下级 L3，L3 只读；所属部门与权限等级仅 L1 可修改。
+        </p>
+      </section>
+
+      <section className="settings-group">
+        <h2 className="settings-group-title">人事档案</h2>
+        <div className="settings-card">
+          {primaryMembership ? (
+            <>
+              <div className="settings-row">
+                <span className="settings-label">工号</span>
+                <div className="settings-value">
+                  <span className="settings-static">{primaryMembership.employeeNo || "—"}</span>
+                </div>
+              </div>
+              <div className="settings-row">
+                <span className="settings-label">入职日期</span>
+                <div className="settings-value">
+                  <span className="settings-static">{formatDate(primaryMembership.hireDate)}</span>
+                </div>
+              </div>
+              <div className="settings-row">
+                <span className="settings-label">司龄</span>
+                <div className="settings-value">
+                  <span className="settings-static">{formatTenure(primaryMembership.hireDate)}</span>
+                </div>
+              </div>
+              <div className="settings-row">
+                <span className="settings-label">生日</span>
+                <div className="settings-value">
+                  <span className="settings-static">{formatDate(profile.birthday)}</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="settings-empty">暂无有效任用</p>
+          )}
+        </div>
+        <p className="settings-group-hint">
+          人事档案由「组织架构 → 员工管理 → 编辑」维护；司龄按入职日期自动计算，不落库。
+          {profile.memberships.length > 1 && primaryMembership
+            ? ` 当前展示「${primaryMembership.departmentName}」这条任用的档案。`
+            : ""}
         </p>
       </section>
 
