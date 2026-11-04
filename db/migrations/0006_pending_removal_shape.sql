@@ -1,2 +1,2 @@
 ALTER TABLE "memberships" DROP CONSTRAINT "memberships_removed_shape";--> statement-breakpoint
-ALTER TABLE "memberships" ADD CONSTRAINT "memberships_removed_shape" CHECK ((status = 'active' and removed_at is null) or (status = 'pending_removal' and removed_at is null) or (status = 'removed' and removed_at is not null));
+ALTER TABLE "memberships" ADD CONSTRAINT "memberships_removed_shape" CHECK ((status::text = 'active' and removed_at is null) or (status::text = 'pending_removal' and removed_at is null) or (status::text = 'removed' and removed_at is not null));

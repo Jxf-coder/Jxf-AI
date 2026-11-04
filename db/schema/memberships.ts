@@ -33,9 +33,11 @@ export const memberships = pgTable(
       .where(sql`status = 'active'`),
     index("memberships_user_idx").on(table.userId),
     index("memberships_department_idx").on(table.departmentId),
+    // 用 ::text 比较：新库首次迁移时 0005 刚新增 pending_removal，
+    // 同一事务内直接使用该枚举值会触发 "unsafe use of new value"
     check(
       "memberships_removed_shape",
-      sql`(status = 'active' and removed_at is null) or (status = 'pending_removal' and removed_at is null) or (status = 'removed' and removed_at is not null)`,
+      sql`(status::text = 'active' and removed_at is null) or (status::text = 'pending_removal' and removed_at is null) or (status::text = 'removed' and removed_at is not null)`,
     ),
   ],
 );

@@ -1313,7 +1313,7 @@
       "checkConstraints": {
         "memberships_removed_shape": {
           "name": "memberships_removed_shape",
-          "value": "(status = 'active' and removed_at is null) or (status = 'pending_removal' and removed_at is null) or (status = 'removed' and removed_at is not null)"
+          "value": "(status::text = 'active' and removed_at is null) or (status::text = 'pending_removal' and removed_at is null) or (status::text = 'removed' and removed_at is not null)"
         }
       },
       "isRLSEnabled": false
