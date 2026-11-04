@@ -7,6 +7,12 @@
 	}
 }
 
+# 统一入口：localhost 一律 308 到 127.0.0.1
+# 原因：会话 Cookie 按主机名隔离，同一浏览器在 localhost / 127.0.0.1 之间切换会丢失登录态
+http://localhost {
+	redir http://127.0.0.1{uri} 308
+}
+
 # 默认监听 :80；私有化交付时把 JXF_SITE_ADDRESS 设为域名并启用 TLS（见下）
 {$JXF_SITE_ADDRESS::80} {
 	encode zstd gzip
