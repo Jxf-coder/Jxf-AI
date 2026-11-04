@@ -174,6 +174,9 @@ async function main() {
       childBId: childB.rows[0].id,
       grandAId: grandA.rows[0].id,
       membershipOfU1: memberships.rows.find((row) => row.user_id === userIds["u1@rls.test"]).id,
+      membershipOfU2: memberships.rows.find((row) => row.user_id === userIds["u2@rls.test"]).id,
+      membershipOfU3: memberships.rows.find((row) => row.user_id === userIds["u3@rls.test"]).id,
+      membershipOfU4: memberships.rows.find((row) => row.user_id === userIds["u4@rls.test"]).id,
       membershipOfU5: memberships.rows.find((row) => row.user_id === userIds["u5@rls.test"]).id,
     };
   });
@@ -273,7 +276,159 @@ async function main() {
   );
   check("删除最后一个 L1 被拒绝", lastL1.ok, lastL1.error ? `code=${lastL1.error.code}` : "未报错");
 
-  // 12. L1 移除 L3 任用 → 成功，且对方立即失效
+  // 12. 005 move_membership：仅 L1，且源 / 目标部门都要在可读子树内
+  const moveByL3 = await expectError(
+    () =>
+      runAs(seatAUser, (client) =>
+        client.query("select app.move_membership($1, $2)", [fixtures.membershipOfU1, fixtures.childBId]),
+      ),
+    "42501",
+  );
+  check("005 L3 调用 move_membership 被拒绝", moveByL3.ok, moveByL3.error ? `code=${moveByL3.error.code}` : "未报错");
+
+  await runAs(ownerUser, (client) =>
+    client.query("select app.move_membership($1, $2)", [fixtures.membershipOfU2, fixtures.childAId]),
+  );
+  const moved = await withClient(OWNER_URL, (client) =>
+    client.query("select department_id from memberships where id = $1", [fixtures.membershipOfU2]),
+  );
+  check(
+    "005 L1 换部门生效",
+    moved.rows[0]?.department_id === fixtures.childAId,
+    `department_id=${moved.rows[0]?.department_id}`,
+  );
+
+  const moveMissing = await expectError(
+    () =>
+      runAs(ownerUser, (client) =>
+        client.query("select app.move_membership($1, $2)", [randomUUID(), fixtures.childAId]),
+      ),
+    "P0002",
+  );
+  check("005 不存在的任用被拒绝", moveMissing.ok, moveMissing.error ? `code=${moveMissing.error.code}` : "未报错");
+
+  // 13. 006 restore_membership：仅 L1，且不产生物理删除
+  const restoreByL3 = await expectError(
+    () => runAs(seatAUser, (client) => client.query("select app.restore_membership($1)", [fixtures.membershipOfU4])),
+    "42501",
+  );
+  check("006 L3 调用 restore_membership 被拒绝", restoreByL3.ok, restoreByL3.error ? `code=${restoreByL3.error.code}` : "未报错");
+
+  await runAs(ownerUser, (client) =>
+    client.query("select app.restore_membership($1)", [fixtures.membershipOfU4]),
+  );
+  const restored = await withClient(OWNER_URL, (client) =>
+    client.query("select status, removed_at from memberships where id = $1", [fixtures.membershipOfU4]),
+  );
+  check(
+    "006 L1 恢复已停用任用",
+    restored.rows[0]?.status === "active" && restored.rows[0]?.removed_at === null,
+    JSON.stringify(restored.rows[0]),
+  );
+
+  const restoreAgain = await expectError(
+    () => runAs(ownerUser, (client) => client.query("select app.restore_membership($1)", [fixtures.membershipOfU4])),
+    "P0002",
+  );
+  check("006 重复恢复被拒绝", restoreAgain.ok, restoreAgain.error ? `code=${restoreAgain.error.code}` : "未报错");
+
+  // 14. 007 membership_blockers：仅 L1；M2 / M3 表未建时计数为 0
+  const blockersByL3 = await expectError(
+    () => runAs(seatAUser, (client) => client.query("select app.membership_blockers($1)", [fixtures.membershipOfU2])),
+    "42501",
+  );
+  check("007 L3 调用 membership_blockers 被拒绝", blockersByL3.ok, blockersByL3.error ? `code=${blockersByL3.error.code}` : "未报错");
+
+  const blockers = await runAs(ownerUser, (client) =>
+    client.query("select app.membership_blockers($1) as blockers", [fixtures.membershipOfU2]),
+  );
+  const blockersValue = blockers.rows[0]?.blockers ?? {};
+  check(
+    "007 L1 拿到阻塞项计数",
+    blockersValue.open_work === 0 && blockersValue.assets === 0,
+    JSON.stringify(blockersValue),
+  );
+
+  const blockersMissing = await expectError(
+    () => runAs(ownerUser, (client) => client.query("select app.membership_blockers($1)", [randomUUID()])),
+    "P0002",
+  );
+  check("007 不存在的任用被拒绝", blockersMissing.ok, blockersMissing.error ? `code=${blockersMissing.error.code}` : "未报错");
+
+  // 15. 008 update_membership_profile：L3 只读 / L2 仅下级 L3 / 部门与等级仅 L1
+  const titleByL3 = await expectError(
+    () =>
+      runAs(seatAUser, (client) =>
+        client.query("select app.update_membership_profile($1, $2, null, null)", [
+          fixtures.membershipOfU1,
+          "自助改名",
+        ]),
+      ),
+    "42501",
+  );
+  check("008 L3 改岗位被拒绝", titleByL3.ok, titleByL3.error ? `code=${titleByL3.error.code}` : "未报错");
+
+  await runAs(leadUser, (client) =>
+    client.query("select app.update_membership_profile($1, $2, null, null)", [
+      fixtures.membershipOfU1,
+      "高级交付顾问",
+    ]),
+  );
+  const titleUpdated = await withClient(OWNER_URL, (client) =>
+    client.query("select title from memberships where id = $1", [fixtures.membershipOfU1]),
+  );
+  check(
+    "008 L2 可改下级 L3 岗位",
+    titleUpdated.rows[0]?.title === "高级交付顾问",
+    `title=${titleUpdated.rows[0]?.title}`,
+  );
+
+  const selfTitleByL2 = await expectError(
+    () =>
+      runAs(leadUser, (client) =>
+        client.query("select app.update_membership_profile($1, $2, null, null)", [
+          fixtures.membershipOfU3,
+          "自己改自己",
+        ]),
+      ),
+    "42501",
+  );
+  check("008 L2 改本人岗位被拒绝", selfTitleByL2.ok, selfTitleByL2.error ? `code=${selfTitleByL2.error.code}` : "无 membership");
+
+  const departmentByL2 = await expectError(
+    () =>
+      runAs(leadUser, (client) =>
+        client.query("select app.update_membership_profile($1, null, $2, null)", [
+          fixtures.membershipOfU1,
+          fixtures.childBId,
+        ]),
+      ),
+    "42501",
+  );
+  check("008 L2 改部门被拒绝", departmentByL2.ok, departmentByL2.error ? `code=${departmentByL2.error.code}` : "未报错");
+
+  const invalidLevel = await expectError(
+    () =>
+      runAs(ownerUser, (client) =>
+        client.query("select app.update_membership_profile($1, null, null, $2)", [
+          fixtures.membershipOfU2,
+          "L9",
+        ]),
+      ),
+    "22023",
+  );
+  check("008 非法等级被拒绝", invalidLevel.ok, invalidLevel.error ? `code=${invalidLevel.error.code}` : "未报错");
+
+  const demoteLastL1 = await expectError(
+    () =>
+      runAs(ownerUser, (client) =>
+        client.query("select app.update_membership_profile($1, null, null, 'L2')", [fixtures.membershipOfU5]),
+      ),
+    "23514",
+  );
+  check("008 最后一位 L1 降级被拒绝", demoteLastL1.ok, demoteLastL1.error ? `code=${demoteLastL1.error.code}` : "未报错");
+
+  // 16. L1 移除 L3 任用 → 成功，且对方立即失效
   await runAs(ownerUser, (client) =>
     client.query("select app.remove_membership($1)", [fixtures.membershipOfU1]),
   );
@@ -284,7 +439,7 @@ async function main() {
     JSON.stringify(seatAAfterRemoval),
   );
 
-  // 13. L1 删除子树内子部门 → 成功；根节点不可删除 → 0 行
+  // 17. L1 删除子树内子部门 → 成功；根节点不可删除 → 0 行
   const deletedChild = await runAs(ownerUser, (client) =>
     client.query("delete from departments where id = $1", [fixtures.grandAId]),
   );
@@ -300,7 +455,7 @@ async function main() {
   );
   check("根节点不可改名", renameRoot.rowCount === 0, `rowCount=${renameRoot.rowCount}`);
 
-  // 14. 连接角色本身无特权
+  // 18. 连接角色本身无特权
   const roleInfo = await withClient(APP_URL, (client) =>
     client.query(
       "select current_user as name, (select rolsuper from pg_roles where rolname = current_user) as is_super, (select rolbypassrls from pg_roles where rolname = current_user) as bypass_rls",
