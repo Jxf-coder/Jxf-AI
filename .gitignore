@@ -23,12 +23,8 @@ npm-debug.log*
 pgdata/
 backup/
 
-# 本地设计 / 推进文档：仅保留在工作区，不进入版本库
-docs/development/P1-progress.md
-docs/development/P6-*.md
-docs/architecture/permission-model.md
-docs/architecture/权限系统与UI落地实施计划.md
-docs/architecture/原项目权限体系分析报告.md
+# 本地设计 / 推进文档：仅保留在工作区，整目录不进入版本库
+docs/
 
 # 系统文件
 .DS_Store
