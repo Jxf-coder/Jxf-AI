@@ -13,6 +13,7 @@ import { Client } from "pg";
 import { chunkPages } from "../src/lib/knowledge/chunk.ts";
 import { verifyQuoteInChunk } from "../src/lib/knowledge/evidence.ts";
 import { answerQuestion } from "../src/lib/knowledge/qa.ts";
+import { runRegression, seedRegressionQuestions } from "../src/lib/knowledge/regression.ts";
 
 const TENANT = process.env.KB_TEST_TENANT ?? "22222222-2222-4222-8222-222222222222";
 const HOST = process.env.SEED_DB_HOST ?? "127.0.0.1";
@@ -610,8 +611,8 @@ async function main() {
     activeMembership: null,
     activeMemberships: [],
     activeMembershipId: fx.membershipOf("boss@kb.test"),
-    activeDepartmentId: fx.departments.root,
-    activeDepartmentName: "知识库总部",
+    activeDepartmentId: fx.departments.groupA,
+    activeDepartmentName: "知识库一组",
     membershipDepartmentIds: [fx.departments.root],
     departmentIds: tenantDepartments,
     subtreeDepartmentIds: tenantDepartments,
@@ -654,6 +655,51 @@ async function main() {
     "命中的问答记录引用卡片",
     qaAudit.some((row) => (row.cited_card_ids ?? []).includes(fx.cardConfirmed)),
     JSON.stringify(qaAudit.map((row) => row.cited_card_ids)),
+  );
+
+  // 20. 回归门禁：基线题保留率 >= 0.9 才通过
+  const seeded = await seedRegressionQuestions(bossContext);
+  check("回归：按已确认卡生成基线题", seeded === 1, `created=${seeded}`);
+
+  const passRun = await runRegression(bossContext, "kb-test-pass");
+  check(
+    "回归：同题召回原卡，保留率 100%",
+    passRun.total === 1 && passRun.passed === 1 && passRun.retained === 1,
+    JSON.stringify({ total: passRun.total, passed: passRun.passed, retained: passRun.retained }),
+  );
+
+  // 追加一道不可能命中的基线题，整体门禁应判失败
+  await withClient(OWNER_URL, async (owner) => {
+    await owner.query(
+      `insert into regression_questions (tenant_id, department_id, q, source, baseline_ids)
+       values ($1, $2, '完全不存在的基线题', 'manual', $3::uuid[])`,
+      [TENANT, fx.departments.groupA, [randomUUID()]],
+    );
+  });
+
+  const failRun = await runRegression(bossContext, "kb-test-fail");
+  check(
+    "回归：存在未通过题目时整体判失败",
+    failRun.total === 2 && failRun.passed === 1 && failRun.retained < 0.9,
+    JSON.stringify({ total: failRun.total, passed: failRun.passed, retained: failRun.retained }),
+  );
+
+  const regressionAudit = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      `select r.total, r.passed, r.retained,
+              (select count(*) from regression_items i where i.run_id = r.id)::int as items
+         from regression_runs r
+        where r.tenant_id = $1
+        order by r.created_at desc
+        limit 2`,
+      [TENANT],
+    );
+    return rows;
+  });
+  check(
+    "回归：运行与明细均已落库",
+    regressionAudit.length === 2 && regressionAudit.every((row) => row.items === row.total),
+    JSON.stringify(regressionAudit),
   );
 
   if (process.env.KEEP_KB_FIXTURES !== "1") {

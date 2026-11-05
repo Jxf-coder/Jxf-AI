@@ -6,10 +6,12 @@ import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 import { authorize } from "@/lib/permissions/authorize";
 import { resolveContextPermissions } from "@/lib/permissions/server";
+import { listRegressionRuns, type RegressionRunView } from "@/lib/knowledge/regression";
 import type { ResolvedPermissions } from "@/types/permission";
 
 import { DistillButton } from "./DistillButton";
 import { QaPanel } from "./QaPanel";
+import { RegressionPanel } from "./RegressionPanel";
 import { RevokeButton } from "./RevokeButton";
 import { UploadPanel } from "./UploadPanel";
 
@@ -167,6 +169,8 @@ export default async function KnowledgePage() {
       gaps: gaps.rows,
     };
   });
+
+  const regressionRuns: RegressionRunView[] = data.canRead ? await listRegressionRuns(context) : [];
 
   return (
     <section className="page">
@@ -361,6 +365,45 @@ export default async function KnowledgePage() {
                   </li>
                 ))}
               </ul>
+            </div>
+          ) : null}
+
+          {data.canWrite ? <RegressionPanel /> : null}
+
+          {regressionRuns.length > 0 ? (
+            <div className="card">
+              <div className="card-title">回归记录（最近 {regressionRuns.length} 次）</div>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>构建标记</th>
+                    <th>通过</th>
+                    <th>保留率</th>
+                    <th>门禁</th>
+                    <th>时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {regressionRuns.map((run) => {
+                    const gate = run.passed === run.total && run.retained >= 0.9;
+                    return (
+                      <tr key={run.id}>
+                        <td data-label="构建标记">{run.buildTag}</td>
+                        <td data-label="通过">
+                          {run.passed} / {run.total}
+                        </td>
+                        <td data-label="保留率">{(run.retained * 100).toFixed(2)}%</td>
+                        <td data-label="门禁">
+                          <span className={gate ? "badge badge-ok" : "badge badge-error"}>
+                            {gate ? "通过" : "未通过"}
+                          </span>
+                        </td>
+                        <td data-label="时间">{formatDate(run.createdAt)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           ) : null}
         </>
