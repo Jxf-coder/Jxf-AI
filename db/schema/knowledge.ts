@@ -114,7 +114,7 @@ export const knowledgeGaps = pgTable(
 );
 
 /**
- * 问答审计：编号必须落在本轮召回集合内（invalid_cites 为空），
+ * 问答审计：引用编号必须落在本轮召回集合内（invalid_cites 为空），
  * 数字必须能在证据原文中找到（unverified_numbers 为空）。
  */
 export const qaLogs = pgTable(
@@ -128,7 +128,8 @@ export const qaLogs = pgTable(
     question: text("question").notNull(),
     answer: text("answer").notNull(),
     citedCardIds: uuid("cited_card_ids").array().notNull().default(sql`'{}'::uuid[]`),
-    invalidCites: uuid("invalid_cites").array().notNull().default(sql`'{}'::uuid[]`),
+    /** 越界引用编号（模型写了 [7] 但本轮只有 5 张卡）；存原始编号便于回放 */
+    invalidCites: text("invalid_cites").array().notNull().default(sql`'{}'::text[]`),
     unverifiedNumbers: text("unverified_numbers").array().notNull().default(sql`'{}'::text[]`),
     gapId: uuid("gap_id").references(() => knowledgeGaps.id, { onDelete: "set null" }),
     /** 预留：M3 建 runs 表后补外键 */

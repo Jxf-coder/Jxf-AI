@@ -9,6 +9,7 @@ import { resolveContextPermissions } from "@/lib/permissions/server";
 import type { ResolvedPermissions } from "@/types/permission";
 
 import { DistillButton } from "./DistillButton";
+import { QaPanel } from "./QaPanel";
 import { RevokeButton } from "./RevokeButton";
 import { UploadPanel } from "./UploadPanel";
 
@@ -35,6 +36,21 @@ interface RunRow {
   created_at: Date;
   department_name: string;
   creator_name: string | null;
+}
+
+interface QaRow {
+  id: string;
+  question: string;
+  cited_card_ids: string[];
+  invalid_cites: string[];
+  unverified_numbers: string[];
+  created_at: Date;
+}
+
+interface GapRow {
+  id: string;
+  question: string;
+  created_at: Date;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -97,7 +113,14 @@ export default async function KnowledgePage() {
     const canWrite = actor ? authorize(actor, "knowledge:write").allowed : false;
 
     if (!canRead) {
-      return { canRead, canWrite, documents: [] as DocumentRow[], runs: [] as RunRow[] };
+      return {
+        canRead,
+        canWrite,
+        documents: [] as DocumentRow[],
+        runs: [] as RunRow[],
+        qaLogs: [] as QaRow[],
+        gaps: [] as GapRow[],
+      };
     }
 
     const documents = await client.query<DocumentRow>(
@@ -120,7 +143,29 @@ export default async function KnowledgePage() {
         limit 30`,
     );
 
-    return { canRead, canWrite, documents: documents.rows, runs: runs.rows };
+    const qaLogs = await client.query<QaRow>(
+      `select id, question, cited_card_ids, invalid_cites, unverified_numbers, created_at
+         from qa_logs
+        order by created_at desc
+        limit 10`,
+    );
+
+    const gaps = await client.query<GapRow>(
+      `select id, question, created_at
+         from knowledge_gaps
+        where status = 'open'
+        order by created_at desc
+        limit 10`,
+    );
+
+    return {
+      canRead,
+      canWrite,
+      documents: documents.rows,
+      runs: runs.rows,
+      qaLogs: qaLogs.rows,
+      gaps: gaps.rows,
+    };
   });
 
   return (
@@ -156,6 +201,8 @@ export default async function KnowledgePage() {
         <div className="alert-error">当前账号没有「知识库查看」权限，请联系 L1 管理员授权。</div>
       ) : (
         <>
+          <QaPanel aiEnabled={ai.chatEnabled} />
+
           <UploadPanel canWrite={data.canWrite} aiEnabled={ai.embeddingEnabled} />
 
           <div className="card">
@@ -261,6 +308,61 @@ export default async function KnowledgePage() {
               </table>
             )}
           </div>
+
+          <div className="card">
+            <div className="card-title">最近问答（{data.qaLogs.length}）</div>
+            {data.qaLogs.length === 0 ? (
+              <p className="hint">还没有提问记录。</p>
+            ) : (
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>问题</th>
+                    <th>引用</th>
+                    <th>校验</th>
+                    <th>时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.qaLogs.map((log) => (
+                    <tr key={log.id}>
+                      <td data-label="问题">{log.question}</td>
+                      <td data-label="引用">{log.cited_card_ids.length} 张卡</td>
+                      <td data-label="校验">
+                        {log.invalid_cites.length === 0 && log.unverified_numbers.length === 0 ? (
+                          <span className="badge badge-ok">通过</span>
+                        ) : (
+                          <span className="badge badge-error">
+                            {log.invalid_cites.length > 0 ? `越界引用 ${log.invalid_cites.join(",")}` : ""}
+                            {log.invalid_cites.length > 0 && log.unverified_numbers.length > 0 ? " · " : ""}
+                            {log.unverified_numbers.length > 0
+                              ? `未核实数字 ${log.unverified_numbers.join("、")}`
+                              : ""}
+                          </span>
+                        )}
+                      </td>
+                      <td data-label="时间">{formatDate(log.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {data.gaps.length > 0 ? (
+            <div className="card">
+              <div className="card-title">知识缺口（{data.gaps.length}）</div>
+              <p className="hint">问答未命中时自动沉淀，补文档或补卡片后可关闭。</p>
+              <ul className="evidence-list">
+                {data.gaps.map((gap) => (
+                  <li key={gap.id}>
+                    <span className="evidence-quote">{gap.question}</span>
+                    <span className="hint">{formatDate(gap.created_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </>
       )}
     </section>

@@ -12,6 +12,7 @@ import { Client } from "pg";
 
 import { chunkPages } from "../src/lib/knowledge/chunk.ts";
 import { verifyQuoteInChunk } from "../src/lib/knowledge/evidence.ts";
+import { answerQuestion } from "../src/lib/knowledge/qa.ts";
 
 const TENANT = process.env.KB_TEST_TENANT ?? "22222222-2222-4222-8222-222222222222";
 const HOST = process.env.SEED_DB_HOST ?? "127.0.0.1";
@@ -589,6 +590,70 @@ async function main() {
     "分块覆盖两页且页码递增",
     chunked.chunks.some((chunk) => chunk.pageNo === 1) && chunked.chunks.some((chunk) => chunk.pageNo === 2),
     JSON.stringify(chunked.chunks.map((chunk) => chunk.pageNo)),
+  );
+
+  // 19. 单轮 RAG：无 AI 时退化为检索结果；未命中沉淀知识缺口
+  process.env.APP_DATABASE_URL = process.env.APP_DATABASE_URL ?? APP_URL;
+  process.env.S3_ENDPOINT = process.env.S3_ENDPOINT ?? "http://127.0.0.1:9000";
+  process.env.S3_BUCKET = process.env.S3_BUCKET ?? process.env.MINIO_BUCKET ?? "jxf-assets";
+  process.env.S3_ACCESS_KEY = process.env.S3_ACCESS_KEY ?? process.env.MINIO_ROOT_USER ?? "jxf";
+  process.env.S3_SECRET_KEY = process.env.S3_SECRET_KEY ?? process.env.MINIO_ROOT_PASSWORD ?? "jxf";
+
+  const tenantDepartments = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query("select id from departments where tenant_id = $1", [TENANT]);
+    return rows.map((row) => row.id);
+  });
+
+  const bossContext = {
+    userId: fx.uid["boss@kb.test"],
+    tenantId: TENANT,
+    activeMembership: null,
+    activeMemberships: [],
+    activeMembershipId: fx.membershipOf("boss@kb.test"),
+    activeDepartmentId: fx.departments.root,
+    activeDepartmentName: "知识库总部",
+    membershipDepartmentIds: [fx.departments.root],
+    departmentIds: tenantDepartments,
+    subtreeDepartmentIds: tenantDepartments,
+    accessLevel: "L1",
+    permissionVersion: 0,
+    requestId: "kb-test",
+  };
+
+  const retrieved = await answerQuestion(bossContext, "迁移量限值");
+  check("问答：无 AI 时退化为仅检索", retrieved.mode === "retrieval_only", retrieved.mode);
+  check(
+    "问答：检索命中已确认卡",
+    retrieved.citations.some((citation) => citation.cardId === fx.cardConfirmed),
+    JSON.stringify(retrieved.citations.map((citation) => citation.cardId)),
+  );
+  check("问答：合法引用不产生越界记录", retrieved.invalidCites.length === 0, JSON.stringify(retrieved.invalidCites));
+
+  const miss = await answerQuestion(bossContext, "量子计算的退相干时间是多少");
+  check("问答：无相关依据时如实未命中", miss.mode === "no_match", miss.mode);
+  check("问答：未命中沉淀知识缺口", miss.gapRecorded === true);
+
+  const qaAudit = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      `select question, cited_card_ids, invalid_cites, unverified_numbers, gap_id
+         from qa_logs
+        where tenant_id = $1
+        order by created_at desc
+        limit 2`,
+      [TENANT],
+    );
+    return rows;
+  });
+  check("问答审计写入 qa_logs", qaAudit.length === 2, `rows=${qaAudit.length}`);
+  check(
+    "未命中的问答带知识缺口外键",
+    qaAudit.some((row) => row.gap_id !== null),
+    JSON.stringify(qaAudit.map((row) => row.gap_id)),
+  );
+  check(
+    "命中的问答记录引用卡片",
+    qaAudit.some((row) => (row.cited_card_ids ?? []).includes(fx.cardConfirmed)),
+    JSON.stringify(qaAudit.map((row) => row.cited_card_ids)),
   );
 
   if (process.env.KEEP_KB_FIXTURES !== "1") {

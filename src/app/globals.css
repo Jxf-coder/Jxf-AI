@@ -1507,6 +1507,22 @@ a.nav-item:hover {
   color: var(--text-secondary);
 }
 
+/* 问答结果 */
+.qa-answer {
+  margin-top: 1rem;
+}
+
+.qa-answer-text {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: var(--radius-sm);
+  background: rgba(120, 120, 128, 0.07);
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* 权限等级徽章：Apple 系统色（L1 紫 / L2 蓝 / L3 灰） */
 .level-l1 {
   background: rgba(168, 85, 247, 0.15);
