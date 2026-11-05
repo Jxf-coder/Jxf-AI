@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 
+import { actions, alert, badge, btnDark, card, cardDesc, cardHead, cardTitle, formGrid, input, label } from "../ui";
 import { createCardAction } from "./actions";
 
 const KIND_LABEL: Record<string, string> = {
@@ -23,28 +24,28 @@ export function NewCardForm() {
   const [failed, setFailed] = useState(false);
 
   return (
-    <div className="akb-card">
-      <div className="akb-card-head">
-        <h2 className="akb-card-title">人工新建知识卡</h2>
-        <span className="akb-badge">可直接确认</span>
+    <div className={card}>
+      <div className={cardHead}>
+        <h2 className={cardTitle}>人工新建知识卡</h2>
+        <span className={badge()}>可直接确认</span>
       </div>
-      <p className="akb-card-desc">作者本人撰写的内容记为「人工编辑过」，创建后可直接确认。</p>
+      <p className={cardDesc}>作者本人撰写的内容记为「人工编辑过」，创建后可直接确认。</p>
 
-      <div className="akb-form">
-        <label className="akb-field">
-          <span className="akb-label">类型</span>
-          <select className="akb-select" value={kind} onChange={(event) => setKind(event.target.value)}>
-            {Object.entries(KIND_LABEL).map(([value, label]) => (
+      <div className={formGrid}>
+        <label className="block">
+          <span className={label}>类型</span>
+          <select className={input} value={kind} onChange={(event) => setKind(event.target.value)}>
+            {Object.entries(KIND_LABEL).map(([value, text]) => (
               <option key={value} value={value}>
-                {label}
+                {text}
               </option>
             ))}
           </select>
         </label>
-        <label className="akb-field">
-          <span className="akb-label">标题</span>
+        <label className="block">
+          <span className={label}>标题</span>
           <input
-            className="akb-input"
+            className={input}
             type="text"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
@@ -54,10 +55,10 @@ export function NewCardForm() {
         </label>
       </div>
 
-      <label className="akb-field">
-        <span className="akb-label">正文</span>
+      <label className="mt-3.5 block">
+        <span className={label}>正文</span>
         <textarea
-          className="akb-textarea"
+          className={`${input} resize-y`}
           rows={4}
           value={body}
           onChange={(event) => setBody(event.target.value)}
@@ -66,10 +67,10 @@ export function NewCardForm() {
         />
       </label>
 
-      <div className="akb-actions">
+      <div className={actions}>
         <button
           type="button"
-          className="akb-btn"
+          className={btnDark}
           disabled={pending || title.trim().length === 0 || body.trim().length === 0}
           onClick={() =>
             startTransition(async () => {
@@ -88,7 +89,7 @@ export function NewCardForm() {
       </div>
 
       {message ? (
-        <div className={failed ? "akb-alert is-error" : "akb-alert"}>{message}</div>
+        <div className={`${alert(failed ? "error" : "info")} mt-4 mb-0`}>{message}</div>
       ) : null}
     </div>
   );

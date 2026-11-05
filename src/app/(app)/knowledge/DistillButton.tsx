@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 
+import { inline, linkBtn, meta } from "./ui";
 import { distillAction } from "./cards/actions";
 
 export function DistillButton({ documentId, disabled }: { documentId: string; disabled: boolean }) {
@@ -9,10 +10,10 @@ export function DistillButton({ documentId, disabled }: { documentId: string; di
   const [message, setMessage] = useState("");
 
   return (
-    <span className="akb-inline">
+    <span className={inline}>
       <button
         type="button"
-        className="akb-link"
+        className={linkBtn}
         disabled={disabled || pending}
         title={disabled ? "未配置 AI，无法蒸馏卡片" : "调用 AI 生成待确认知识卡"}
         onClick={() =>
@@ -24,7 +25,7 @@ export function DistillButton({ documentId, disabled }: { documentId: string; di
       >
         {pending ? "生成中…" : "生成卡片"}
       </button>
-      {message ? <span className="akb-evidence-meta">{message}</span> : null}
+      {message ? <span className={meta}>{message}</span> : null}
     </span>
   );
 }

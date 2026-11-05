@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
+import { actions, alert, badge, btnDark, card, cardDesc, cardHead, cardTitle, fileInput, formGrid, input, label } from "./ui";
+
 interface IngestResponse {
   ok: boolean;
   error?: string;
@@ -72,36 +74,36 @@ export function UploadPanel({ canWrite, aiEnabled }: { canWrite: boolean; aiEnab
 
   if (!canWrite) {
     return (
-      <div className="akb-alert">
+      <div className={alert()}>
         当前账号没有「知识入库」权限，只能查看本部门文档与知识卡。
       </div>
     );
   }
 
   return (
-    <form className="akb-card" onSubmit={onSubmit}>
-      <div className="akb-card-head">
-        <h2 className="akb-card-title">上传文档</h2>
-        <span className="akb-badge">≤ 20MB · ≤ 20 个</span>
+    <form className={card} onSubmit={onSubmit}>
+      <div className={cardHead}>
+        <h2 className={cardTitle}>上传文档</h2>
+        <span className={badge()}>≤ 20MB · ≤ 20 个</span>
       </div>
-      <p className="akb-card-desc">
+      <p className={cardDesc}>
         支持 PDF / DOCX / TXT / Markdown / CSV。扫描件会标记为「待 OCR」，不生成切片。
       </p>
       {!aiEnabled ? (
-        <div className="akb-alert">
+        <div className={alert()}>
           未配置 AI 密钥：本次入库只做解析与分块，检索走 pg_bigm 纯关键词通道，向量通道自动跳过。
         </div>
       ) : null}
 
-      <div className="akb-form">
-        <label className="akb-field">
-          <span className="akb-label">文件</span>
-          <input ref={inputRef} className="akb-file" type="file" name="files" multiple />
+      <div className={formGrid}>
+        <label className="block">
+          <span className={label}>文件</span>
+          <input ref={inputRef} className={fileInput} type="file" name="files" multiple />
         </label>
-        <label className="akb-field">
-          <span className="akb-label">入库目标（选填）</span>
+        <label className="block">
+          <span className={label}>入库目标（选填）</span>
           <input
-            className="akb-input"
+            className={input}
             type="text"
             value={goal}
             onChange={(event) => setGoal(event.target.value)}
@@ -111,14 +113,14 @@ export function UploadPanel({ canWrite, aiEnabled }: { canWrite: boolean; aiEnab
         </label>
       </div>
 
-      <div className="akb-actions">
-        <button type="submit" className="akb-btn" disabled={busy}>
+      <div className={actions}>
+        <button type="submit" className={btnDark} disabled={busy}>
           {busy ? "正在解析入库…" : "开始入库"}
         </button>
       </div>
 
       {result ? (
-        <div className={result.ok ? "akb-alert" : "akb-alert is-error"}>
+        <div className={`${alert(result.ok ? "info" : "error")} mt-4 mb-0`}>
           {result.ok && result.counts ? (
             <>
               <div>
@@ -126,7 +128,7 @@ export function UploadPanel({ canWrite, aiEnabled }: { canWrite: boolean; aiEnab
                 待人工 {result.counts.needsOcr} · 切片 {result.counts.chunks} · 向量 {result.counts.embedded}
                 {result.counts.embeddingSkipped > 0 ? ` · 未向量化 ${result.counts.embeddingSkipped}` : ""}
               </div>
-              <ul>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
                 {(result.files ?? []).map((file) => (
                   <li key={`${file.name}-${file.decision}`}>
                     {file.name} — {DECISION_LABEL[file.decision] ?? file.decision}

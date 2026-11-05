@@ -10,6 +10,29 @@ import type { ResolvedPermissions } from "@/types/permission";
 
 import { CardActions } from "./CardActions";
 import { NewCardForm } from "./NewCardForm";
+import {
+  badge,
+  badgeRow,
+  bodyText,
+  btnGhost,
+  card,
+  cardTitle,
+  divider,
+  emptyState,
+  evidenceItem,
+  evidenceList,
+  headerRow,
+  label,
+  meta,
+  pageSubtitle,
+  pageTitle,
+  pageWrap,
+  quote,
+  tabActive,
+  tabBar,
+  tabIdle,
+  alert as alertCls,
+} from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -81,110 +104,108 @@ export default async function KnowledgeCardsPage({
   const activeTabLabel = STATUS_TABS.find((tab) => tab.key === status)?.label ?? "";
 
   return (
-    <section className="akb">
-      <div className="akb-container">
-        <header className="akb-header">
-          <div>
-            <h1 className="akb-title">知识卡</h1>
-            <p className="akb-subtitle">
-              只有确认过的卡片会进入问答召回；证据引文必须能在原文逐字复现。
-            </p>
+    <section className={pageWrap}>
+      <header className={headerRow}>
+        <div>
+          <h1 className={pageTitle}>知识卡</h1>
+          <p className={pageSubtitle}>
+            只有确认过的卡片会进入问答召回；证据引文必须能在原文逐字复现。
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link className={btnGhost} href="/knowledge">
+            返回知识库
+          </Link>
+        </div>
+      </header>
+
+      <nav className={tabBar} role="tablist" aria-label="知识卡状态">
+        {STATUS_TABS.map((tab) => (
+          <Link
+            key={tab.key}
+            href={`/knowledge/cards?status=${tab.key}`}
+            role="tab"
+            aria-selected={tab.key === status}
+            className={tab.key === status ? tabActive : tabIdle}
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </nav>
+
+      {!access.canRead ? (
+        <div className={`${alertCls("error")} mt-4`}>当前账号没有「知识库查看」权限，请联系 L1 管理员授权。</div>
+      ) : (
+        <>
+          {status === "pending" && access.canWrite ? <NewCardForm /> : null}
+
+          <div className={`${badgeRow} mt-4`}>
+            <span className={badge()}>{activeTabLabel}</span>
+            <span className={badge()}>{cards.length} 张</span>
           </div>
-          <div className="akb-header-actions">
-            <Link className="akb-btn is-ghost" href="/knowledge">
-              返回知识库
-            </Link>
-          </div>
-        </header>
 
-        <nav className="akb-tabs" role="tablist" aria-label="知识卡状态">
-          {STATUS_TABS.map((tab) => (
-            <Link
-              key={tab.key}
-              href={`/knowledge/cards?status=${tab.key}`}
-              role="tab"
-              aria-selected={tab.key === status}
-              className={`akb-tab${tab.key === status ? " is-active" : ""}`}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
-
-        {!access.canRead ? (
-          <div className="akb-alert is-error">当前账号没有「知识库查看」权限，请联系 L1 管理员授权。</div>
-        ) : (
-          <>
-            {status === "pending" && access.canWrite ? <NewCardForm /> : null}
-
-            <div className="akb-badges">
-              <span className="akb-badge">{activeTabLabel}</span>
-              <span className="akb-badge">{cards.length} 张</span>
+          {cards.length === 0 ? (
+            <div className={card}>
+              <p className={emptyState}>
+                暂无{activeTabLabel}的知识卡。
+                {status === "pending" ? "可在知识库页面用「生成卡片」从文档蒸馏，或人工新建。" : ""}
+              </p>
             </div>
+          ) : (
+            cards.map((cardItem) => (
+              <article className={card} key={cardItem.id}>
+                <div className={badgeRow}>
+                  <span className={badge("blue")}>{KIND_LABEL[cardItem.kind] ?? cardItem.kind}</span>
+                  <span className={badge()}>{ORIGIN_LABEL[cardItem.origin] ?? cardItem.origin}</span>
+                  <span className={badge()}>{cardItem.departmentName}</span>
+                  {cardItem.humanEdited ? <span className={badge("ok")}>人工编辑</span> : null}
+                  {cardItem.conflictWith.length > 0 ? <span className={badge("error")}>存在冲突</span> : null}
+                  {cardItem.validUntil ? <span className={badge()}>有效期至 {cardItem.validUntil}</span> : null}
+                </div>
 
-            {cards.length === 0 ? (
-              <div className="akb-card">
-                <p className="akb-empty">
-                  暂无{activeTabLabel}的知识卡。
-                  {status === "pending" ? "可在知识库页面用「生成卡片」从文档蒸馏，或人工新建。" : ""}
-                </p>
-              </div>
-            ) : (
-              cards.map((card) => (
-                <article className="akb-card" key={card.id}>
-                  <div className="akb-badges">
-                    <span className="akb-badge is-blue">{KIND_LABEL[card.kind] ?? card.kind}</span>
-                    <span className="akb-badge">{ORIGIN_LABEL[card.origin] ?? card.origin}</span>
-                    <span className="akb-badge">{card.departmentName}</span>
-                    {card.humanEdited ? <span className="akb-badge is-ok">人工编辑</span> : null}
-                    {card.conflictWith.length > 0 ? <span className="akb-badge is-error">存在冲突</span> : null}
-                    {card.validUntil ? <span className="akb-badge">有效期至 {card.validUntil}</span> : null}
-                  </div>
+                <h2 className={cardTitle}>{cardItem.title}</h2>
+                <p className={`${bodyText} mt-2`}>{cardItem.body}</p>
 
-                  <h2 className="akb-card-title">{card.title}</h2>
-                  <p className="akb-body akb-body-tight">{card.body}</p>
+                <div className={divider} />
 
-                  <div className="akb-divider" />
+                <div className={label}>证据 · {cardItem.evidence.length}</div>
+                {cardItem.evidence.length === 0 ? (
+                  <p className={`${meta} mt-2`}>
+                    {cardItem.status === "pending"
+                      ? "暂无证据。需要人工修订或补充证据后才能确认。"
+                      : "暂无关联证据。"}
+                  </p>
+                ) : (
+                  <ul className={evidenceList}>
+                    {cardItem.evidence.map((evidence) => (
+                      <li key={evidence.id} className={evidenceItem}>
+                        <span className={quote}>“{evidence.quote}”</span>
+                        <span className={meta}>
+                          {evidence.documentTitle ?? "文档"} · {evidence.locator ?? "未标注位置"} ·{" "}
+                          {evidence.verified ? "已核对" : "未核对"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
-                  <div className="akb-label">证据 · {card.evidence.length}</div>
-                  {card.evidence.length === 0 ? (
-                    <p className="akb-hint">
-                      {card.status === "pending"
-                        ? "暂无证据。需要人工修订或补充证据后才能确认。"
-                        : "暂无关联证据。"}
-                    </p>
-                  ) : (
-                    <ul className="akb-evidence">
-                      {card.evidence.map((evidence) => (
-                        <li key={evidence.id}>
-                          <span className="akb-quote">“{evidence.quote}”</span>
-                          <span className="akb-evidence-meta">
-                            {evidence.documentTitle ?? "文档"} · {evidence.locator ?? "未标注位置"} ·{" "}
-                            {evidence.verified ? "已核对" : "未核对"}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                {cardItem.confirmedAt ? (
+                  <p className={`${meta} mt-3`}>确认时间：{formatDate(cardItem.confirmedAt)}</p>
+                ) : null}
 
-                  {card.confirmedAt ? (
-                    <p className="akb-hint">确认时间：{formatDate(card.confirmedAt)}</p>
-                  ) : null}
-
-                  <CardActions
-                    cardId={card.id}
-                    title={card.title}
-                    body={card.body}
-                    canConfirm={access.canConfirm}
-                    canWrite={access.canWrite}
-                    status={card.status}
-                  />
-                </article>
-              ))
-            )}
-          </>
-        )}
-      </div>
+                <CardActions
+                  cardId={cardItem.id}
+                  title={cardItem.title}
+                  body={cardItem.body}
+                  canConfirm={access.canConfirm}
+                  canWrite={access.canWrite}
+                  status={cardItem.status}
+                />
+              </article>
+            ))
+          )}
+        </>
+      )}
     </section>
   );
 }

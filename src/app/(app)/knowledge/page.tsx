@@ -14,6 +14,28 @@ import { QaPanel } from "./QaPanel";
 import { RegressionPanel } from "./RegressionPanel";
 import { RevokeButton } from "./RevokeButton";
 import { UploadPanel } from "./UploadPanel";
+import {
+  badge,
+  badgeRow,
+  card,
+  cardDesc,
+  cardHead,
+  cardTitle,
+  emptyState,
+  evidenceItem,
+  evidenceList,
+  headerRow,
+  meta,
+  pageSubtitle,
+  pageTitle,
+  pageWrap,
+  quote,
+  tabActive,
+  tabBar,
+  tabIdle,
+  alert as alertCls,
+  inline as inlineCls,
+} from "./ui";
 
 export const dynamic = "force-dynamic";
 
@@ -86,15 +108,15 @@ function formatDate(value: Date | string): string {
 
 function statusBadgeClass(status: string): string {
   if (status === "done" || status === "parsed") {
-    return "akb-badge is-ok";
+    return badge("ok");
   }
   if (status === "failed") {
-    return "akb-badge is-error";
+    return badge("error");
   }
   if (status === "revoked" || status === "needs_ocr" || status === "running") {
-    return "akb-badge is-warn";
+    return badge("warn");
   }
-  return "akb-badge";
+  return badge("muted");
 }
 
 export default async function KnowledgePage() {
@@ -173,52 +195,52 @@ export default async function KnowledgePage() {
   const regressionRuns: RegressionRunView[] = data.canRead ? await listRegressionRuns(context) : [];
 
   return (
-    <section className="akb">
-      <div className="akb-container">
-        <header className="akb-header">
-          <div>
-            <h1 className="akb-title">知识库</h1>
-            <p className="akb-subtitle">
-              上传文档 → 解析分块 → 知识卡确认 → 单轮问答。入库范围为本部门及下级部门。
-            </p>
-          </div>
-        </header>
-
-        <nav className="akb-tabs" role="tablist" aria-label="知识库视图">
-          <Link href="/knowledge" className="akb-tab is-active" aria-current="page" role="tab" aria-selected>
-            文档与批次
-          </Link>
-          <Link href="/knowledge/cards" className="akb-tab" role="tab" aria-selected={false}>
-            知识卡
-          </Link>
-        </nav>
-
-        <div className="akb-badges">
-          <span className={ai.embeddingEnabled ? "akb-badge is-ok" : "akb-badge is-warn"}>
-            向量检索 · {ai.embeddingEnabled ? `${ai.embeddingModel} 已启用` : "未配置（仅关键词）"}
-          </span>
-          <span className={ai.chatEnabled ? "akb-badge is-ok" : "akb-badge is-warn"}>
-            问答生成 · {ai.chatEnabled ? ai.chatModel : "未启用"}
-          </span>
+    <section className={pageWrap}>
+      <header className={headerRow}>
+        <div>
+          <h1 className={pageTitle}>知识库</h1>
+          <p className={pageSubtitle}>
+            上传文档 → 解析分块 → 知识卡确认 → 单轮问答。入库范围为本部门及下级部门。
+          </p>
         </div>
+      </header>
 
-        {!data.canRead ? (
-          <div className="akb-alert is-error">当前账号没有「知识库查看」权限，请联系 L1 管理员授权。</div>
-        ) : (
-          <>
-            <QaPanel aiEnabled={ai.chatEnabled} />
+      <nav className={tabBar} role="tablist" aria-label="知识库视图">
+        <Link href="/knowledge" className={tabActive} aria-current="page" role="tab" aria-selected>
+          文档与批次
+        </Link>
+        <Link href="/knowledge/cards" className={tabIdle} role="tab" aria-selected={false}>
+          知识卡
+        </Link>
+      </nav>
 
-            <UploadPanel canWrite={data.canWrite} aiEnabled={ai.embeddingEnabled} />
+      <div className={`${badgeRow} mt-4`}>
+        <span className={ai.embeddingEnabled ? badge("ok") : badge("warn")}>
+          向量检索 · {ai.embeddingEnabled ? `${ai.embeddingModel} 已启用` : "未配置（仅关键词）"}
+        </span>
+        <span className={ai.chatEnabled ? badge("ok") : badge("warn")}>
+          问答生成 · {ai.chatEnabled ? ai.chatModel : "未启用"}
+        </span>
+      </div>
 
-            <div className="akb-card">
-              <div className="akb-card-head">
-                <h2 className="akb-card-title">文档</h2>
-                <span className="akb-badge">{data.documents.length}</span>
-              </div>
-              {data.documents.length === 0 ? (
-                <p className="akb-empty">还没有文档。上传后会自动解析、分块并写入检索索引。</p>
-              ) : (
-                <table className="akb-table">
+      {!data.canRead ? (
+        <div className={alertCls("error")}>当前账号没有「知识库查看」权限，请联系 L1 管理员授权。</div>
+      ) : (
+        <>
+          <QaPanel aiEnabled={ai.chatEnabled} />
+
+          <UploadPanel canWrite={data.canWrite} aiEnabled={ai.embeddingEnabled} />
+
+          <div className={card}>
+            <div className={cardHead}>
+              <h2 className={cardTitle}>文档</h2>
+              <span className={badge()}>{data.documents.length}</span>
+            </div>
+            {data.documents.length === 0 ? (
+              <p className={emptyState}>还没有文档。上传后会自动解析、分块并写入检索索引。</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="kb-table">
                   <thead>
                     <tr>
                       <th>标题</th>
@@ -234,7 +256,7 @@ export default async function KnowledgePage() {
                   <tbody>
                     {data.documents.map((document) => (
                       <tr key={document.id}>
-                        <td data-label="标题" className="akb-cell-strong">
+                        <td data-label="标题" className="kb-strong">
                           {document.title}
                         </td>
                         <td data-label="部门">{document.department_name}</td>
@@ -243,21 +265,21 @@ export default async function KnowledgePage() {
                             {STATUS_LABEL[document.status] ?? document.status}
                           </span>
                         </td>
-                        <td data-label="页数" className="akb-cell-num">
+                        <td data-label="页数" className="kb-num">
                           {document.page_count ?? "—"}
                         </td>
-                        <td data-label="字符" className="akb-cell-num">
+                        <td data-label="字符" className="kb-num">
                           {document.char_count}
                         </td>
-                        <td data-label="切片" className="akb-cell-num">
+                        <td data-label="切片" className="kb-num">
                           {document.chunk_count}
                         </td>
-                        <td data-label="入库时间" className="akb-cell-num">
+                        <td data-label="入库时间" className="kb-num">
                           {formatDate(document.created_at)}
                         </td>
                         <td data-label="操作">
-                          <span className="akb-inline">
-                            <a className="akb-link" href={`/api/knowledge/documents/${document.id}`}>
+                          <span className={inlineCls}>
+                            <a className="text-[13px] text-apple-blue hover:underline" href={`/api/knowledge/documents/${document.id}`}>
                               下载
                             </a>
                             {data.canWrite && document.status === "parsed" ? (
@@ -269,18 +291,20 @@ export default async function KnowledgePage() {
                     ))}
                   </tbody>
                 </table>
-              )}
-            </div>
-
-            <div className="akb-card">
-              <div className="akb-card-head">
-                <h2 className="akb-card-title">入库批次</h2>
-                <span className="akb-badge">最近 {data.runs.length} 次</span>
               </div>
-              {data.runs.length === 0 ? (
-                <p className="akb-empty">暂无入库批次。</p>
-              ) : (
-                <table className="akb-table">
+            )}
+          </div>
+
+          <div className={card}>
+            <div className={cardHead}>
+              <h2 className={cardTitle}>入库批次</h2>
+              <span className={badge()}>最近 {data.runs.length} 次</span>
+            </div>
+            {data.runs.length === 0 ? (
+              <p className={emptyState}>暂无入库批次。</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="kb-table">
                   <thead>
                     <tr>
                       <th>来源</th>
@@ -296,7 +320,7 @@ export default async function KnowledgePage() {
                   <tbody>
                     {data.runs.map((run) => (
                       <tr key={run.id}>
-                        <td data-label="来源" className="akb-cell-strong">
+                        <td data-label="来源" className="kb-strong">
                           {RUN_KIND_LABEL[run.kind] ?? run.kind}
                         </td>
                         <td data-label="部门">{run.department_name}</td>
@@ -305,10 +329,10 @@ export default async function KnowledgePage() {
                             {STATUS_LABEL[run.status] ?? run.status}
                           </span>
                         </td>
-                        <td data-label="文件数" className="akb-cell-num">
+                        <td data-label="文件数" className="kb-num">
                           {run.counts.files ?? 0} / {run.counts.documents ?? 0} / {run.counts.skipped ?? 0}
                         </td>
-                        <td data-label="切片数" className="akb-cell-num">
+                        <td data-label="切片数" className="kb-num">
                           {run.counts.chunks ?? 0} / {run.counts.embedded ?? 0}
                         </td>
                         <td data-label="目标">{run.goal ?? "—"}</td>
@@ -326,18 +350,20 @@ export default async function KnowledgePage() {
                     ))}
                   </tbody>
                 </table>
-              )}
-            </div>
-
-            <div className="akb-card">
-              <div className="akb-card-head">
-                <h2 className="akb-card-title">最近问答</h2>
-                <span className="akb-badge">{data.qaLogs.length}</span>
               </div>
-              {data.qaLogs.length === 0 ? (
-                <p className="akb-empty">还没有提问记录。</p>
-              ) : (
-                <table className="akb-table">
+            )}
+          </div>
+
+          <div className={card}>
+            <div className={cardHead}>
+              <h2 className={cardTitle}>最近问答</h2>
+              <span className={badge()}>{data.qaLogs.length}</span>
+            </div>
+            {data.qaLogs.length === 0 ? (
+              <p className={emptyState}>还没有提问记录。</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="kb-table">
                   <thead>
                     <tr>
                       <th>问题</th>
@@ -349,17 +375,17 @@ export default async function KnowledgePage() {
                   <tbody>
                     {data.qaLogs.map((log) => (
                       <tr key={log.id}>
-                        <td data-label="问题" className="akb-cell-strong">
+                        <td data-label="问题" className="kb-strong">
                           {log.question}
                         </td>
-                        <td data-label="引用" className="akb-cell-num">
+                        <td data-label="引用" className="kb-num">
                           {log.cited_card_ids.length} 张卡
                         </td>
                         <td data-label="校验">
                           {log.invalid_cites.length === 0 && log.unverified_numbers.length === 0 ? (
-                            <span className="akb-badge is-ok">通过</span>
+                            <span className={badge("ok")}>通过</span>
                           ) : (
-                            <span className="akb-badge is-error">
+                            <span className={badge("error")}>
                               {log.invalid_cites.length > 0 ? `越界引用 ${log.invalid_cites.join(",")}` : ""}
                               {log.invalid_cites.length > 0 && log.unverified_numbers.length > 0 ? " · " : ""}
                               {log.unverified_numbers.length > 0
@@ -368,43 +394,45 @@ export default async function KnowledgePage() {
                             </span>
                           )}
                         </td>
-                        <td data-label="时间" className="akb-cell-num">
+                        <td data-label="时间" className="kb-num">
                           {formatDate(log.created_at)}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              )}
-            </div>
-
-            {data.gaps.length > 0 ? (
-              <div className="akb-card">
-                <div className="akb-card-head">
-                  <h2 className="akb-card-title">知识缺口</h2>
-                  <span className="akb-badge is-warn">{data.gaps.length}</span>
-                </div>
-                <p className="akb-card-desc">问答未命中时自动沉淀，补文档或补卡片后可关闭。</p>
-                <ul className="akb-evidence">
-                  {data.gaps.map((gap) => (
-                    <li key={gap.id}>
-                      <span className="akb-quote">{gap.question}</span>
-                      <span className="akb-evidence-meta">{formatDate(gap.created_at)}</span>
-                    </li>
-                  ))}
-                </ul>
               </div>
-            ) : null}
+            )}
+          </div>
 
-            {data.canWrite ? <RegressionPanel /> : null}
+          {data.gaps.length > 0 ? (
+            <div className={card}>
+              <div className={cardHead}>
+                <h2 className={cardTitle}>知识缺口</h2>
+                <span className={badge("warn")}>{data.gaps.length}</span>
+              </div>
+              <p className={cardDesc}>问答未命中时自动沉淀，补文档或补卡片后可关闭。</p>
+              <ul className={evidenceList}>
+                {data.gaps.map((gap) => (
+                  <li key={gap.id} className={evidenceItem}>
+                    <span className={quote}>{gap.question}</span>
+                    <span className={meta}>{formatDate(gap.created_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
-            {regressionRuns.length > 0 ? (
-              <div className="akb-card">
-                <div className="akb-card-head">
-                  <h2 className="akb-card-title">回归记录</h2>
-                  <span className="akb-badge">最近 {regressionRuns.length} 次</span>
-                </div>
-                <table className="akb-table">
+          {data.canWrite ? <RegressionPanel /> : null}
+
+          {regressionRuns.length > 0 ? (
+            <div className={card}>
+              <div className={cardHead}>
+                <h2 className={cardTitle}>回归记录</h2>
+                <span className={badge()}>最近 {regressionRuns.length} 次</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="kb-table">
                   <thead>
                     <tr>
                       <th>构建标记</th>
@@ -419,21 +447,21 @@ export default async function KnowledgePage() {
                       const gate = run.passed === run.total && run.retained >= 0.9;
                       return (
                         <tr key={run.id}>
-                          <td data-label="构建标记" className="akb-cell-strong">
+                          <td data-label="构建标记" className="kb-strong">
                             {run.buildTag}
                           </td>
-                          <td data-label="通过" className="akb-cell-num">
+                          <td data-label="通过" className="kb-num">
                             {run.passed} / {run.total}
                           </td>
-                          <td data-label="保留率" className="akb-cell-num">
+                          <td data-label="保留率" className="kb-num">
                             {(run.retained * 100).toFixed(2)}%
                           </td>
                           <td data-label="门禁">
-                            <span className={gate ? "akb-badge is-ok" : "akb-badge is-error"}>
+                            <span className={gate ? badge("ok") : badge("error")}>
                               {gate ? "通过" : "未通过"}
                             </span>
                           </td>
-                          <td data-label="时间" className="akb-cell-num">
+                          <td data-label="时间" className="kb-num">
                             {formatDate(run.createdAt)}
                           </td>
                         </tr>
@@ -442,10 +470,10 @@ export default async function KnowledgePage() {
                   </tbody>
                 </table>
               </div>
-            ) : null}
-          </>
-        )}
-      </div>
+            </div>
+          ) : null}
+        </>
+      )}
     </section>
   );
 }

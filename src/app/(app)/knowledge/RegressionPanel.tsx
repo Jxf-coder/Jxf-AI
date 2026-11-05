@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 
+import { actions, alert, badge, btnBlue, btnGhost, card, cardDesc, cardHead, cardTitle, input, label } from "./ui";
 import { runRegressionAction, seedRegressionAction } from "./actions";
 
 export function RegressionPanel() {
@@ -11,33 +12,31 @@ export function RegressionPanel() {
   const [failed, setFailed] = useState(false);
 
   return (
-    <div className="akb-card">
-      <div className="akb-card-head">
-        <h2 className="akb-card-title">检索回归门禁</h2>
-        <span className="akb-badge">retained ≥ 90%</span>
+    <div className={card}>
+      <div className={cardHead}>
+        <h2 className={cardTitle}>检索回归门禁</h2>
+        <span className={badge()}>retained ≥ 90%</span>
       </div>
-      <p className="akb-card-desc">
+      <p className={cardDesc}>
         用已确认卡片标题生成基线题；改动分块或向量模型后跑一轮，保留率低于 90% 或任一道未通过即判失败。
       </p>
 
-      <div className="akb-form">
-        <label className="akb-field">
-          <span className="akb-label">构建标记</span>
-          <input
-            className="akb-input"
-            type="text"
-            value={buildTag}
-            onChange={(event) => setBuildTag(event.target.value)}
-            maxLength={40}
-            placeholder="例如：chunk-800 / bge-m3"
-          />
-        </label>
-      </div>
+      <label className="block max-w-md">
+        <span className={label}>构建标记</span>
+        <input
+          className={input}
+          type="text"
+          value={buildTag}
+          onChange={(event) => setBuildTag(event.target.value)}
+          maxLength={40}
+          placeholder="例如：chunk-800 / bge-m3"
+        />
+      </label>
 
-      <div className="akb-actions">
+      <div className={actions}>
         <button
           type="button"
-          className="akb-btn is-ghost"
+          className={btnGhost}
           disabled={pending}
           onClick={() =>
             startTransition(async () => {
@@ -51,7 +50,7 @@ export function RegressionPanel() {
         </button>
         <button
           type="button"
-          className="akb-btn is-blue"
+          className={btnBlue}
           disabled={pending}
           onClick={() =>
             startTransition(async () => {
@@ -66,7 +65,7 @@ export function RegressionPanel() {
       </div>
 
       {message ? (
-        <div className={failed ? "akb-alert is-error" : "akb-alert"}>{message}</div>
+        <div className={`${alert(failed ? "error" : "info")} mt-4 mb-0`}>{message}</div>
       ) : null}
     </div>
   );

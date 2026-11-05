@@ -2,6 +2,24 @@
 
 import { useState, useTransition } from "react";
 
+import {
+  actions,
+  alert,
+  badge,
+  badgeRow,
+  bodyText,
+  btnBlue,
+  card,
+  cardDesc,
+  cardHead,
+  cardTitle,
+  evidenceItem,
+  evidenceList,
+  input,
+  label,
+  meta,
+  quote,
+} from "./ui";
 import { askAction, type AskResult } from "./actions";
 
 export function QaPanel({ aiEnabled }: { aiEnabled: boolean }) {
@@ -12,23 +30,23 @@ export function QaPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const answer = result?.answer;
 
   return (
-    <div className="akb-card">
-      <div className="akb-card-head">
-        <h2 className="akb-card-title">知识问答</h2>
-        <span className={aiEnabled ? "akb-badge is-ok" : "akb-badge"}>
+    <div className={card}>
+      <div className={cardHead}>
+        <h2 className={cardTitle}>知识问答</h2>
+        <span className={aiEnabled ? badge("ok") : badge()}>
           {aiEnabled ? "AI 生成" : "仅检索"}
         </span>
       </div>
-      <p className="akb-card-desc">
+      <p className={cardDesc}>
         {aiEnabled
           ? "只依据已确认的知识卡作答，引用编号与数字会逐条校验。"
           : "未启用 AI 生成：这里只返回检索到的已确认知识卡。"}
       </p>
 
-      <label className="akb-field">
-        <span className="akb-label">问题</span>
+      <label className="block">
+        <span className={label}>问题</span>
         <textarea
-          className="akb-textarea"
+          className={`${input} resize-y`}
           rows={2}
           value={question}
           maxLength={500}
@@ -37,10 +55,10 @@ export function QaPanel({ aiEnabled }: { aiEnabled: boolean }) {
         />
       </label>
 
-      <div className="akb-actions">
+      <div className={actions}>
         <button
           type="button"
-          className="akb-btn is-blue"
+          className={btnBlue}
           disabled={pending || question.trim().length < 2}
           onClick={() =>
             startTransition(async () => {
@@ -52,40 +70,40 @@ export function QaPanel({ aiEnabled }: { aiEnabled: boolean }) {
         </button>
       </div>
 
-      {result && !result.ok ? <div className="akb-alert is-error">{result.message}</div> : null}
+      {result && !result.ok ? <div className={`${alert("error")} mt-4 mb-0`}>{result.message}</div> : null}
 
       {answer ? (
-        <div className="akb-answer">
-          <div className="akb-badges">
-            <span className={`akb-badge ${answer.mode === "no_match" ? "is-error" : "is-ok"}`}>
+        <div className="mt-5">
+          <div className={badgeRow}>
+            <span className={answer.mode === "no_match" ? badge("error") : badge("ok")}>
               {answer.mode === "ai" ? "AI 生成" : answer.mode === "retrieval_only" ? "仅检索" : "未命中"}
             </span>
-            {answer.gapRecorded ? <span className="akb-badge is-warn">已记录知识缺口</span> : null}
+            {answer.gapRecorded ? <span className={badge("warn")}>已记录知识缺口</span> : null}
             {answer.invalidCites.length > 0 ? (
-              <span className="akb-badge is-error">
+              <span className={badge("error")}>
                 越界引用 {answer.invalidCites.map((index) => `[${index}]`).join(" ")}
               </span>
             ) : null}
             {answer.unverifiedNumbers.length > 0 ? (
-              <span className="akb-badge is-error">
+              <span className={badge("error")}>
                 未核实数字 {answer.unverifiedNumbers.join("、")}
               </span>
             ) : null}
           </div>
 
-          <p className="akb-answer-box">{answer.answer}</p>
+          <p className={`${bodyText} mb-4 rounded-2xl bg-apple-canvas px-4 py-3.5`}>{answer.answer}</p>
 
           {answer.citations.length > 0 ? (
             <>
-              <div className="akb-label">引用来源</div>
-              <ul className="akb-evidence">
+              <div className={label}>引用来源</div>
+              <ul className={evidenceList}>
                 {answer.citations.map((citation) => (
-                  <li key={citation.cardId}>
-                    <span className="akb-quote">
+                  <li key={citation.cardId} className={evidenceItem}>
+                    <span className={quote}>
                       [{citation.index}] {citation.title}
                     </span>
                     {citation.quotes.length > 0 ? (
-                      <span className="akb-evidence-meta">证据：{citation.quotes.join(" / ")}</span>
+                      <span className={meta}>证据：{citation.quotes.join(" / ")}</span>
                     ) : null}
                   </li>
                 ))}

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 
+import { actions, btnBlue, btnDark, btnGhost, input, label, linkBtn, meta } from "../ui";
 import { confirmCardAction, dropCardAction, updateCardAction } from "./actions";
 
 interface CardActionsProps {
@@ -28,9 +29,9 @@ export function CardActions({ cardId, title, body, canConfirm, canWrite, status 
   }
 
   return (
-    <div className="akb-actions">
+    <div className={actions}>
       {status === "pending" && canConfirm ? (
-        <button type="button" className="akb-btn is-blue" disabled={pending} onClick={() => run(() => confirmCardAction(cardId))}>
+        <button type="button" className={btnBlue} disabled={pending} onClick={() => run(() => confirmCardAction(cardId))}>
           确认
         </button>
       ) : null}
@@ -38,7 +39,7 @@ export function CardActions({ cardId, title, body, canConfirm, canWrite, status 
       {canWrite && status !== "dropped" ? (
         <button
           type="button"
-          className="akb-btn is-ghost"
+          className={btnGhost}
           disabled={pending}
           onClick={() => run(() => dropCardAction(cardId))}
         >
@@ -47,37 +48,37 @@ export function CardActions({ cardId, title, body, canConfirm, canWrite, status 
       ) : null}
 
       {canWrite && status === "pending" ? (
-        <button type="button" className="akb-link" onClick={() => setEditing((value) => !value)}>
+        <button type="button" className={linkBtn} onClick={() => setEditing((value) => !value)}>
           {editing ? "收起编辑" : "人工修订"}
         </button>
       ) : null}
 
       {editing ? (
-        <div className="akb-card-edit">
-          <label className="akb-field">
-            <span className="akb-label">标题</span>
+        <div className="mt-1 flex w-full flex-col gap-3">
+          <label className="block">
+            <span className={label}>标题</span>
             <input
-              className="akb-input"
+              className={input}
               type="text"
               value={draftTitle}
               onChange={(event) => setDraftTitle(event.target.value)}
               maxLength={120}
             />
           </label>
-          <label className="akb-field">
-            <span className="akb-label">正文</span>
+          <label className="block">
+            <span className={label}>正文</span>
             <textarea
-              className="akb-textarea"
+              className={`${input} resize-y`}
               rows={4}
               value={draftBody}
               onChange={(event) => setDraftBody(event.target.value)}
               maxLength={4000}
             />
           </label>
-          <div className="akb-actions">
+          <div className={actions}>
             <button
               type="button"
-              className="akb-btn"
+              className={btnDark}
               disabled={pending}
               onClick={() =>
                 run(async () => {
@@ -95,7 +96,7 @@ export function CardActions({ cardId, title, body, canConfirm, canWrite, status 
         </div>
       ) : null}
 
-      {message ? <span className="akb-evidence-meta">{message}</span> : null}
+      {message ? <span className={meta}>{message}</span> : null}
     </div>
   );
 }
