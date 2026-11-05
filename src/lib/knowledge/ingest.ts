@@ -78,10 +78,16 @@ interface ExistingAsset {
   documentId: string | null;
 }
 
+export interface IngestOptions {
+  /** 追加到已有批次：逐文件上传时复用同一个 run */
+  runId?: string;
+}
+
 export async function ingestUpload(
   context: UserContext,
   inputs: IngestFileInput[],
   goal?: string,
+  options: IngestOptions = {},
 ): Promise<IngestResult> {
   if (!context.activeDepartmentId) {
     throw new Error("当前账号没有有效部门上下文，无法入库");
@@ -212,19 +218,22 @@ export async function ingestUpload(
     fresh.push(item);
   }
 
+  const skippedCount = results.filter((item) => item.decision === "rule_skip").length;
+  const errorCount = results.filter((item) => item.decision === "error").length;
+
   const counts: IngestCounts = {
-    files: inputs.length,
-    kept: fresh.length,
-    skipped: results.filter((item) => item.decision === "rule_skip").length,
+    files: 0,
+    kept: 0,
+    skipped: 0,
     needsOcr: 0,
-    errors: results.filter((item) => item.decision === "error").length,
+    errors: 0,
     documents: 0,
     chunks: 0,
     embedded: 0,
     embeddingSkipped: 0,
   };
 
-  // 4. 落库
+  // 4. 落库（可追加到已有批次：runId 复用）
   const runId = await withUserContext(context, async (client) => {
     await requireContextPermission(client, context, "knowledge:write", {
       kind: "department",
@@ -232,13 +241,48 @@ export async function ingestUpload(
       departmentId,
     });
 
-    const run = await client.query<{ id: string }>(
-      `insert into ingest_runs (tenant_id, department_id, kind, goal, status, created_by)
-       values ($1, $2, 'upload', $3, 'running', $4)
-       returning id`,
-      [context.tenantId, departmentId, goal?.trim() || null, context.userId],
-    );
-    const createdRunId = run.rows[0].id;
+    let createdRunId: string;
+
+    if (options.runId) {
+      const existing = await client.query<{
+        id: string;
+        department_id: string;
+        status: string;
+        counts: Record<string, number> | null;
+      }>(
+        `select id, department_id, status, counts
+           from ingest_runs
+          where id = $1
+          for update`,
+        [options.runId],
+      );
+      const row = existing.rows[0];
+      if (!row) {
+        throw new Error("入库批次不存在");
+      }
+      if (row.department_id !== departmentId) {
+        throw new Error("无权写入该入库批次");
+      }
+      if (row.status === "revoked") {
+        throw new Error("该批次已撤回，不能再追加文件");
+      }
+      createdRunId = row.id;
+      Object.assign(counts, row.counts ?? {});
+      await client.query(`update ingest_runs set status = 'running' where id = $1`, [createdRunId]);
+    } else {
+      const run = await client.query<{ id: string }>(
+        `insert into ingest_runs (tenant_id, department_id, kind, goal, status, created_by)
+         values ($1, $2, 'upload', $3, 'running', $4)
+         returning id`,
+        [context.tenantId, departmentId, goal?.trim() || null, context.userId],
+      );
+      createdRunId = run.rows[0].id;
+    }
+
+    counts.files += inputs.length;
+    counts.kept += fresh.length;
+    counts.skipped += skippedCount;
+    counts.errors += errorCount;
 
     for (const item of fresh) {
       const asset = await client.query<{ id: string }>(

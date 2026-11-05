@@ -28,10 +28,9 @@ import type { ResolvedPermissions } from "@/types/permission";
 import { DistillButton } from "./DistillButton";
 import { QaPanel } from "./QaPanel";
 import { RegressionPanel } from "./RegressionPanel";
-import { RevokeButton } from "./RevokeButton";
-import { UploadPanel } from "./UploadPanel";
 import { StatBar } from "./_components/StatBar";
 import { CardsTab } from "./_components/CardsTab";
+import { ScoutTab } from "./_components/ScoutTab";
 import { DEFAULT_TAB, TabNav, isKnowledgeTab, type KnowledgeTab } from "./_components/TabNav";
 
 export const dynamic = "force-dynamic";
@@ -82,12 +81,6 @@ const STATUS_LABEL: Record<string, string> = {
   draft: "草稿",
   running: "进行中",
   done: "已完成",
-};
-
-const RUN_KIND_LABEL: Record<string, string> = {
-  upload: "上传",
-  scout: "巡读",
-  manual: "手工",
 };
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
@@ -264,7 +257,17 @@ export default async function KnowledgePage({
 
           {tab === "scout" ? (
             <>
-              <UploadPanel canWrite={data.canWrite} aiEnabled={ai.embeddingEnabled} />
+              <ScoutTab
+                canWrite={data.canWrite}
+                runs={data.runs.map((run) => ({
+                  id: run.id,
+                  status: run.status,
+                  goal: run.goal,
+                  counts: run.counts,
+                  createdAt: run.created_at.toISOString(),
+                  creatorName: run.creator_name,
+                }))}
+              />
 
               <SectionCard title="文档" count={data.documents.length}>
                 {data.documents.length === 0 ? (
@@ -320,61 +323,6 @@ export default async function KnowledgePage({
                                   <DistillButton documentId={document.id} disabled={!ai.chatEnabled} />
                                 ) : null}
                               </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </SectionCard>
-
-              <SectionCard title="入库批次" count={`最近 ${data.runs.length} 次`}>
-                {data.runs.length === 0 ? (
-                  <EmptyState>暂无入库批次。</EmptyState>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="kb-table">
-                      <thead>
-                        <tr>
-                          <th>来源</th>
-                          <th>部门</th>
-                          <th>状态</th>
-                          <th>文件 / 入库 / 跳过</th>
-                          <th>切片 / 向量</th>
-                          <th>目标</th>
-                          <th>创建</th>
-                          <th>操作</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.runs.map((run) => (
-                          <tr key={run.id}>
-                            <td data-label="来源" className="kb-strong">
-                              {RUN_KIND_LABEL[run.kind] ?? run.kind}
-                            </td>
-                            <td data-label="部门">{run.department_name}</td>
-                            <td data-label="状态">
-                              <span className={statusBadgeClass(run.status)}>
-                                {STATUS_LABEL[run.status] ?? run.status}
-                              </span>
-                            </td>
-                            <td data-label="文件数" className="kb-num">
-                              {run.counts.files ?? 0} / {run.counts.documents ?? 0} / {run.counts.skipped ?? 0}
-                            </td>
-                            <td data-label="切片数" className="kb-num">
-                              {run.counts.chunks ?? 0} / {run.counts.embedded ?? 0}
-                            </td>
-                            <td data-label="目标">{run.goal ?? "—"}</td>
-                            <td data-label="创建">
-                              {run.creator_name ?? "—"} · {formatDate(run.created_at)}
-                            </td>
-                            <td data-label="操作">
-                              {data.canWrite && run.status !== "revoked" ? (
-                                <RevokeButton runId={run.id} />
-                              ) : (
-                                "—"
-                              )}
                             </td>
                           </tr>
                         ))}

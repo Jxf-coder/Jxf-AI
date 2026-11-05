@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireSession } from "@/lib/auth/session";
-import { resolveUserContext } from "@/lib/db/user-context";
+import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 import { revokeIngestRun } from "@/lib/knowledge/ingest";
 import { answerQuestion, type QaAnswer } from "@/lib/knowledge/qa";
 import { runRegression, seedRegressionQuestions } from "@/lib/knowledge/regression";
@@ -85,6 +85,99 @@ export async function revokeRunAction(formData: FormData): Promise<ActionResult>
     await revokeIngestRun(context, runId);
     revalidatePath("/knowledge");
     return { ok: true, message: "批次已撤回" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+export interface RunDetailFileView {
+  id: string;
+  sourcePath: string;
+  decision: string;
+  reason: string | null;
+  error: string | null;
+  documentId: string | null;
+}
+
+export interface RunDetailView {
+  id: string;
+  status: string;
+  goal: string | null;
+  counts: Record<string, number>;
+  createdAt: string;
+  creatorName: string | null;
+  files: RunDetailFileView[];
+}
+
+export interface RunDetailResult {
+  ok: boolean;
+  message?: string;
+  detail?: RunDetailView;
+}
+
+/** 批次详情：单文件判定明细（RLS 内按可见范围返回） */
+export async function loadRunDetailAction(runId: string): Promise<RunDetailResult> {
+  const session = await requireSession();
+  const context = await resolveUserContext(session.userId);
+
+  try {
+    const detail = await withUserContext(context, async (client) => {
+      const run = await client.query<{
+        id: string;
+        status: string;
+        goal: string | null;
+        counts: Record<string, number> | null;
+        created_at: Date;
+        creator_name: string | null;
+      }>(
+        `select r.id, r.status, r.goal, r.counts, r.created_at, u.name as creator_name
+           from ingest_runs r
+           left join users u on u.id = r.created_by
+          where r.id = $1`,
+        [runId],
+      );
+      const row = run.rows[0];
+      if (!row) {
+        return null;
+      }
+
+      const files = await client.query<{
+        id: string;
+        source_path: string;
+        decision: string;
+        reason: string | null;
+        error: string | null;
+        document_id: string | null;
+      }>(
+        `select id, source_path, decision, reason, error, document_id
+           from ingest_files
+          where run_id = $1
+          order by created_at, source_path`,
+        [runId],
+      );
+
+      return {
+        id: row.id,
+        status: row.status,
+        goal: row.goal,
+        counts: row.counts ?? {},
+        createdAt: row.created_at.toISOString(),
+        creatorName: row.creator_name,
+        files: files.rows.map((file) => ({
+          id: file.id,
+          sourcePath: file.source_path,
+          decision: file.decision,
+          reason: file.reason,
+          error: file.error,
+          documentId: file.document_id,
+        })),
+      } satisfies RunDetailView;
+    });
+
+    if (!detail) {
+      return { ok: false, message: "批次不存在或无权查看" };
+    }
+    return { ok: true, detail };
   } catch (error) {
     return { ok: false, message: toPermissionMessage(error) };
   }
