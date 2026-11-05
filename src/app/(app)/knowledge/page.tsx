@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import Link from "next/link";
 
 import { aiStatus } from "@/lib/ai/openai";
 import { requireSession } from "@/lib/auth/session";
@@ -7,6 +8,7 @@ import { authorize } from "@/lib/permissions/authorize";
 import { resolveContextPermissions } from "@/lib/permissions/server";
 import type { ResolvedPermissions } from "@/types/permission";
 
+import { DistillButton } from "./DistillButton";
 import { RevokeButton } from "./RevokeButton";
 import { UploadPanel } from "./UploadPanel";
 
@@ -132,6 +134,15 @@ export default async function KnowledgePage() {
         </div>
       </header>
 
+      <nav className="perm-tabs" role="tablist" aria-label="知识库视图">
+        <Link href="/knowledge" className="perm-tab is-active" aria-current="page">
+          文档与批次
+        </Link>
+        <Link href="/knowledge/cards" className="perm-tab">
+          知识卡
+        </Link>
+      </nav>
+
       <div className="badge-row">
         <span className={ai.embeddingEnabled ? "badge badge-ok" : "badge badge-accent"}>
           向量检索：{ai.embeddingEnabled ? `${ai.embeddingModel} 已启用` : "未配置（仅关键词）"}
@@ -163,6 +174,7 @@ export default async function KnowledgePage() {
                     <th>切片</th>
                     <th>入库时间</th>
                     <th>原件</th>
+                    <th>知识卡</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -183,6 +195,13 @@ export default async function KnowledgePage() {
                         <a className="link-action" href={`/api/knowledge/documents/${document.id}`}>
                           下载
                         </a>
+                      </td>
+                      <td data-label="知识卡">
+                        {data.canWrite && document.status === "parsed" ? (
+                          <DistillButton documentId={document.id} disabled={!ai.chatEnabled} />
+                        ) : (
+                          "—"
+                        )}
                       </td>
                     </tr>
                   ))}

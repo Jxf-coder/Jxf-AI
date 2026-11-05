@@ -10,6 +10,9 @@ import { randomUUID } from "node:crypto";
 
 import { Client } from "pg";
 
+import { chunkPages } from "../src/lib/knowledge/chunk.ts";
+import { verifyQuoteInChunk } from "../src/lib/knowledge/evidence.ts";
+
 const TENANT = process.env.KB_TEST_TENANT ?? "22222222-2222-4222-8222-222222222222";
 const HOST = process.env.SEED_DB_HOST ?? "127.0.0.1";
 const PORT = process.env.SEED_DB_PORT ?? process.env.POSTGRES_PORT ?? "5432";
@@ -550,6 +553,43 @@ async function main() {
   const pats = patterns.rows[0]?.pats ?? [];
   check("中文关键词切分出多个模式", pats.length >= 6, JSON.stringify(pats));
   check("关键词模式为 like 通配", pats.every((pat) => pat.startsWith("%") && pat.endsWith("%")), JSON.stringify(pats));
+
+  // 17. 证据核对：逐字匹配 + 空白/全半角归一化，改写即失败
+  const source = "食品接触材料的迁移量应当符合国家标准限值要求。总迁移量不得超过 10 mg/dm²。";
+  const exact = verifyQuoteInChunk(source, 1000, "迁移量应当符合国家标准限值要求");
+  check("证据：逐字命中并给出原文区间", exact.verified, JSON.stringify(exact));
+  check(
+    "证据：区间对应原文",
+    exact.verified && source.slice(exact.charStart - 1000, exact.charEnd - 1000) === exact.quote,
+    JSON.stringify(exact),
+  );
+
+  const spaced = verifyQuoteInChunk(source, 0, "总迁移量 不得超过 10mg/dm²");
+  check("证据：空白差异仍命中", spaced.verified, JSON.stringify(spaced));
+
+  const ellipsis = verifyQuoteInChunk(source, 0, "食品接触材料…限值要求");
+  check("证据：省略号跳过仍命中", ellipsis.verified, JSON.stringify(ellipsis));
+
+  const rewritten = verifyQuoteInChunk(source, 0, "迁移量可以超过国家标准限值");
+  check("证据：改写引文不命中", !rewritten.verified, JSON.stringify(rewritten));
+
+  const tooShort = verifyQuoteInChunk(source, 0, "要求");
+  check("证据：过短引文不算证据", !tooShort.verified, JSON.stringify(tooShort));
+
+  // 18. 分块：区间与原文严格对齐（证据链高亮依赖该不变量）
+  const chunked = chunkPages([
+    "第一页内容。" + "迁移量应当符合限值。".repeat(80),
+    "第二页内容。" + "验收需要提前预约。".repeat(60),
+  ]);
+  const aligned = chunked.chunks.every(
+    (chunk) => chunked.fullText.slice(chunk.charStart, chunk.charEnd) === chunk.text,
+  );
+  check("分块区间与全文对齐", aligned, `chunks=${chunked.chunks.length}`);
+  check(
+    "分块覆盖两页且页码递增",
+    chunked.chunks.some((chunk) => chunk.pageNo === 1) && chunked.chunks.some((chunk) => chunk.pageNo === 2),
+    JSON.stringify(chunked.chunks.map((chunk) => chunk.pageNo)),
+  );
 
   if (process.env.KEEP_KB_FIXTURES !== "1") {
     await withClient(OWNER_URL, cleanup);

@@ -1455,6 +1455,58 @@ a.nav-item:hover {
   background: var(--separator);
 }
 
+/* 知识卡：证据与操作区 */
+.evidence-list {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.evidence-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: rgba(120, 120, 128, 0.07);
+}
+
+.evidence-quote {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.card-actions {
+  margin-top: 1rem;
+}
+
+.card-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.card-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.card-edit label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
 /* 权限等级徽章：Apple 系统色（L1 紫 / L2 蓝 / L3 灰） */
 .level-l1 {
   background: rgba(168, 85, 247, 0.15);
