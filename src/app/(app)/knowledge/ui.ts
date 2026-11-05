@@ -5,7 +5,7 @@
 
 export const pageWrap = "mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 lg:px-8";
 export const headerRow = "flex flex-wrap items-start justify-between gap-5";
-export const pageTitle = "text-[1.75rem] font-semibold tracking-tight text-zinc-900";
+export const pageTitle = "text-2xl font-semibold tracking-tight text-zinc-900";
 export const pageSubtitle = "mt-2 max-w-2xl text-[13px] leading-relaxed text-zinc-500";
 
 export const tabBar =
