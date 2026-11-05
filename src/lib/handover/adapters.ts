@@ -74,16 +74,16 @@ export const knowledgeAdapter: AssetAdapter = {
   },
 };
 
-/** 智能体资产（M2 agents 表；当前未建表） */
+/** 智能体资产（M2 ai_employees 表） */
 export const agentAdapter: AssetAdapter = {
   assetType: "agent",
   label: "智能体",
   async listBlocking(client, userId) {
-    if (!(await hasTable(client, "agents")) || !(await hasColumn(client, "agents", "created_by"))) {
+    if (!(await hasTable(client, "ai_employees")) || !(await hasColumn(client, "ai_employees", "created_by"))) {
       return [];
     }
     const { rows } = await client.query<{ id: string; name: string | null }>(
-      "select id::text as id, name from agents where created_by = $1 order by id",
+      "select id::text as id, name from ai_employees where created_by = $1 order by id",
       [userId],
     );
     return rows.map((row) => ({
@@ -92,7 +92,13 @@ export const agentAdapter: AssetAdapter = {
       label: row.name?.trim() || `智能体 ${row.id.slice(0, 8)}`,
     }));
   },
-  async transfer() {
-    throw new Error("智能体交接尚未接入，请等待资产模块上线后再审批");
+  async transfer(client, assetId, fromUserId, toUserId) {
+    if (!(await hasTable(client, "ai_employees"))) {
+      return;
+    }
+    await client.query(
+      "update ai_employees set created_by = $2 where id = $1::uuid and created_by = $3",
+      [assetId, toUserId, fromUserId],
+    );
   },
 };
