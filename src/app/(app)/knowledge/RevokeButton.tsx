@@ -9,10 +9,10 @@ export function RevokeButton({ runId }: { runId: string }) {
   const [message, setMessage] = useState("");
 
   return (
-    <>
+    <span className="akb-inline">
       <button
         type="button"
-        className="button-ghost"
+        className="akb-link"
         disabled={pending}
         onClick={() => {
           const formData = new FormData();
@@ -25,7 +25,7 @@ export function RevokeButton({ runId }: { runId: string }) {
       >
         {pending ? "撤回中…" : "撤回批次"}
       </button>
-      {message ? <span className="hint">{message}</span> : null}
-    </>
+      {message ? <span className="akb-evidence-meta">{message}</span> : null}
+    </span>
   );
 }

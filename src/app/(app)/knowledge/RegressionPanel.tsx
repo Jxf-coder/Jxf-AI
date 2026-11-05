@@ -8,18 +8,23 @@ export function RegressionPanel() {
   const [pending, startTransition] = useTransition();
   const [buildTag, setBuildTag] = useState("");
   const [message, setMessage] = useState("");
+  const [failed, setFailed] = useState(false);
 
   return (
-    <div className="card">
-      <div className="card-title">检索回归门禁</div>
-      <p className="hint">
-        用已确认卡片标题生成基线题；每次改动分块或向量模型后跑一轮，保留率低于 90% 或任一道未通过即判失败。
+    <div className="akb-card">
+      <div className="akb-card-head">
+        <h2 className="akb-card-title">检索回归门禁</h2>
+        <span className="akb-badge">retained ≥ 90%</span>
+      </div>
+      <p className="akb-card-desc">
+        用已确认卡片标题生成基线题；改动分块或向量模型后跑一轮，保留率低于 90% 或任一道未通过即判失败。
       </p>
 
-      <div className="form-grid">
-        <label>
-          构建标记
+      <div className="akb-form">
+        <label className="akb-field">
+          <span className="akb-label">构建标记</span>
           <input
+            className="akb-input"
             type="text"
             value={buildTag}
             onChange={(event) => setBuildTag(event.target.value)}
@@ -29,14 +34,15 @@ export function RegressionPanel() {
         </label>
       </div>
 
-      <div className="card-actions-row">
+      <div className="akb-actions">
         <button
           type="button"
-          className="button-secondary"
+          className="akb-btn is-ghost"
           disabled={pending}
           onClick={() =>
             startTransition(async () => {
               const result = await seedRegressionAction();
+              setFailed(!result.ok);
               setMessage(result.message);
             })
           }
@@ -45,11 +51,12 @@ export function RegressionPanel() {
         </button>
         <button
           type="button"
-          className="button"
+          className="akb-btn is-blue"
           disabled={pending}
           onClick={() =>
             startTransition(async () => {
               const result = await runRegressionAction(buildTag);
+              setFailed(!result.ok);
               setMessage(result.message);
             })
           }
@@ -58,7 +65,9 @@ export function RegressionPanel() {
         </button>
       </div>
 
-      {message ? <p className="hint">{message}</p> : null}
+      {message ? (
+        <div className={failed ? "akb-alert is-error" : "akb-alert"}>{message}</div>
+      ) : null}
     </div>
   );
 }
