@@ -2,6 +2,45 @@
 @tailwind components;
 
 /* ------------------------------------------------------------------------- */
+/* 兼容别名：原项目组件使用 var(--ink) / var(--muted) / var(--chip) 等写法，   */
+/* 这里映射到全站 Apple 令牌，使原 JSX 可以零改动搬入（不含原项目任何色值）      */
+/* ------------------------------------------------------------------------- */
+
+:root {
+  --ink: var(--text);
+  --muted: var(--text-secondary);
+  --line: var(--separator);
+  --chip: var(--sidebar-bg);
+  --on-ink: #ffffff;
+  --btn-hover: #f0f1f4;
+  --accent: var(--brand-500);
+}
+
+/* 原项目仅依赖这 3 个组件类，映射到 Apple 令牌 */
+@layer components {
+  .lx-card {
+    @apply rounded-2xl border border-hairline bg-white p-4 shadow-card;
+  }
+
+  .lx-btn {
+    @apply inline-flex items-center justify-center gap-1 rounded-xl px-3 py-1.5 text-[13px] font-medium transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100;
+    @apply bg-apple-canvas text-zinc-800 hover:bg-[#eef0f4];
+  }
+
+  .lx-btn-primary {
+    @apply bg-apple-blue text-white hover:bg-apple-blue-hover;
+  }
+
+  .lx-btn-ghost {
+    @apply bg-transparent text-zinc-600 hover:bg-[#eef0f4] hover:text-zinc-900;
+  }
+
+  .lx-input {
+    @apply w-full rounded-xl border-0 bg-apple-canvas px-3 py-1.5 text-[13px] text-zinc-900 outline-none transition-all duration-200 placeholder:text-zinc-400 focus:bg-white focus:ring-2 focus:ring-apple-blue/20;
+  }
+}
+
+/* ------------------------------------------------------------------------- */
 /* 根字号流式缩放：13px 兜底 / 0.35vw + 10px / 16.5px 封顶                     */
 /* 布局尺寸统一使用 rem，随根字号一起流式缩放                                   */
 /* ------------------------------------------------------------------------- */

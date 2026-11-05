@@ -8,6 +8,8 @@ import type { Config } from "tailwindcss";
  */
 const config: Config = {
   content: ["./src/**/*.{ts,tsx,mdx}"],
+  // 兼容类由原项目组件直接使用，尚未出现在 src 中，先加入白名单避免被裁剪
+  safelist: ["lx-card", "lx-btn", "lx-btn-primary", "lx-btn-ghost", "lx-input"],
   theme: {
     extend: {
       colors: {
