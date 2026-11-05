@@ -21,6 +21,13 @@ interface CommandItem {
 
 const ITEMS: CommandItem[] = [
   {
+    label: "知识库",
+    hint: "文档 · 入库批次 · 知识卡",
+    href: "/knowledge",
+    keywords: ["knowledge", "document", "rag", "知识", "文档", "入库"],
+    permission: "knowledge:read",
+  },
+  {
     label: "组织架构",
     hint: "部门树 · 成员",
     href: "/admin/organization",

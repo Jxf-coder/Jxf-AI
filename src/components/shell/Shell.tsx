@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { usePermission } from "@/components/permissions/usePermission";
-import { BellIcon, CloseIcon, MenuIcon, SearchIcon } from "@/components/ui/icons";
+import { BellIcon, CloseIcon, KnowledgeIcon, MenuIcon, SearchIcon } from "@/components/ui/icons";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { DepartmentSwitcher, type DepartmentOption } from "@/components/shell/DepartmentSwitcher";
 import { ProfileMenu } from "@/components/shell/ProfileMenu";
@@ -31,8 +32,22 @@ export function Shell({
   children,
 }: ShellProps) {
   const { can } = usePermission();
+  const pathname = usePathname();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const knowledgeLink = can("knowledge:read") ? (
+    <Link
+      href="/knowledge"
+      className={`nav-item${pathname.startsWith("/knowledge") ? " is-active" : ""}`}
+      aria-current={pathname.startsWith("/knowledge") ? "page" : undefined}
+    >
+      <span className="nav-icon">
+        <KnowledgeIcon size={18} />
+      </span>
+      <span className="nav-label">知识库</span>
+    </Link>
+  ) : null;
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -68,7 +83,9 @@ export function Shell({
         </div>
 
         {/* 主侧边栏只承载主业务（AI 工作台 / Agent / 知识库）；管理入口收敛到顶栏与个人菜单 */}
-        <nav className="sidebar-nav" aria-label="主导航" />
+        <nav className="sidebar-nav" aria-label="主导航">
+          {knowledgeLink}
+        </nav>
 
         <div className="sidebar-profile">
           <DepartmentSwitcher
@@ -160,6 +177,10 @@ export function Shell({
               <SearchIcon className="search-icon" />
               <span className="search-label">搜索岗位、成员或页面</span>
             </button>
+
+            <nav className="sidebar-nav" aria-label="移动导航">
+              {knowledgeLink}
+            </nav>
 
             <div className="drawer-bottom">
               <div className="sidebar-footer">

@@ -7,6 +7,27 @@
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
+/**
+ * AI 配置（OpenAI 标准兼容）。
+ * 与数据库 / S3 不同，AI 缺失不拒绝启动：无 Key 时检索降级为 pg_bigm 纯关键词。
+ */
+export interface AiEnvConfig {
+  /** 对话生成总开关；false 或缺少 Key 时只做检索，不生成答案 */
+  enabled: boolean;
+  baseUrl: string;
+  apiKey: string;
+  chatModel: string;
+  timeoutMs: number;
+  topK: number;
+  maxTokens: number;
+  embedding: {
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+    dimensions: number;
+  };
+}
+
 export interface AppEnv {
   nodeEnv: string;
   appEnv: string;
@@ -23,6 +44,7 @@ export interface AppEnv {
     accessKey: string;
     secretKey: string;
   };
+  ai: AiEnvConfig;
 }
 
 const VALID_LOG_LEVELS: readonly LogLevel[] = ["debug", "info", "warn", "error"];
@@ -82,6 +104,38 @@ function readLogLevel(): LogLevel {
   return raw as LogLevel;
 }
 
+/** AI 相关均为可选项：缺失时安静降级，不阻断启动 */
+function readOptional(name: string, fallback: string): string {
+  return process.env[name]?.trim() || fallback;
+}
+
+function readOptionalInt(name: string, fallback: number): number {
+  const parsed = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function readAiConfig(): AiEnvConfig {
+  const apiKey = readOptional("JXF_AI_API_KEY", "");
+  const embeddingApiKey = readOptional("JXF_EMBEDDING_API_KEY", "") || apiKey;
+
+  return {
+    enabled: readOptional("JXF_AI_ENABLED", "false") === "true" && apiKey !== "",
+    baseUrl: readOptional("JXF_AI_BASE_URL", "https://api.openai.com/v1").replace(/\/+$/, ""),
+    apiKey,
+    chatModel: readOptional("JXF_AI_CHAT_MODEL", "gpt-4o-mini"),
+    timeoutMs: readOptionalInt("JXF_AI_TIMEOUT_MS", 30_000),
+    topK: readOptionalInt("JXF_AI_TOP_K", 6),
+    maxTokens: readOptionalInt("JXF_AI_MAX_TOKENS", 1024),
+    embedding: {
+      baseUrl: readOptional("JXF_EMBEDDING_BASE_URL", readOptional("JXF_AI_BASE_URL", "https://api.openai.com/v1")).replace(/\/+$/, ""),
+      apiKey: embeddingApiKey,
+      // 维度必须与 doc_chunks.embedding 的 vector(1024) 一致，改动需迁移并重建 hnsw 索引
+      model: readOptional("JXF_EMBEDDING_MODEL", "text-embedding-3-small"),
+      dimensions: readOptionalInt("JXF_EMBEDDING_DIM", 1024),
+    },
+  };
+}
+
 export function loadEnv(): AppEnv {
   if (cached) {
     return cached;
@@ -113,6 +167,7 @@ export function loadEnv(): AppEnv {
       accessKey: readRequired("S3_ACCESS_KEY"),
       secretKey: readRequired("S3_SECRET_KEY"),
     },
+    ai: readAiConfig(),
   };
 
   return cached;

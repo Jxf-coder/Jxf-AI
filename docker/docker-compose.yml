@@ -173,6 +173,18 @@ services:
       S3_BUCKET: ${MINIO_BUCKET:?MINIO_BUCKET 不能为空}
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER 不能为空}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 不能为空}
+      # AI：OpenAI 标准兼容；留空即自动降级为 pg_bigm 纯关键词检索
+      JXF_AI_ENABLED: ${JXF_AI_ENABLED:-false}
+      JXF_AI_BASE_URL: ${JXF_AI_BASE_URL:-https://api.openai.com/v1}
+      JXF_AI_API_KEY: ${JXF_AI_API_KEY:-}
+      JXF_AI_CHAT_MODEL: ${JXF_AI_CHAT_MODEL:-gpt-4o-mini}
+      JXF_AI_TIMEOUT_MS: ${JXF_AI_TIMEOUT_MS:-30000}
+      JXF_AI_TOP_K: ${JXF_AI_TOP_K:-6}
+      JXF_AI_MAX_TOKENS: ${JXF_AI_MAX_TOKENS:-1024}
+      JXF_EMBEDDING_BASE_URL: ${JXF_EMBEDDING_BASE_URL:-https://api.openai.com/v1}
+      JXF_EMBEDDING_API_KEY: ${JXF_EMBEDDING_API_KEY:-}
+      JXF_EMBEDDING_MODEL: ${JXF_EMBEDDING_MODEL:-text-embedding-3-small}
+      JXF_EMBEDDING_DIM: ${JXF_EMBEDDING_DIM:-1024}
     depends_on:
       postgres:
         condition: service_healthy

@@ -888,6 +888,14 @@ a.nav-item:hover {
   color: #0a63c4;
 }
 
+/* 徽章横向排列（状态条） */
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 /* 键值信息 */
 .meta-grid {
   display: grid;
@@ -2517,13 +2525,6 @@ select.ui-select:disabled {
     grid-template-columns: 1fr;
   }
 
-  /* 窄屏表格内部横向滚动，避免整页横向溢出 */
-  .table {
-    display: block;
-    overflow-x: auto;
-    white-space: nowrap;
-  }
-
   .section-title {
     font-size: 1.3125rem;
   }
@@ -2716,35 +2717,35 @@ a.perm-tab {
   min-width: 0;
 }
 
-/* 手机端：员工表格从 8 列压缩改为卡片式堆叠，避免列被挤压 / 横向滚动 */
+/* 手机端：表格从横向滚动改为卡片式堆叠，避免列被挤压 / 表内横滚 */
 @media (max-width: 767px) {
-  .members-table,
-  .members-table tbody,
-  .members-table tr,
-  .members-table td {
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
     display: block;
     width: 100%;
   }
 
-  .members-table {
+  .table {
     overflow: visible;
     white-space: normal;
   }
 
-  .members-table thead {
+  .table thead {
     display: none;
   }
 
-  .members-table tbody tr {
+  .table tbody tr {
     padding: 0.75rem 0.25rem;
     border-bottom: 1px solid var(--separator);
   }
 
-  .members-table tbody tr:last-child {
+  .table tbody tr:last-child {
     border-bottom: none;
   }
 
-  .members-table td {
+  .table td {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
@@ -2756,7 +2757,7 @@ a.perm-tab {
     word-break: break-word;
   }
 
-  .members-table td::before {
+  .table td::before {
     content: attr(data-label);
     flex: 0 0 auto;
     color: var(--text-tertiary);
@@ -2767,12 +2768,12 @@ a.perm-tab {
     font-weight: 600;
   }
 
-  .members-table td[data-label="操作"] {
+  .table td[data-label="操作"] {
     justify-content: flex-end;
     padding-top: 0.4375rem;
   }
 
-  .members-table td[data-label="操作"]::before {
+  .table td[data-label="操作"]::before {
     content: none;
   }
 

@@ -1,6 +1,7 @@
 import {
   Archive,
   Bell,
+  BookOpen,
   Building2,
   ChevronDown,
   Inbox,
@@ -82,4 +83,8 @@ export function BellIcon(props: IconProps) {
 
 export function InboxIcon(props: IconProps) {
   return <Icon icon={Inbox} {...props} />;
+}
+
+export function KnowledgeIcon(props: IconProps) {
+  return <Icon icon={BookOpen} {...props} />;
 }
