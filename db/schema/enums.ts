@@ -22,3 +22,59 @@ export const membershipStatus = pgEnum("membership_status", [
  * - disabled：已停用
  */
 export const userStatus = pgEnum("user_status", ["active", "pending_handover", "disabled"]);
+
+/* -------------------------------------------------------------------------- */
+/* M2 · 知识库                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/** 入库批次来源：上传 / 巡读（目录扫描）/ 手工 */
+export const ingestKind = pgEnum("ingest_kind", ["upload", "scout", "manual"]);
+
+/** 入库批次状态机 */
+export const ingestStatus = pgEnum("ingest_status", [
+  "draft",
+  "running",
+  "done",
+  "failed",
+  "revoked",
+]);
+
+/** 单文件处置结论：规则筛 / 模型判 / 待人工 / 出错 */
+export const fileDecision = pgEnum("file_decision", [
+  "pending",
+  "rule_keep",
+  "rule_skip",
+  "model_keep",
+  "model_skip",
+  "ask",
+  "error",
+]);
+
+/**
+ * 文档状态：
+ * - parsed：已解析出文本
+ * - needs_ocr：扫描件/图片，暂不生成切片（不假装读过）
+ * - failed：解析失败
+ * - revoked：随批次撤回
+ */
+export const docStatus = pgEnum("doc_status", ["parsed", "needs_ocr", "failed", "revoked"]);
+
+/** 知识卡类型 */
+export const cardKind = pgEnum("card_kind", [
+  "object",
+  "decision",
+  "preference",
+  "fact",
+  "faq",
+  "case",
+  "viewpoint",
+]);
+
+/** 知识卡状态：待确认 / 已确认 / 已丢弃 */
+export const cardStatus = pgEnum("card_status", ["pending", "confirmed", "dropped"]);
+
+/** 知识卡来源：开工问卷 / 提炼 / 手工 / 巡读 */
+export const cardOrigin = pgEnum("card_origin", ["intake", "distill", "manual", "scout"]);
+
+/** 知识缺口状态 */
+export const gapStatus = pgEnum("gap_status", ["open", "answered", "closed"]);

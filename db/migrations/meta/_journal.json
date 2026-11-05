@@ -57,6 +57,13 @@
       "when": 1793803809470,
       "tag": "0007_bitter_nighthawk",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793871949363,
+      "tag": "0008_knowledge_base",
+      "breakpoints": true
     }
   ]
 }
