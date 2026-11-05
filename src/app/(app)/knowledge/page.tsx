@@ -1,5 +1,4 @@
 import { headers } from "next/headers";
-import Link from "next/link";
 
 import { EmptyState } from "@/components/knowledge/EmptyState";
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
@@ -7,7 +6,6 @@ import { SectionCard } from "@/components/knowledge/SectionCard";
 import {
   badge,
   badgeRow,
-  btnGhost,
   evidenceItem,
   evidenceList,
   headerRow,
@@ -33,6 +31,7 @@ import { RegressionPanel } from "./RegressionPanel";
 import { RevokeButton } from "./RevokeButton";
 import { UploadPanel } from "./UploadPanel";
 import { StatBar } from "./_components/StatBar";
+import { CardsTab } from "./_components/CardsTab";
 import { DEFAULT_TAB, TabNav, isKnowledgeTab, type KnowledgeTab } from "./_components/TabNav";
 
 export const dynamic = "force-dynamic";
@@ -120,7 +119,15 @@ function statusBadgeClass(status: string): string {
 export default async function KnowledgePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    status?: string;
+    kind?: string;
+    category?: string;
+    product?: string;
+    q?: string;
+    problems?: string;
+  }>;
 }) {
   const session = await requireSession();
   const requestId = (await headers()).get("x-request-id") ?? undefined;
@@ -505,16 +512,7 @@ export default async function KnowledgePage({
             </>
           ) : null}
 
-          {tab === "cards" ? (
-            <SectionCard
-              title="知识卡"
-              desc="卡片列表、状态筛选、批量决策与证据折叠将在本页统一承载；当前完整列表仍在独立页面。"
-            >
-              <Link className={btnGhost} href="/knowledge/cards">
-                打开知识卡页
-              </Link>
-            </SectionCard>
-          ) : null}
+          {tab === "cards" ? <CardsTab context={context} searchParams={params} /> : null}
 
           {tab === "meta" ? (
             <SectionCard title="条目四字段" desc="来源 / 版本 / 负责人 / 有效期的批量补全。">
