@@ -2,7 +2,10 @@
 
 import { useState, useTransition } from "react";
 
-import { actions, alert, badge, btnDark, card, cardDesc, cardHead, cardTitle, formGrid, input, label } from "../ui";
+import { Field } from "@/components/knowledge/Field";
+import { InlineMessage } from "@/components/knowledge/InlineMessage";
+import { SectionCard } from "@/components/knowledge/SectionCard";
+import { actions, badge, btnDark, formGrid, input } from "@/components/knowledge/tokens";
 import { createCardAction } from "./actions";
 
 const KIND_LABEL: Record<string, string> = {
@@ -24,16 +27,13 @@ export function NewCardForm() {
   const [failed, setFailed] = useState(false);
 
   return (
-    <div className={card}>
-      <div className={cardHead}>
-        <h2 className={cardTitle}>人工新建知识卡</h2>
-        <span className={badge()}>可直接确认</span>
-      </div>
-      <p className={cardDesc}>作者本人撰写的内容记为「人工编辑过」，创建后可直接确认。</p>
-
+    <SectionCard
+      title="人工新建知识卡"
+      right={<span className={badge()}>可直接确认</span>}
+      desc="作者本人撰写的内容记为「人工编辑过」，创建后可直接确认。"
+    >
       <div className={formGrid}>
-        <label className="block">
-          <span className={label}>类型</span>
+        <Field label="类型">
           <select className={input} value={kind} onChange={(event) => setKind(event.target.value)}>
             {Object.entries(KIND_LABEL).map(([value, text]) => (
               <option key={value} value={value}>
@@ -41,9 +41,8 @@ export function NewCardForm() {
               </option>
             ))}
           </select>
-        </label>
-        <label className="block">
-          <span className={label}>标题</span>
+        </Field>
+        <Field label="标题">
           <input
             className={input}
             type="text"
@@ -52,11 +51,10 @@ export function NewCardForm() {
             maxLength={120}
             placeholder="一句话说明这张卡解决什么问题"
           />
-        </label>
+        </Field>
       </div>
 
-      <label className="mt-3.5 block">
-        <span className={label}>正文</span>
+      <Field label="正文" className="mt-3.5 block">
         <textarea
           className={`${input} resize-y`}
           rows={4}
@@ -65,7 +63,7 @@ export function NewCardForm() {
           maxLength={4000}
           placeholder="写清结论、适用范围与前提条件"
         />
-      </label>
+      </Field>
 
       <div className={actions}>
         <button
@@ -89,8 +87,10 @@ export function NewCardForm() {
       </div>
 
       {message ? (
-        <div className={`${alert(failed ? "error" : "info")} mt-4 mb-0`}>{message}</div>
+        <InlineMessage tone={failed ? "error" : "info"} className="mt-4 mb-0">
+          {message}
+        </InlineMessage>
       ) : null}
-    </div>
+    </SectionCard>
   );
 }

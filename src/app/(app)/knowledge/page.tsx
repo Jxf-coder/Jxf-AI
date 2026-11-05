@@ -14,14 +14,12 @@ import { QaPanel } from "./QaPanel";
 import { RegressionPanel } from "./RegressionPanel";
 import { RevokeButton } from "./RevokeButton";
 import { UploadPanel } from "./UploadPanel";
+import { EmptyState } from "@/components/knowledge/EmptyState";
+import { InlineMessage } from "@/components/knowledge/InlineMessage";
+import { SectionCard } from "@/components/knowledge/SectionCard";
 import {
   badge,
   badgeRow,
-  card,
-  cardDesc,
-  cardHead,
-  cardTitle,
-  emptyState,
   evidenceItem,
   evidenceList,
   headerRow,
@@ -33,9 +31,8 @@ import {
   tabActive,
   tabBar,
   tabIdle,
-  alert as alertCls,
   inline as inlineCls,
-} from "./ui";
+} from "@/components/knowledge/tokens";
 
 export const dynamic = "force-dynamic";
 
@@ -224,20 +221,16 @@ export default async function KnowledgePage() {
       </div>
 
       {!data.canRead ? (
-        <div className={alertCls("error")}>当前账号没有「知识库查看」权限，请联系 L1 管理员授权。</div>
+        <InlineMessage tone="error">当前账号没有「知识库查看」权限，请联系 L1 管理员授权。</InlineMessage>
       ) : (
         <>
           <QaPanel aiEnabled={ai.chatEnabled} />
 
           <UploadPanel canWrite={data.canWrite} aiEnabled={ai.embeddingEnabled} />
 
-          <div className={card}>
-            <div className={cardHead}>
-              <h2 className={cardTitle}>文档</h2>
-              <span className={badge()}>{data.documents.length}</span>
-            </div>
+          <SectionCard title="文档" count={data.documents.length}>
             {data.documents.length === 0 ? (
-              <p className={emptyState}>还没有文档。上传后会自动解析、分块并写入检索索引。</p>
+              <EmptyState>还没有文档。上传后会自动解析、分块并写入检索索引。</EmptyState>
             ) : (
               <div className="overflow-x-auto">
                 <table className="kb-table">
@@ -293,15 +286,11 @@ export default async function KnowledgePage() {
                 </table>
               </div>
             )}
-          </div>
+          </SectionCard>
 
-          <div className={card}>
-            <div className={cardHead}>
-              <h2 className={cardTitle}>入库批次</h2>
-              <span className={badge()}>最近 {data.runs.length} 次</span>
-            </div>
+          <SectionCard title="入库批次" count={`最近 ${data.runs.length} 次`}>
             {data.runs.length === 0 ? (
-              <p className={emptyState}>暂无入库批次。</p>
+              <EmptyState>暂无入库批次。</EmptyState>
             ) : (
               <div className="overflow-x-auto">
                 <table className="kb-table">
@@ -352,15 +341,11 @@ export default async function KnowledgePage() {
                 </table>
               </div>
             )}
-          </div>
+          </SectionCard>
 
-          <div className={card}>
-            <div className={cardHead}>
-              <h2 className={cardTitle}>最近问答</h2>
-              <span className={badge()}>{data.qaLogs.length}</span>
-            </div>
+          <SectionCard title="最近问答" count={data.qaLogs.length}>
             {data.qaLogs.length === 0 ? (
-              <p className={emptyState}>还没有提问记录。</p>
+              <EmptyState>还没有提问记录。</EmptyState>
             ) : (
               <div className="overflow-x-auto">
                 <table className="kb-table">
@@ -403,15 +388,14 @@ export default async function KnowledgePage() {
                 </table>
               </div>
             )}
-          </div>
+          </SectionCard>
 
           {data.gaps.length > 0 ? (
-            <div className={card}>
-              <div className={cardHead}>
-                <h2 className={cardTitle}>知识缺口</h2>
-                <span className={badge("warn")}>{data.gaps.length}</span>
-              </div>
-              <p className={cardDesc}>问答未命中时自动沉淀，补文档或补卡片后可关闭。</p>
+            <SectionCard
+              title="知识缺口"
+              right={<span className={badge("warn")}>{data.gaps.length}</span>}
+              desc="问答未命中时自动沉淀，补文档或补卡片后可关闭。"
+            >
               <ul className={evidenceList}>
                 {data.gaps.map((gap) => (
                   <li key={gap.id} className={evidenceItem}>
@@ -420,17 +404,13 @@ export default async function KnowledgePage() {
                   </li>
                 ))}
               </ul>
-            </div>
+            </SectionCard>
           ) : null}
 
           {data.canWrite ? <RegressionPanel /> : null}
 
           {regressionRuns.length > 0 ? (
-            <div className={card}>
-              <div className={cardHead}>
-                <h2 className={cardTitle}>回归记录</h2>
-                <span className={badge()}>最近 {regressionRuns.length} 次</span>
-              </div>
+            <SectionCard title="回归记录" count={`最近 ${regressionRuns.length} 次`}>
               <div className="overflow-x-auto">
                 <table className="kb-table">
                   <thead>
@@ -470,7 +450,7 @@ export default async function KnowledgePage() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </SectionCard>
           ) : null}
         </>
       )}

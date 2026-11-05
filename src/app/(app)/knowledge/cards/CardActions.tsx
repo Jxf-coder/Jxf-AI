@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 
-import { actions, btnBlue, btnDark, btnGhost, input, label, linkBtn, meta } from "../ui";
+import { actions, btnBlue, btnDark, btnGhost, fieldLabel, input, linkBtn, meta } from "@/components/knowledge/tokens";
 import { confirmCardAction, dropCardAction, updateCardAction } from "./actions";
 
 interface CardActionsProps {
@@ -56,7 +56,7 @@ export function CardActions({ cardId, title, body, canConfirm, canWrite, status 
       {editing ? (
         <div className="mt-1 flex w-full flex-col gap-3">
           <label className="block">
-            <span className={label}>标题</span>
+            <span className={fieldLabel}>标题</span>
             <input
               className={input}
               type="text"
@@ -66,7 +66,7 @@ export function CardActions({ cardId, title, body, canConfirm, canWrite, status 
             />
           </label>
           <label className="block">
-            <span className={label}>正文</span>
+            <span className={fieldLabel}>正文</span>
             <textarea
               className={`${input} resize-y`}
               rows={4}

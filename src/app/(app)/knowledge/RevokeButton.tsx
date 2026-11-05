@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 
-import { inline, linkBtn, meta } from "./ui";
+import { inline, linkBtn, meta } from "@/components/knowledge/tokens";
 import { revokeRunAction } from "./actions";
 
 export function RevokeButton({ runId }: { runId: string }) {

@@ -2,7 +2,10 @@
 
 import { useState, useTransition } from "react";
 
-import { actions, alert, badge, btnBlue, btnGhost, card, cardDesc, cardHead, cardTitle, input, label } from "./ui";
+import { Field } from "@/components/knowledge/Field";
+import { InlineMessage } from "@/components/knowledge/InlineMessage";
+import { SectionCard } from "@/components/knowledge/SectionCard";
+import { actions, badge, btnBlue, btnGhost, input } from "@/components/knowledge/tokens";
 import { runRegressionAction, seedRegressionAction } from "./actions";
 
 export function RegressionPanel() {
@@ -12,17 +15,12 @@ export function RegressionPanel() {
   const [failed, setFailed] = useState(false);
 
   return (
-    <div className={card}>
-      <div className={cardHead}>
-        <h2 className={cardTitle}>检索回归门禁</h2>
-        <span className={badge()}>retained ≥ 90%</span>
-      </div>
-      <p className={cardDesc}>
-        用已确认卡片标题生成基线题；改动分块或向量模型后跑一轮，保留率低于 90% 或任一道未通过即判失败。
-      </p>
-
-      <label className="block max-w-md">
-        <span className={label}>构建标记</span>
+    <SectionCard
+      title="检索回归门禁"
+      right={<span className={badge()}>retained ≥ 90%</span>}
+      desc="用已确认卡片标题生成基线题；改动分块或向量模型后跑一轮，保留率低于 90% 或任一道未通过即判失败。"
+    >
+      <Field label="构建标记" className="block max-w-md">
         <input
           className={input}
           type="text"
@@ -31,7 +29,7 @@ export function RegressionPanel() {
           maxLength={40}
           placeholder="例如：chunk-800 / bge-m3"
         />
-      </label>
+      </Field>
 
       <div className={actions}>
         <button
@@ -65,8 +63,10 @@ export function RegressionPanel() {
       </div>
 
       {message ? (
-        <div className={`${alert(failed ? "error" : "info")} mt-4 mb-0`}>{message}</div>
+        <InlineMessage tone={failed ? "error" : "info"} className="mt-4 mb-0">
+          {message}
+        </InlineMessage>
       ) : null}
-    </div>
+    </SectionCard>
   );
 }

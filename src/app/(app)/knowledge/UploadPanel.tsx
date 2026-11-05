@@ -3,7 +3,20 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
-import { actions, alert, badge, btnDark, card, cardDesc, cardHead, cardTitle, fileInput, formGrid, input, label } from "./ui";
+import { Field } from "@/components/knowledge/Field";
+import { InlineMessage } from "@/components/knowledge/InlineMessage";
+import {
+  actions,
+  badge,
+  btnDark,
+  card,
+  cardDesc,
+  cardHead,
+  cardTitle,
+  fileInput,
+  formGrid,
+  input,
+} from "@/components/knowledge/tokens";
 
 interface IngestResponse {
   ok: boolean;
@@ -73,11 +86,7 @@ export function UploadPanel({ canWrite, aiEnabled }: { canWrite: boolean; aiEnab
   }
 
   if (!canWrite) {
-    return (
-      <div className={alert()}>
-        当前账号没有「知识入库」权限，只能查看本部门文档与知识卡。
-      </div>
-    );
+    return <InlineMessage>当前账号没有「知识入库」权限，只能查看本部门文档与知识卡。</InlineMessage>;
   }
 
   return (
@@ -90,18 +99,16 @@ export function UploadPanel({ canWrite, aiEnabled }: { canWrite: boolean; aiEnab
         支持 PDF / DOCX / TXT / Markdown / CSV。扫描件会标记为「待 OCR」，不生成切片。
       </p>
       {!aiEnabled ? (
-        <div className={alert()}>
+        <InlineMessage>
           未配置 AI 密钥：本次入库只做解析与分块，检索走 pg_bigm 纯关键词通道，向量通道自动跳过。
-        </div>
+        </InlineMessage>
       ) : null}
 
       <div className={formGrid}>
-        <label className="block">
-          <span className={label}>文件</span>
+        <Field label="文件">
           <input ref={inputRef} className={fileInput} type="file" name="files" multiple />
-        </label>
-        <label className="block">
-          <span className={label}>入库目标（选填）</span>
+        </Field>
+        <Field label="入库目标（选填）">
           <input
             className={input}
             type="text"
@@ -110,7 +117,7 @@ export function UploadPanel({ canWrite, aiEnabled }: { canWrite: boolean; aiEnab
             placeholder="例如：补齐 2026 年食品接触材料验收标准"
             maxLength={200}
           />
-        </label>
+        </Field>
       </div>
 
       <div className={actions}>
@@ -120,7 +127,7 @@ export function UploadPanel({ canWrite, aiEnabled }: { canWrite: boolean; aiEnab
       </div>
 
       {result ? (
-        <div className={`${alert(result.ok ? "info" : "error")} mt-4 mb-0`}>
+        <InlineMessage tone={result.ok ? "info" : "error"} className="mt-4 mb-0">
           {result.ok && result.counts ? (
             <>
               <div>
@@ -142,7 +149,7 @@ export function UploadPanel({ canWrite, aiEnabled }: { canWrite: boolean; aiEnab
           ) : (
             result.error ?? "上传失败"
           )}
-        </div>
+        </InlineMessage>
       ) : null}
     </form>
   );

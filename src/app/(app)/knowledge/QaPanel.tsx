@@ -2,24 +2,22 @@
 
 import { useState, useTransition } from "react";
 
+import { Field } from "@/components/knowledge/Field";
+import { InlineMessage } from "@/components/knowledge/InlineMessage";
+import { Pill } from "@/components/knowledge/Pill";
+import { SectionCard } from "@/components/knowledge/SectionCard";
 import {
   actions,
-  alert,
-  badge,
   badgeRow,
   bodyText,
   btnBlue,
-  card,
-  cardDesc,
-  cardHead,
-  cardTitle,
   evidenceItem,
   evidenceList,
+  fieldLabel,
   input,
-  label,
   meta,
   quote,
-} from "./ui";
+} from "@/components/knowledge/tokens";
 import { askAction, type AskResult } from "./actions";
 
 export function QaPanel({ aiEnabled }: { aiEnabled: boolean }) {
@@ -30,21 +28,16 @@ export function QaPanel({ aiEnabled }: { aiEnabled: boolean }) {
   const answer = result?.answer;
 
   return (
-    <div className={card}>
-      <div className={cardHead}>
-        <h2 className={cardTitle}>知识问答</h2>
-        <span className={aiEnabled ? badge("ok") : badge()}>
-          {aiEnabled ? "AI 生成" : "仅检索"}
-        </span>
-      </div>
-      <p className={cardDesc}>
-        {aiEnabled
+    <SectionCard
+      title="知识问答"
+      right={<Pill tone={aiEnabled ? "ok" : "muted"}>{aiEnabled ? "AI 生成" : "仅检索"}</Pill>}
+      desc={
+        aiEnabled
           ? "只依据已确认的知识卡作答，引用编号与数字会逐条校验。"
-          : "未启用 AI 生成：这里只返回检索到的已确认知识卡。"}
-      </p>
-
-      <label className="block">
-        <span className={label}>问题</span>
+          : "未启用 AI 生成：这里只返回检索到的已确认知识卡。"
+      }
+    >
+      <Field label="问题">
         <textarea
           className={`${input} resize-y`}
           rows={2}
@@ -53,7 +46,7 @@ export function QaPanel({ aiEnabled }: { aiEnabled: boolean }) {
           onChange={(event) => setQuestion(event.target.value)}
           placeholder="例如：食品接触材料的迁移量限值是多少？"
         />
-      </label>
+      </Field>
 
       <div className={actions}>
         <button
@@ -70,24 +63,26 @@ export function QaPanel({ aiEnabled }: { aiEnabled: boolean }) {
         </button>
       </div>
 
-      {result && !result.ok ? <div className={`${alert("error")} mt-4 mb-0`}>{result.message}</div> : null}
+      {result && !result.ok ? (
+        <InlineMessage tone="error" className="mt-4 mb-0">
+          {result.message}
+        </InlineMessage>
+      ) : null}
 
       {answer ? (
         <div className="mt-5">
           <div className={badgeRow}>
-            <span className={answer.mode === "no_match" ? badge("error") : badge("ok")}>
+            <Pill tone={answer.mode === "no_match" ? "error" : "ok"}>
               {answer.mode === "ai" ? "AI 生成" : answer.mode === "retrieval_only" ? "仅检索" : "未命中"}
-            </span>
-            {answer.gapRecorded ? <span className={badge("warn")}>已记录知识缺口</span> : null}
+            </Pill>
+            {answer.gapRecorded ? <Pill tone="warn">已记录知识缺口</Pill> : null}
             {answer.invalidCites.length > 0 ? (
-              <span className={badge("error")}>
+              <Pill tone="error">
                 越界引用 {answer.invalidCites.map((index) => `[${index}]`).join(" ")}
-              </span>
+              </Pill>
             ) : null}
             {answer.unverifiedNumbers.length > 0 ? (
-              <span className={badge("error")}>
-                未核实数字 {answer.unverifiedNumbers.join("、")}
-              </span>
+              <Pill tone="error">未核实数字 {answer.unverifiedNumbers.join("、")}</Pill>
             ) : null}
           </div>
 
@@ -95,7 +90,7 @@ export function QaPanel({ aiEnabled }: { aiEnabled: boolean }) {
 
           {answer.citations.length > 0 ? (
             <>
-              <div className={label}>引用来源</div>
+              <div className={fieldLabel}>引用来源</div>
               <ul className={evidenceList}>
                 {answer.citations.map((citation) => (
                   <li key={citation.cardId} className={evidenceItem}>
@@ -112,6 +107,6 @@ export function QaPanel({ aiEnabled }: { aiEnabled: boolean }) {
           ) : null}
         </div>
       ) : null}
-    </div>
+    </SectionCard>
   );
 }

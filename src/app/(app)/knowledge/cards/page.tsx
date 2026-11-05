@@ -10,29 +10,27 @@ import type { ResolvedPermissions } from "@/types/permission";
 
 import { CardActions } from "./CardActions";
 import { NewCardForm } from "./NewCardForm";
+import { EmptyState } from "@/components/knowledge/EmptyState";
+import { EvidenceList } from "@/components/knowledge/EvidenceList";
+import { InlineMessage } from "@/components/knowledge/InlineMessage";
+import { Pill } from "@/components/knowledge/Pill";
 import {
-  badge,
   badgeRow,
   bodyText,
   btnGhost,
   card,
   cardTitle,
   divider,
-  emptyState,
-  evidenceItem,
-  evidenceList,
+  fieldLabel,
   headerRow,
-  label,
   meta,
   pageSubtitle,
   pageTitle,
   pageWrap,
-  quote,
   tabActive,
   tabBar,
   tabIdle,
-  alert as alertCls,
-} from "../ui";
+} from "@/components/knowledge/tokens";
 
 export const dynamic = "force-dynamic";
 
@@ -134,33 +132,35 @@ export default async function KnowledgeCardsPage({
       </nav>
 
       {!access.canRead ? (
-        <div className={`${alertCls("error")} mt-4`}>当前账号没有「知识库查看」权限，请联系 L1 管理员授权。</div>
+        <InlineMessage tone="error" className="mt-4">
+          当前账号没有「知识库查看」权限，请联系 L1 管理员授权。
+        </InlineMessage>
       ) : (
         <>
           {status === "pending" && access.canWrite ? <NewCardForm /> : null}
 
           <div className={`${badgeRow} mt-4`}>
-            <span className={badge()}>{activeTabLabel}</span>
-            <span className={badge()}>{cards.length} 张</span>
+            <Pill>{activeTabLabel}</Pill>
+            <Pill>{cards.length} 张</Pill>
           </div>
 
           {cards.length === 0 ? (
             <div className={card}>
-              <p className={emptyState}>
+              <EmptyState>
                 暂无{activeTabLabel}的知识卡。
                 {status === "pending" ? "可在知识库页面用「生成卡片」从文档蒸馏，或人工新建。" : ""}
-              </p>
+              </EmptyState>
             </div>
           ) : (
             cards.map((cardItem) => (
               <article className={card} key={cardItem.id}>
                 <div className={badgeRow}>
-                  <span className={badge("blue")}>{KIND_LABEL[cardItem.kind] ?? cardItem.kind}</span>
-                  <span className={badge()}>{ORIGIN_LABEL[cardItem.origin] ?? cardItem.origin}</span>
-                  <span className={badge()}>{cardItem.departmentName}</span>
-                  {cardItem.humanEdited ? <span className={badge("ok")}>人工编辑</span> : null}
-                  {cardItem.conflictWith.length > 0 ? <span className={badge("error")}>存在冲突</span> : null}
-                  {cardItem.validUntil ? <span className={badge()}>有效期至 {cardItem.validUntil}</span> : null}
+                  <Pill tone="blue">{KIND_LABEL[cardItem.kind] ?? cardItem.kind}</Pill>
+                  <Pill>{ORIGIN_LABEL[cardItem.origin] ?? cardItem.origin}</Pill>
+                  <Pill>{cardItem.departmentName}</Pill>
+                  {cardItem.humanEdited ? <Pill tone="ok">人工编辑</Pill> : null}
+                  {cardItem.conflictWith.length > 0 ? <Pill tone="error">存在冲突</Pill> : null}
+                  {cardItem.validUntil ? <Pill>有效期至 {cardItem.validUntil}</Pill> : null}
                 </div>
 
                 <h2 className={cardTitle}>{cardItem.title}</h2>
@@ -168,7 +168,7 @@ export default async function KnowledgeCardsPage({
 
                 <div className={divider} />
 
-                <div className={label}>证据 · {cardItem.evidence.length}</div>
+                <div className={fieldLabel}>证据 · {cardItem.evidence.length}</div>
                 {cardItem.evidence.length === 0 ? (
                   <p className={`${meta} mt-2`}>
                     {cardItem.status === "pending"
@@ -176,17 +176,7 @@ export default async function KnowledgeCardsPage({
                       : "暂无关联证据。"}
                   </p>
                 ) : (
-                  <ul className={evidenceList}>
-                    {cardItem.evidence.map((evidence) => (
-                      <li key={evidence.id} className={evidenceItem}>
-                        <span className={quote}>“{evidence.quote}”</span>
-                        <span className={meta}>
-                          {evidence.documentTitle ?? "文档"} · {evidence.locator ?? "未标注位置"} ·{" "}
-                          {evidence.verified ? "已核对" : "未核对"}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  <EvidenceList items={cardItem.evidence} />
                 )}
 
                 {cardItem.confirmedAt ? (
