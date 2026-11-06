@@ -182,30 +182,31 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
 
       {tree.departments.map((department) => {
         const deptKey = `dep:${department.id}`;
-        const deptCount = department.roles.reduce(
-          (sum, role) => sum + role.folders.reduce((n, folder) => n + folder.items.length, 0),
-          0,
-        );
+        const deptCount =
+          department.folders.reduce((sum, folder) => sum + folder.items.length, 0) +
+          department.roles.reduce(
+            (sum, role) => sum + role.folders.reduce((n, folder) => n + folder.items.length, 0),
+            0,
+          );
         return (
           <div key={department.id}>
             {sectionHead(deptKey, department.name, deptCount)}
             {isOpen(deptKey) ? (
               <div className="mb-1">
-                {department.roles.length === 0 ? (
-                  <p className="px-2 py-1 text-[11px] text-zinc-400">该部门暂无岗位</p>
-                ) : null}
-                {department.roles.map((role) => {
-                  const roleKey = `role:${department.id}:${role.name}`;
-                  const roleCount = role.folders.reduce((sum, folder) => sum + folder.items.length, 0);
-                  return (
-                    <div key={roleKey}>
-                      {groupHead(roleKey, `角色·${role.name}`, roleCount, 2)}
-                      {isOpen(roleKey)
-                        ? role.folders.map((folder) => folderBlock(folder, 3, roleKey))
-                        : null}
-                    </div>
-                  );
-                })}
+                {department.roles.length === 0
+                  ? department.folders.map((folder) => folderBlock(folder, 2, deptKey))
+                  : department.roles.map((role) => {
+                      const roleKey = `role:${department.id}:${role.name}`;
+                      const roleCount = role.folders.reduce((sum, folder) => sum + folder.items.length, 0);
+                      return (
+                        <div key={roleKey}>
+                          {groupHead(roleKey, `角色·${role.name}`, roleCount, 2)}
+                          {isOpen(roleKey)
+                            ? role.folders.map((folder) => folderBlock(folder, 3, roleKey))
+                            : null}
+                        </div>
+                      );
+                    })}
               </div>
             ) : null}
           </div>

@@ -10,7 +10,7 @@
 import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
-import { folderLabel, STANDARD_FOLDERS, UNASSIGNED_ROLE } from "@/lib/knowledge/folders";
+import { folderLabel, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
 import { requireContextPermission } from "@/lib/permissions/server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -40,7 +40,10 @@ export interface TreeRole {
 export interface TreeDepartment {
   id: string;
   name: string;
+  /** 岗位层：多岗位部门才展示；单岗位部门直接走 folders */
   roles: TreeRole[];
+  /** 部门直属 10 目录：单岗位部门 / 无岗位资料都落这里 */
+  folders: TreeFolder[];
 }
 
 export interface WorkspaceTree {
@@ -83,15 +86,25 @@ function folderMap(): Map<string, TreeFolder> {
 }
 
 function roleName(value: string | null): string {
-  return (value ?? "").trim() || UNASSIGNED_ROLE;
+  return (value ?? "").trim();
 }
 
 function sortRoles(names: string[]): string[] {
-  return names.sort((a, b) => {
-    if (a === UNASSIGNED_ROLE) return 1;
-    if (b === UNASSIGNED_ROLE) return -1;
-    return a.localeCompare(b, "zh");
-  });
+  return names.sort((a, b) => a.localeCompare(b, "zh"));
+}
+
+function countItems(folders: Map<string, TreeFolder>): number {
+  let total = 0;
+  for (const folder of folders.values()) {
+    total += folder.items.length;
+  }
+  return total;
+}
+
+function orderedFolders(folders: Map<string, TreeFolder>): TreeFolder[] {
+  return STANDARD_FOLDERS.map(
+    (folder) => folders.get(folder.key) ?? { key: folder.key, label: folder.label, items: [] },
+  );
 }
 
 /** 左侧目录：共享区 + 部门 → 岗位 → 10 个标准目录 */
@@ -100,10 +113,9 @@ export async function loadWorkspaceTree(context: UserContext): Promise<Workspace
     const [departments, roles, documents, cards] = await Promise.all([
       client.query<DepartmentRow>(`select id, name from departments order by sort_order, name`),
       client.query<RoleRow>(
-        `select distinct department_id, coalesce(nullif(trim(position), ''), $1) as role
+        `select distinct department_id, trim(position) as role
            from memberships
-          where status = 'active'`,
-        [UNASSIGNED_ROLE],
+          where status = 'active' and nullif(trim(position), '') is not null`,
       ),
       client.query<NodeRow>(
         `select id, title, status, department_id, role_key, folder_key, visibility
@@ -121,19 +133,31 @@ export async function loadWorkspaceTree(context: UserContext): Promise<Workspace
     ]);
 
     const sharedFolders = folderMap();
-    const deptTree = new Map<string, { name: string; roles: Map<string, Map<string, TreeFolder>> }>();
+    const deptTree = new Map<
+      string,
+      { name: string; roles: Map<string, Map<string, TreeFolder>>; direct: Map<string, TreeFolder> }
+    >();
 
-    function ensureRole(departmentId: string, name: string) {
-      const department =
-        deptTree.get(departmentId) ??
-        {
+    function departmentEntry(departmentId: string) {
+      let entry = deptTree.get(departmentId);
+      if (!entry) {
+        entry = {
           name: departments.rows.find((row) => row.id === departmentId)?.name ?? "未命名部门",
           roles: new Map<string, Map<string, TreeFolder>>(),
+          direct: folderMap(),
         };
-      deptTree.set(departmentId, department);
+        deptTree.set(departmentId, entry);
+      }
+      return entry;
+    }
 
-      const role = department.roles.get(name) ?? folderMap();
-      department.roles.set(name, role);
+    function ensureRole(departmentId: string, name: string) {
+      const entry = departmentEntry(departmentId);
+      let role = entry.roles.get(name);
+      if (!role) {
+        role = folderMap();
+        entry.roles.set(name, role);
+      }
       return role;
     }
 
@@ -149,7 +173,13 @@ export async function loadWorkspaceTree(context: UserContext): Promise<Workspace
 
     function addNode(row: NodeRow, kind: "card" | "document") {
       const item: TreeItem = { kind, id: row.id, title: row.title, status: row.status };
-      const target = row.visibility === "shared" ? sharedFolders : ensureRole(row.department_id, roleName(row.role_key));
+      const name = roleName(row.role_key);
+      const target =
+        row.visibility === "shared"
+          ? sharedFolders
+          : name
+            ? ensureRole(row.department_id, name)
+            : departmentEntry(row.department_id).direct;
       const folder = target.get(row.folder_key) ?? target.get(kind === "card" ? "02-cards" : "01-original");
       if (!folder) {
         return;
@@ -167,28 +197,45 @@ export async function loadWorkspaceTree(context: UserContext): Promise<Workspace
       addNode(row, "card");
     }
 
-    const departmentsOut: TreeDepartment[] = Array.from(deptTree.entries()).map(([id, entry]) => ({
-      id,
-      name: entry.name,
-      roles: sortRoles(Array.from(entry.roles.keys())).map((name) => ({
-        name,
-        folders: STANDARD_FOLDERS.map((folder) => entry.roles.get(name)?.get(folder.key) ?? {
-          key: folder.key,
-          label: folder.label,
-          items: [],
-        }),
-      })),
-    }));
+    const departmentsOut: TreeDepartment[] = Array.from(deptTree.entries()).map(([id, entry]) => {
+      const roleNames = sortRoles(Array.from(entry.roles.keys()));
 
-    const sharedFoldersOut = STANDARD_FOLDERS.map(
-      (folder) =>
-        sharedFolders.get(folder.key) ?? { key: folder.key, label: folder.label, items: [] },
-    );
+      // 单岗位部门省略岗位层：无岗位的历史资料并入该岗位，直接展示「部门 → 10 目录」
+      if (roleNames.length <= 1) {
+        const merged = roleNames.length === 1 ? entry.roles.get(roleNames[0]) ?? folderMap() : folderMap();
+        for (const folder of entry.direct.values()) {
+          const target = merged.get(folder.key);
+          if (target) {
+            target.items.push(...folder.items);
+          }
+        }
+        return { id, name: entry.name, roles: [], folders: orderedFolders(merged) };
+      }
+
+      const rolesOut: TreeRole[] = roleNames.map((name) => ({
+        name,
+        folders: orderedFolders(entry.roles.get(name) ?? new Map<string, TreeFolder>()),
+      }));
+
+      // 多岗位部门才可能出现「没有岗位的历史资料」，单独成组，避免混进某个真实岗位
+      if (countItems(entry.direct) > 0) {
+        rolesOut.push({ name: "其他资料", folders: orderedFolders(entry.direct) });
+      }
+
+      return { id, name: entry.name, roles: rolesOut, folders: [] };
+    });
+
+    const sharedFoldersOut = orderedFolders(sharedFolders);
 
     const sharedCount = sharedFoldersOut.reduce((sum, folder) => sum + folder.items.length, 0);
     const deptCount = departmentsOut.reduce(
       (sum, department) =>
-        sum + department.roles.reduce((roleSum, role) => roleSum + role.folders.reduce((n, f) => n + f.items.length, 0), 0),
+        sum +
+        department.folders.reduce((n, folder) => n + folder.items.length, 0) +
+        department.roles.reduce(
+          (roleSum, role) => roleSum + role.folders.reduce((n, folder) => n + folder.items.length, 0),
+          0,
+        ),
       0,
     );
     const pendingCards = cards.rows.filter((row) => row.status === "pending").length;

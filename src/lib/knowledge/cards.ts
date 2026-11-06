@@ -303,7 +303,7 @@ export async function createManualCard(context: UserContext, input: CreateCardIn
        values ($1, $2, $3, $4, $5, 'pending', 'manual', true, 1, $6, $7, $8, $9, $10::jsonb,
                coalesce((select nullif(trim(m.position), '') from memberships m
                           where m.user_id = $11 and m.department_id = $2 and m.status = 'active'
-                          limit 1), '未分配岗位'))
+                          limit 1), null))
        returning id`,
       [
         context.tenantId,

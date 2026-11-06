@@ -20,7 +20,6 @@ import { chunkPages, type TextChunk } from "@/lib/knowledge/chunk";
 import {
   DEFAULT_DOCUMENT_FOLDER,
   isFolderKey,
-  UNASSIGNED_ROLE,
   type FolderKey,
 } from "@/lib/knowledge/folders";
 import { fileExtension, parseDocument, UnsupportedDocumentError } from "@/lib/knowledge/parse";
@@ -130,7 +129,7 @@ export async function ingestUpload(
     };
   });
 
-  const roleKey = scope.role || UNASSIGNED_ROLE;
+  const roleKey = scope.role;
   const folderKey: FolderKey = isFolderKey(options.folderKey)
     ? options.folderKey
     : DEFAULT_DOCUMENT_FOLDER;
@@ -352,7 +351,7 @@ export async function ingestUpload(
           createdRunId,
           item.input.name,
           item.input.mime || "application/octet-stream",
-          roleKey,
+          roleKey || null,
           folderKey,
           item.pageCount,
           item.charCount,

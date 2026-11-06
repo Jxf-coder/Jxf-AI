@@ -26,9 +26,6 @@ export const FOLDER_KEYS: readonly FolderKey[] = STANDARD_FOLDERS.map((folder) =
 export const DEFAULT_DOCUMENT_FOLDER: FolderKey = "01-original";
 export const DEFAULT_CARD_FOLDER: FolderKey = "02-cards";
 
-/** 岗位缺失时的兜底分组名 */
-export const UNASSIGNED_ROLE = "未分配岗位";
-
 export function isFolderKey(value: string | undefined | null): value is FolderKey {
   return typeof value === "string" && (FOLDER_KEYS as readonly string[]).includes(value);
 }

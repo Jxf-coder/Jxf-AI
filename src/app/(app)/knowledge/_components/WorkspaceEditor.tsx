@@ -68,7 +68,7 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
   const metaLine = isDocument
     ? [
         props.document.departmentName,
-        `角色·${props.document.roleKey}`,
+        props.document.roleKey ? `角色·${props.document.roleKey}` : "",
         props.document.folderLabel,
         DOC_STATUS_LABEL[props.document.status] ?? props.document.status,
         props.document.pageCount ? `${props.document.pageCount} 页` : "",
@@ -79,7 +79,7 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
         .join(" · ")
     : [
         props.card.departmentName,
-        `角色·${props.card.roleKey}`,
+        props.card.roleKey ? `角色·${props.card.roleKey}` : "",
         props.card.folderLabel,
         CARD_STATUS_LABEL[props.card.status] ?? props.card.status,
         props.card.category ? `分类 ${props.card.category}` : "",
