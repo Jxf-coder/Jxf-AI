@@ -1,8 +1,6 @@
 import { headers } from "next/headers";
 
-import { EmptyState } from "@/components/knowledge/EmptyState";
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
-import { SectionCard } from "@/components/knowledge/SectionCard";
 import {
   badge,
   badgeRow,
@@ -10,39 +8,35 @@ import {
   pageSubtitle,
   pageTitle,
   pageWrap,
-  inline as inlineCls,
 } from "@/components/knowledge/tokens";
 import { aiStatus } from "@/lib/ai/openai";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 import { loadKnowledgeStats } from "@/lib/knowledge/stats";
+import {
+  isUuid,
+  loadCardDetail,
+  loadDocumentContent,
+  loadKnowledgeGraph,
+  loadWorkspaceTree,
+} from "@/lib/knowledge/workspace";
 import { authorize } from "@/lib/permissions/authorize";
 import { resolveContextPermissions } from "@/lib/permissions/server";
 import type { ResolvedPermissions } from "@/types/permission";
 
-import { DistillButton } from "./DistillButton";
 import { CardsTab } from "./_components/CardsTab";
 import { GapsTab } from "./_components/GapsTab";
+import { GraphView } from "./_components/GraphView";
 import { MetaTab } from "./_components/MetaTab";
 import { QaTab } from "./_components/QaTab";
 import { RegressionTab } from "./_components/RegressionTab";
 import { ScoutTab } from "./_components/ScoutTab";
 import { StatBar } from "./_components/StatBar";
 import { DEFAULT_TAB, TabNav, isKnowledgeTab, type KnowledgeTab } from "./_components/TabNav";
+import { WorkspaceEditor } from "./_components/WorkspaceEditor";
+import { WorkspaceTree } from "./_components/WorkspaceTree";
 
 export const dynamic = "force-dynamic";
-
-interface DocumentRow {
-  id: string;
-  title: string;
-  mime: string;
-  status: "parsed" | "needs_ocr" | "failed" | "revoked";
-  page_count: number | null;
-  char_count: number;
-  created_at: Date;
-  department_name: string;
-  chunk_count: string;
-}
 
 interface RunRow {
   id: string;
@@ -53,42 +47,6 @@ interface RunRow {
   created_at: Date;
   department_name: string;
   creator_name: string | null;
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  parsed: "已解析",
-  needs_ocr: "待 OCR",
-  failed: "解析失败",
-  revoked: "已撤回",
-  draft: "草稿",
-  running: "进行中",
-  done: "已完成",
-};
-
-const DATE_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
-  timeZone: "Asia/Shanghai",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-function formatDate(value: Date | string): string {
-  return DATE_FORMATTER.format(typeof value === "string" ? new Date(value) : value);
-}
-
-function statusBadgeClass(status: string): string {
-  if (status === "done" || status === "parsed") {
-    return badge("ok");
-  }
-  if (status === "failed") {
-    return badge("error");
-  }
-  if (status === "revoked" || status === "needs_ocr" || status === "running") {
-    return badge("warn");
-  }
-  return badge("muted");
 }
 
 export default async function KnowledgePage({
@@ -104,6 +62,8 @@ export default async function KnowledgePage({
     problems?: string;
     gapStatus?: string;
     missing?: string;
+    doc?: string;
+    card?: string;
   }>;
 }) {
   const session = await requireSession();
@@ -114,45 +74,29 @@ export default async function KnowledgePage({
   const params = await searchParams;
   const tab: KnowledgeTab = isKnowledgeTab(params.tab) ? params.tab : DEFAULT_TAB;
 
-  const data = await withUserContext(context, async (client) => {
+  const access = await withUserContext(context, async (client) => {
     let actor: ResolvedPermissions | null = null;
     try {
       actor = await resolveContextPermissions(client, context);
     } catch {
       actor = null;
     }
+    return {
+      canRead: actor ? authorize(actor, "knowledge:read").allowed : false,
+      canWrite: actor ? authorize(actor, "knowledge:write").allowed : false,
+    };
+  });
 
-    const canRead = actor ? authorize(actor, "knowledge:read").allowed : false;
-    const canWrite = actor ? authorize(actor, "knowledge:write").allowed : false;
+  const [stats, tree] = await Promise.all([
+    access.canRead ? loadKnowledgeStats(context) : Promise.resolve(null),
+    access.canRead ? loadWorkspaceTree(context) : Promise.resolve(null),
+  ]);
 
-    if (!canRead) {
-      return {
-        canRead,
-        canWrite,
-        documents: [] as DocumentRow[],
-        runs: [] as RunRow[],
-      };
-    }
-
-    const documents =
-      tab === "scout"
-        ? (
-            await client.query<DocumentRow>(
-              `select d.id, d.title, d.mime, d.status, d.page_count, d.char_count, d.created_at,
-                      dep.name as department_name,
-                      (select count(*) from doc_chunks c where c.document_id = d.id)::text as chunk_count
-                 from documents d
-                 join departments dep on dep.id = d.department_id
-                order by d.created_at desc
-                limit 100`,
-            )
-          ).rows
-        : [];
-
-    const runs =
-      tab === "scout"
-        ? (
-            await client.query<RunRow>(
+  const runs =
+    access.canRead && tab === "scout"
+      ? (
+          await withUserContext(context, (client) =>
+            client.query<RunRow>(
               `select r.id, r.kind, r.status, r.goal, r.counts, r.created_at,
                       dep.name as department_name, u.name as creator_name
                  from ingest_runs r
@@ -160,14 +104,19 @@ export default async function KnowledgePage({
                  left join users u on u.id = r.created_by
                 order by r.created_at desc
                 limit 30`,
-            )
-          ).rows
-        : [];
+            ),
+          )
+        ).rows
+      : [];
 
-    return { canRead, canWrite, documents, runs };
-  });
+  const wantsDocument = tab === "scout" && Boolean(params.doc);
+  const wantsCard = tab === "scout" && Boolean(params.card);
 
-  const stats = data.canRead ? await loadKnowledgeStats(context) : null;
+  const document =
+    tab === "scout" && isUuid(params.doc) ? await loadDocumentContent(context, params.doc) : null;
+  const card = tab === "scout" && isUuid(params.card) ? await loadCardDetail(context, params.card) : null;
+  const graph =
+    tab === "scout" && !wantsDocument && !wantsCard ? await loadKnowledgeGraph(context) : null;
 
   const regressionFailed =
     stats?.lastRegression && stats.lastRegression.passed < stats.lastRegression.total
@@ -194,117 +143,90 @@ export default async function KnowledgePage({
         </span>
       </div>
 
-      {!data.canRead || !stats ? (
+      {!access.canRead || !stats || !tree ? (
         <InlineMessage tone="error">当前账号没有「知识库查看」权限，请联系 L1 管理员授权。</InlineMessage>
       ) : (
-        <>
-          <StatBar stats={stats} />
-
-          <TabNav
-            active={tab}
-            counts={{
-              cards: stats.pendingCards,
-              gaps: stats.gapsOpen,
-              qa: stats.qaFlagged,
-              regression: regressionFailed,
-            }}
+        <div className="mt-5 grid gap-4 lg:grid-cols-[264px_minmax(0,1fr)] lg:items-start">
+          <WorkspaceTree
+            tree={tree}
+            selected={
+              document
+                ? { kind: "doc", id: document.id }
+                : card
+                  ? { kind: "card", id: card.id }
+                  : null
+            }
           />
 
-          {tab === "scout" ? (
-            <>
-              <ScoutTab
-                canWrite={data.canWrite}
-                runs={data.runs.map((run) => ({
-                  id: run.id,
-                  status: run.status,
-                  goal: run.goal,
-                  counts: run.counts,
-                  createdAt: run.created_at.toISOString(),
-                  creatorName: run.creator_name,
-                }))}
-              />
+          <div className="min-w-0">
+            <StatBar stats={stats} />
 
-              <SectionCard title="文档" count={data.documents.length}>
-                {data.documents.length === 0 ? (
-                  <EmptyState>还没有文档。上传后会自动解析、分块并写入检索索引。</EmptyState>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="kb-table">
-                      <thead>
-                        <tr>
-                          <th>标题</th>
-                          <th>部门</th>
-                          <th>状态</th>
-                          <th>页数</th>
-                          <th>字符</th>
-                          <th>切片</th>
-                          <th>入库时间</th>
-                          <th>操作</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.documents.map((document) => (
-                          <tr key={document.id}>
-                            <td data-label="标题" className="kb-strong">
-                              {document.title}
-                            </td>
-                            <td data-label="部门">{document.department_name}</td>
-                            <td data-label="状态">
-                              <span className={statusBadgeClass(document.status)}>
-                                {STATUS_LABEL[document.status] ?? document.status}
-                              </span>
-                            </td>
-                            <td data-label="页数" className="kb-num">
-                              {document.page_count ?? "—"}
-                            </td>
-                            <td data-label="字符" className="kb-num">
-                              {document.char_count}
-                            </td>
-                            <td data-label="切片" className="kb-num">
-                              {document.chunk_count}
-                            </td>
-                            <td data-label="入库时间" className="kb-num">
-                              {formatDate(document.created_at)}
-                            </td>
-                            <td data-label="操作">
-                              <span className={inlineCls}>
-                                <a
-                                  className="text-[13px] text-apple-blue hover:underline"
-                                  href={`/api/knowledge/documents/${document.id}`}
-                                >
-                                  下载
-                                </a>
-                                {data.canWrite && document.status === "parsed" ? (
-                                  <DistillButton documentId={document.id} disabled={!ai.chatEnabled} />
-                                ) : null}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+            <TabNav
+              active={tab}
+              counts={{
+                cards: stats.pendingCards,
+                gaps: stats.gapsOpen,
+                qa: stats.qaFlagged,
+                regression: regressionFailed,
+              }}
+            />
+
+            {tab === "scout" ? (
+              <>
+                <details className="mb-4 rounded-2xl border border-hairline bg-white px-4 py-3 shadow-card">
+                  <summary className="cursor-pointer text-[13px] font-medium text-zinc-800">
+                    上传文档与入库批次
+                  </summary>
+                  <div className="mt-3">
+                    <ScoutTab
+                      canWrite={access.canWrite}
+                      runs={runs.map((run) => ({
+                        id: run.id,
+                        status: run.status,
+                        goal: run.goal,
+                        counts: run.counts,
+                        createdAt: run.created_at.toISOString(),
+                        creatorName: run.creator_name,
+                      }))}
+                    />
                   </div>
-                )}
-              </SectionCard>
-            </>
-          ) : null}
+                </details>
 
-          {tab === "qa" ? <QaTab context={context} aiEnabled={ai.chatEnabled} /> : null}
+                {document ? (
+                  <WorkspaceEditor
+                    key={document.id}
+                    mode="document"
+                    document={document}
+                    canWrite={access.canWrite}
+                    aiEnabled={ai.chatEnabled}
+                  />
+                ) : card ? (
+                  <WorkspaceEditor key={card.id} mode="card" card={card} canWrite={access.canWrite} />
+                ) : wantsDocument || wantsCard ? (
+                  <InlineMessage tone="error">找不到该条目，或当前部门无权查看。</InlineMessage>
+                ) : graph ? (
+                  <GraphView data={graph} />
+                ) : null}
+              </>
+            ) : null}
 
-          {tab === "gaps" ? (
-            <GapsTab context={context} canWrite={data.canWrite} statusParam={params.gapStatus} />
-          ) : null}
+            {tab === "qa" ? <QaTab context={context} aiEnabled={ai.chatEnabled} /> : null}
 
-          {tab === "regression" ? (
-            <RegressionTab context={context} canWrite={data.canWrite} />
-          ) : null}
+            {tab === "gaps" ? (
+              <GapsTab context={context} canWrite={access.canWrite} statusParam={params.gapStatus} />
+            ) : null}
 
-          {tab === "cards" ? <CardsTab context={context} searchParams={params} /> : null}
+            {tab === "regression" ? (
+              <RegressionTab context={context} canWrite={access.canWrite} />
+            ) : null}
 
-          {tab === "meta" ? (
-            <MetaTab context={context} canWrite={data.canWrite} missingOnly={params.missing === "1"} />
-          ) : null}
-        </>
+            {tab === "cards" ? <CardsTab context={context} searchParams={params} /> : null}
+
+            {tab === "meta" ? (
+              <MetaTab context={context} canWrite={access.canWrite} missingOnly={params.missing === "1"} />
+            ) : null}
+          </div>
+        </div>
       )}
     </section>
   );

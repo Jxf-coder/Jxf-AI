@@ -4,7 +4,11 @@ import {
   BookOpen,
   Building2,
   ChevronDown,
+  ChevronRight,
+  FileText,
+  Folder,
   Inbox,
+  Layers,
   LogOut,
   Menu,
   Search,
@@ -39,6 +43,23 @@ type IconProps = Omit<LucideProps, "icon">;
 /** 折叠 / 展开箭头（唯一实现，自带 is-open 旋转样式钩子） */
 export function ChevronIcon(props: IconProps) {
   return <Icon icon={ChevronDown} {...props} />;
+}
+
+/** 目录树的行内展开箭头（朝右，展开后由调用方旋转 90°） */
+export function ChevronRightIcon(props: IconProps) {
+  return <Icon icon={ChevronRight} {...props} />;
+}
+
+export function FolderIcon(props: IconProps) {
+  return <Icon icon={Folder} {...props} />;
+}
+
+export function FileTextIcon(props: IconProps) {
+  return <Icon icon={FileText} {...props} />;
+}
+
+export function LayersIcon(props: IconProps) {
+  return <Icon icon={Layers} {...props} />;
 }
 
 export function CloseIcon(props: IconProps) {
