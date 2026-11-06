@@ -14,6 +14,7 @@ import type { PoolClient } from "pg";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
 import { auditInTx } from "@/lib/audit";
+import { PermissionDeniedError } from "@/lib/permissions/guard";
 import { requireContextPermission } from "@/lib/permissions/server";
 
 export type ShareTargetKind = "document" | "card";
@@ -207,7 +208,10 @@ export async function reviewShare(
   approve: boolean,
 ): Promise<ShareStateResult> {
   if (context.accessLevel !== "L1") {
-    throw new Error("仅 L1 可以审批公司共享申请");
+    throw new PermissionDeniedError({
+      allowed: false,
+      reason: "仅 L1 可以审批公司共享申请",
+    });
   }
   const spec = TABLES[kind];
 

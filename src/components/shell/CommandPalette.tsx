@@ -21,6 +21,13 @@ interface CommandItem {
 
 const ITEMS: CommandItem[] = [
   {
+    label: "AI 工作台",
+    hint: "运行时会话 · 流式回答",
+    href: "/chat",
+    keywords: ["chat", "run", "ai", "对话", "会话", "工作台", "流式"],
+    permission: "skill:use",
+  },
+  {
     label: "知识库",
     hint: "文档 · 入库批次 · 知识卡",
     href: "/knowledge",

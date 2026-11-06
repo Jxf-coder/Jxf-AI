@@ -3082,5 +3082,63 @@ a.perm-tab {
   }
 }
 
+/* M3 AI 工作台：流式文本光标与思考指示 */
+@keyframes chat-caret-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes chat-dot {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+.chat-caret::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 0.95em;
+  margin-left: 2px;
+  vertical-align: -0.1em;
+  background: currentColor;
+  animation: chat-caret-blink 1s steps(1) infinite;
+}
+
+.chat-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.chat-thinking i {
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: #86868b;
+  animation: chat-dot 1.2s infinite ease-in-out;
+}
+
+.chat-thinking i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.chat-thinking i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
 /* 工具类放在文件末尾，确保优先级高于上方历史样式 */
 @tailwind utilities;

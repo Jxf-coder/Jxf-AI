@@ -13,7 +13,7 @@ import os from "node:os";
 
 import { Pool } from "pg";
 
-import { chatCompletionDetailed } from "@/lib/ai/openai";
+import { chatCompletionStreamDetailed } from "@/lib/ai/openai";
 import { log, errorMessage } from "@/lib/logger";
 import { claimRun, heartbeatRun, sweepExhausted, type ClaimedRun } from "@/lib/runtime/claim";
 import { isCancelRequested } from "@/lib/runtime/cancel";
@@ -112,6 +112,9 @@ async function execute(pool: Pool, run: ClaimedRun): Promise<void> {
     });
   }, HEARTBEAT_MS);
 
+  const controller = new AbortController();
+  let cancelWatch: ReturnType<typeof setInterval> | null = null;
+
   try {
     // step 边界：先看是否已被取消，取消后不再产生新的模型调用
     if (await isCancelRequested(pool, run.id)) {
@@ -137,17 +140,74 @@ async function execute(pool: Pool, run: ClaimedRun): Promise<void> {
       stepClient.release();
     }
 
+    // 步开始事件：前端据此显示「思考中 · 第 N 步」，无需持久化思考正文
+    const startClient = await pool.connect();
+    try {
+      await startClient.query("begin");
+      await emitEvent(startClient, run.id, "step", {
+        ord: stepOrd,
+        phase: "answer",
+        status: "started",
+      });
+      await startClient.query("commit");
+    } catch (error) {
+      await startClient.query("rollback").catch(() => {});
+      throw error;
+    } finally {
+      startClient.release();
+    }
+
+    // 用户取消：1s 内中止上游流，已生成内容保留在 partial_text 供前端如实展示
+    cancelWatch = setInterval(() => {
+      void isCancelRequested(pool, run.id)
+        .then((requested) => {
+          if (requested) {
+            controller.abort();
+          }
+        })
+        .catch(() => undefined);
+    }, 1_000);
+
+    // 增量快照节流：400ms 一次，避免每个 token 都写库
+    let snapshotAt = 0;
+    let snapshotSaving = false;
+    let snapshotPending: Promise<void> = Promise.resolve();
+    const onDelta = (_delta: string, text: string) => {
+      const now = Date.now();
+      if (now - snapshotAt < 400 || snapshotSaving) {
+        return;
+      }
+      snapshotAt = now;
+      snapshotSaving = true;
+      snapshotPending = pool
+        .query(`update runs set partial_text = $2, partial_updated_at = now() where id = $1`, [run.id, text])
+        .then(
+          () => undefined,
+          (error) => {
+            log("warn", "runtime_partial_text_failed", { run_id: run.id, error: errorMessage(error) });
+          },
+        )
+        .finally(() => {
+          snapshotSaving = false;
+        });
+    };
+
     const startedAt = Date.now();
-    const completion = await chatCompletionDetailed(
+    const completion = await chatCompletionStreamDetailed(
       [
         { role: "system", content: systemPromptFor(run) },
         { role: "user", content: question },
       ],
       { tier, temperature: 0.2 },
+      { onDelta, signal: controller.signal },
     );
     const durationMs = Date.now() - startedAt;
 
     if (!completion) {
+      if (controller.signal.aborted || (await isCancelRequested(pool, run.id))) {
+        await finish(pool, run.id, "cancelled", { status: "cancelled", reason: "user_cancelled" });
+        return;
+      }
       await pool.query(
         `update run_steps set finish_reason = 'unavailable', duration_ms = $2 where id = $1`,
         [stepId, durationMs],
@@ -162,6 +222,7 @@ async function execute(pool: Pool, run: ClaimedRun): Promise<void> {
       return;
     }
 
+    await snapshotPending;
     await pool.query(
       `update run_steps
           set model = $2, provider = $3, finish_reason = 'stop', duration_ms = $4
@@ -212,10 +273,22 @@ async function execute(pool: Pool, run: ClaimedRun): Promise<void> {
     );
     log("info", "runtime_run_done", { run_id: run.id, model: completion.model, duration_ms: durationMs });
   } catch (error) {
-    log("warn", "runtime_run_failed", { run_id: run.id, error: errorMessage(error) });
-    await finish(pool, run.id, "failed", { error: errorMessage(error) }).catch(() => undefined);
+    const cancelled =
+      controller.signal.aborted || (await isCancelRequested(pool, run.id).catch(() => false));
+    if (cancelled) {
+      log("info", "runtime_run_cancelled", { run_id: run.id });
+      await finish(pool, run.id, "cancelled", { status: "cancelled", reason: "user_cancelled" }).catch(
+        () => undefined,
+      );
+    } else {
+      log("warn", "runtime_run_failed", { run_id: run.id, error: errorMessage(error) });
+      await finish(pool, run.id, "failed", { error: errorMessage(error) }).catch(() => undefined);
+    }
   } finally {
     clearInterval(heartbeat);
+    if (cancelWatch) {
+      clearInterval(cancelWatch);
+    }
   }
 }
 

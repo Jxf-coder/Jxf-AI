@@ -12,6 +12,7 @@ import {
   Layers,
   LogOut,
   Menu,
+  MessageSquare,
   Search,
   Settings,
   ShieldCheck,
@@ -114,4 +115,9 @@ export function KnowledgeIcon(props: IconProps) {
 /** AI 员工目录 */
 export function AiIcon(props: IconProps) {
   return <Icon icon={Bot} {...props} />;
+}
+
+/** AI 工作台（运行时会话） */
+export function ChatIcon(props: IconProps) {
+  return <Icon icon={MessageSquare} {...props} />;
 }

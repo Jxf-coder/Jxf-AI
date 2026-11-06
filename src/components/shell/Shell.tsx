@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { usePermission } from "@/components/permissions/usePermission";
-import { AiIcon, BellIcon, CloseIcon, KnowledgeIcon, MenuIcon, SearchIcon } from "@/components/ui/icons";
+import { AiIcon, BellIcon, ChatIcon, CloseIcon, KnowledgeIcon, MenuIcon, SearchIcon } from "@/components/ui/icons";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { DepartmentSwitcher, type DepartmentOption } from "@/components/shell/DepartmentSwitcher";
 import { ProfileMenu } from "@/components/shell/ProfileMenu";
@@ -35,6 +35,19 @@ export function Shell({
   const pathname = usePathname();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const chatLink = can("skill:use") ? (
+    <Link
+      href="/chat"
+      className={`nav-item${pathname.startsWith("/chat") ? " is-active" : ""}`}
+      aria-current={pathname.startsWith("/chat") ? "page" : undefined}
+    >
+      <span className="nav-icon">
+        <ChatIcon size={18} />
+      </span>
+      <span className="nav-label">AI 工作台</span>
+    </Link>
+  ) : null;
 
   const knowledgeLink = can("knowledge:read") ? (
     <Link
@@ -97,6 +110,7 @@ export function Shell({
 
         {/* 主侧边栏只承载主业务（AI 工作台 / Agent / 知识库）；管理入口收敛到顶栏与个人菜单 */}
         <nav className="sidebar-nav" aria-label="主导航">
+          {chatLink}
           {knowledgeLink}
           {aiEmployeesLink}
         </nav>
@@ -193,6 +207,7 @@ export function Shell({
             </button>
 
             <nav className="sidebar-nav" aria-label="移动导航">
+              {chatLink}
               {knowledgeLink}
               {aiEmployeesLink}
             </nav>

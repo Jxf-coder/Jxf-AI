@@ -192,6 +192,55 @@ export interface ChatCompletionResult {
   usage: ChatUsage | null;
 }
 
+export interface ChatStreamHandlers {
+  /** 增量文本 + 累计文本（累计值便于 worker 节流写 partial_text 快照） */
+  onDelta?: (delta: string, text: string) => void;
+  /** 用户取消：中止上游请求，已收到的内容由调用方决定是否保留 */
+  signal?: AbortSignal;
+}
+
+function toChatUsage(payload: {
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
+  };
+}): ChatUsage | null {
+  if (!payload.usage) {
+    return null;
+  }
+  return {
+    promptTokens: Math.max(0, Math.trunc(payload.usage.prompt_tokens ?? 0)),
+    completionTokens: Math.max(0, Math.trunc(payload.usage.completion_tokens ?? 0)),
+    cachedTokens: Math.max(0, Math.trunc(payload.usage.prompt_tokens_details?.cached_tokens ?? 0)),
+  };
+}
+
+interface ChatProvider {
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
+
+function chatProviders(tier: ChatTier): ChatProvider[] {
+  const ai = loadEnv().ai;
+  const model = tier === "fast" ? ai.fastModel : ai.chatModel;
+  return [
+    { name: "primary", baseUrl: ai.baseUrl, apiKey: ai.apiKey, model },
+    ...(ai.fallback
+      ? [
+          {
+            name: "fallback",
+            baseUrl: ai.fallback.baseUrl,
+            apiKey: ai.fallback.apiKey,
+            model: tier === "fast" ? ai.fallback.fastModel : ai.fallback.chatModel,
+          },
+        ]
+      : []),
+  ];
+}
+
 /**
  * 单轮问答生成（含用量）。返回 null 表示未启用、重试与备用节点都失败。
  *
@@ -207,21 +256,8 @@ export async function chatCompletionDetailed(
   }
 
   const tier: ChatTier = options.tier ?? "deep";
-  const model = tier === "fast" ? ai.fastModel : ai.chatModel;
-
-  const providers = [
-    { name: "primary", baseUrl: ai.baseUrl, apiKey: ai.apiKey, model },
-    ...(ai.fallback
-      ? [
-          {
-            name: "fallback",
-            baseUrl: ai.fallback.baseUrl,
-            apiKey: ai.fallback.apiKey,
-            model: tier === "fast" ? ai.fallback.fastModel : ai.fallback.chatModel,
-          },
-        ]
-      : []),
-  ];
+  const providers = chatProviders(tier);
+  const model = providers[0].model;
 
   for (const [index, provider] of providers.entries()) {
     try {
@@ -267,15 +303,7 @@ export async function chatCompletionDetailed(
         });
       }
 
-      const usage = payload.usage
-        ? {
-            promptTokens: Math.max(0, Math.trunc(payload.usage.prompt_tokens ?? 0)),
-            completionTokens: Math.max(0, Math.trunc(payload.usage.completion_tokens ?? 0)),
-            cachedTokens: Math.max(0, Math.trunc(payload.usage.prompt_tokens_details?.cached_tokens ?? 0)),
-          }
-        : null;
-
-      return { text: content, model: provider.model, provider: provider.name, usage };
+      return { text: content, model: provider.model, provider: provider.name, usage: toChatUsage(payload) };
     } catch (error) {
       log("warn", index === 0 ? "ai_chat_provider_failed" : "ai_chat_fallback_failed", {
         provider: provider.name,
@@ -288,6 +316,204 @@ export async function chatCompletionDetailed(
   }
 
   log("warn", "ai_chat_failed", { model, tier, providers: providers.map((item) => item.name) });
+  return null;
+}
+
+/** 单节点流式请求：逐块解析 SSE，累积文本并回调增量 */
+async function streamProviderOnce(
+  provider: ChatProvider,
+  messages: ChatMessage[],
+  options: { temperature?: number; maxTokens?: number; tier?: ChatTier },
+  handlers: ChatStreamHandlers,
+): Promise<ChatCompletionResult> {
+  const ai = loadEnv().ai;
+  const timeout = AbortSignal.timeout(ai.timeoutMs);
+  const signal = handlers.signal ? AbortSignal.any([handlers.signal, timeout]) : timeout;
+
+  let response: Response;
+  try {
+    response = await fetch(`${provider.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${provider.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: provider.model,
+        messages,
+        temperature: options.temperature ?? 0.2,
+        max_tokens: options.maxTokens ?? ai.maxTokens,
+        stream: true,
+        // OpenAI 兼容端点：最后一块带 usage；不支持时只是没有用量，不影响文本
+        stream_options: { include_usage: true },
+      }),
+      signal,
+    });
+  } catch (error) {
+    throw new AiRequestError(errorMessage(error), null);
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new AiRequestError(`AI HTTP ${response.status}: ${detail.slice(0, 300)}`, response.status);
+  }
+  if (!response.body) {
+    throw new AiRequestError("AI 流式响应缺少 body", 200);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let text = "";
+  let usage: ChatUsage | null = null;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
+
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary !== -1) {
+        const block = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+
+        // SSE 允许同一事件多行 data:，按规范用换行拼接
+        const data = block
+          .split("\n")
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trim())
+          .join("\n");
+
+        if (data && data !== "[DONE]") {
+          try {
+            const payload = JSON.parse(data) as {
+              choices?: Array<{
+                delta?: { content?: string | null };
+                finish_reason?: string | null;
+              }>;
+              usage?: {
+                prompt_tokens?: number;
+                completion_tokens?: number;
+                prompt_tokens_details?: { cached_tokens?: number };
+              };
+            };
+            const delta = payload.choices?.[0]?.delta?.content;
+            if (typeof delta === "string" && delta.length > 0) {
+              text += delta;
+              handlers.onDelta?.(delta, text);
+            }
+            const nextUsage = toChatUsage(payload);
+            if (nextUsage) {
+              usage = nextUsage;
+            }
+          } catch {
+            // 非 JSON 的心跳 / 注释块忽略
+          }
+        }
+
+        boundary = buffer.indexOf("\n\n");
+      }
+    }
+  } catch (error) {
+    throw new AiRequestError(errorMessage(error), null);
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+
+  const content = text.trim();
+  if (!content) {
+    throw new AiRequestError("AI 流式返回为空", 200);
+  }
+  return { text: content, model: provider.model, provider: provider.name, usage };
+}
+
+/**
+ * 流式问答生成（含用量）。返回 null 表示未启用或全部节点失败。
+ *
+ * 红线：
+ * - 一旦已经向调用方吐过增量，就不再重试 / 切备用节点，避免前端文本重复；
+ * - 调用方通过 signal 中止（用户取消），已收到的内容由调用方决定去留。
+ */
+export async function chatCompletionStreamDetailed(
+  messages: ChatMessage[],
+  options: { temperature?: number; maxTokens?: number; tier?: ChatTier } = {},
+  handlers: ChatStreamHandlers = {},
+): Promise<ChatCompletionResult | null> {
+  const ai = loadEnv().ai;
+  if (!ai.enabled) {
+    return null;
+  }
+
+  const tier: ChatTier = options.tier ?? "deep";
+  const providers = chatProviders(tier);
+
+  for (const [index, provider] of providers.entries()) {
+    let received = false;
+    const wrapped: ChatStreamHandlers = {
+      signal: handlers.signal,
+      onDelta: (delta, text) => {
+        received = true;
+        handlers.onDelta?.(delta, text);
+      },
+    };
+
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const result = await streamProviderOnce(provider, messages, options, wrapped);
+        if (index > 0) {
+          log("info", "ai_chat_fallback_used", {
+            provider: provider.name,
+            model: provider.model,
+            tier,
+          });
+        }
+        return result;
+      } catch (error) {
+        const failure =
+          error instanceof AiRequestError ? error : new AiRequestError(errorMessage(error), null);
+
+        if (handlers.signal?.aborted) {
+          throw failure;
+        }
+        if (received) {
+          // 已产生增量时重试会让前端文本重复，直接失败交给上层收口
+          log("warn", "ai_chat_stream_interrupted", {
+            provider: provider.name,
+            model: provider.model,
+            tier,
+            error: failure.message,
+          });
+          return null;
+        }
+        if (!failure.retryable || attempt >= ai.retryAttempts) {
+          log("warn", index === 0 ? "ai_chat_provider_failed" : "ai_chat_fallback_failed", {
+            provider: provider.name,
+            model: provider.model,
+            tier,
+            status: failure.status,
+            error: failure.message,
+          });
+          break;
+        }
+
+        const delayMs = ai.retryBaseMs * 2 ** attempt;
+        log("warn", "ai_retry", {
+          provider: provider.name,
+          attempt: attempt + 1,
+          max_attempts: ai.retryAttempts,
+          status: failure.status,
+          delay_ms: delayMs,
+          error: failure.message,
+        });
+        await sleep(delayMs);
+      }
+    }
+  }
+
+  log("warn", "ai_chat_failed", { model: providers[0].model, tier, providers: providers.map((item) => item.name) });
   return null;
 }
 
