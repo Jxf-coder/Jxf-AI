@@ -17,6 +17,11 @@ import { emptyTrashAction } from "../actions";
 interface WorkspaceTreeProps {
   tree: WorkspaceTree;
   selected: { kind: "doc" | "card"; id: string } | null;
+  /** 目录标题搜索词（服务端检索，不受目录 500 条上限影响） */
+  query: string;
+  matches: TreeItem[];
+  /** 当前 Tab，保证搜索提交后不跳出当前视图 */
+  tab: string;
 }
 
 const DOC_STATUS_LABEL: Record<string, string> = {
@@ -45,7 +50,7 @@ function itemStatusLabel(item: TreeItem): string {
 }
 
 /** 左侧常驻目录：公司资料（共享） + 部门 → 岗位 → 10 个标准目录 */
-export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
+export function WorkspaceTree({ tree, selected, query, matches, tab }: WorkspaceTreeProps) {
   const router = useRouter();
   const firstDepartment = tree.departments[0];
   const firstRole = firstDepartment?.roles[0];
@@ -81,12 +86,13 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
     }
   }
 
-  function itemRow(item: TreeItem, depth: number) {
+  function itemRow(item: TreeItem, depth: number, keepQuery = false) {
     const active = selected?.kind === (item.kind === "card" ? "card" : "doc") && selected.id === item.id;
-    const href =
+    const base =
       item.kind === "card"
         ? `/knowledge?tab=scout&card=${item.id}`
         : `/knowledge?tab=scout&doc=${item.id}`;
+    const href = keepQuery && query ? `${base}&treeQ=${encodeURIComponent(query)}` : base;
     return (
       <Link
         key={`${item.kind}:${item.id}`}
@@ -220,6 +226,38 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
     >
       <p className="px-2 pb-1 pt-1 text-[11px] font-medium text-zinc-500">知识库目录</p>
 
+      <form action="/knowledge" method="get" className="px-1 pb-2">
+        <input type="hidden" name="tab" value={tab} />
+        <input
+          name="treeQ"
+          defaultValue={query}
+          maxLength={60}
+          placeholder="搜索标题…"
+          aria-label="搜索知识库标题"
+          className="w-full rounded-lg border border-black/[0.06] bg-white px-2 py-1.5 text-[12px] text-zinc-800 outline-none placeholder:text-zinc-400 focus:border-black/20"
+        />
+      </form>
+
+      {query ? (
+        <div className="mb-2 rounded-xl border border-black/[0.05] bg-white/80 p-1">
+          <p className="px-1.5 py-1 text-[11px] text-zinc-500">
+            搜索「{query}」 · {matches.length} 条
+          </p>
+          {matches.length === 0 ? (
+            <p className="px-1.5 pb-1 text-[11px] text-zinc-400">没有匹配的知识卡或文档</p>
+          ) : (
+            matches.map((item) => itemRow(item, 1, true))
+          )}
+          <Link
+            href={`/knowledge?tab=${tab}`}
+            scroll={false}
+            className="block px-1.5 py-1 text-[11px] text-zinc-400 transition-colors hover:text-zinc-700"
+          >
+            清除搜索
+          </Link>
+        </div>
+      ) : null}
+
       {sectionHead("shared", "公司资料（共享）", tree.shared.count)}
       {isOpen("shared") ? (
         <div className="mb-1">
@@ -265,6 +303,12 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
           </div>
         );
       })}
+
+      {tree.totals.truncated ? (
+        <p className="px-2 pt-1 text-[10px] leading-relaxed text-zinc-400">
+          条目较多，目录仅显示最近 500 条；用上方搜索可定位更早的内容
+        </p>
+      ) : null}
 
       {notice ? (
         <p role="status" className="px-2 py-1 text-[11px] text-zinc-500">

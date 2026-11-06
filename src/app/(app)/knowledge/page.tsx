@@ -19,6 +19,7 @@ import {
   loadDocumentContent,
   loadKnowledgeGraph,
   loadWorkspaceTree,
+  searchWorkspace,
 } from "@/lib/knowledge/workspace";
 import { authorize } from "@/lib/permissions/authorize";
 import { resolveContextPermissions } from "@/lib/permissions/server";
@@ -64,6 +65,7 @@ export default async function KnowledgePage({
     missing?: string;
     doc?: string;
     card?: string;
+    treeQ?: string;
   }>;
 }) {
   const session = await requireSession();
@@ -73,6 +75,7 @@ export default async function KnowledgePage({
 
   const params = await searchParams;
   const tab: KnowledgeTab = isKnowledgeTab(params.tab) ? params.tab : DEFAULT_TAB;
+  const treeQuery = typeof params.treeQ === "string" ? params.treeQ.trim().slice(0, 60) : "";
 
   const access = await withUserContext(context, async (client) => {
     let actor: ResolvedPermissions | null = null;
@@ -87,9 +90,12 @@ export default async function KnowledgePage({
     };
   });
 
-  const [stats, tree] = await Promise.all([
+  const [stats, tree, matches] = await Promise.all([
     access.canRead ? loadKnowledgeStats(context) : Promise.resolve(null),
     access.canRead ? loadWorkspaceTree(context) : Promise.resolve(null),
+    access.canRead && treeQuery.length > 0
+      ? searchWorkspace(context, treeQuery)
+      : Promise.resolve([]),
   ]);
 
   const runs =
@@ -152,6 +158,9 @@ export default async function KnowledgePage({
         <div className="mt-5 grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:items-start">
           <WorkspaceTree
             tree={tree}
+            query={treeQuery}
+            matches={matches}
+            tab={tab}
             selected={
               document
                 ? { kind: "doc", id: document.id }

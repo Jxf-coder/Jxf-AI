@@ -23,7 +23,7 @@ import {
   restoreDocument,
   trashDocument,
 } from "../src/lib/knowledge/trash.ts";
-import { loadWorkspaceTree, setCardVisibility } from "../src/lib/knowledge/workspace.ts";
+import { loadWorkspaceTree, searchWorkspace, setCardVisibility } from "../src/lib/knowledge/workspace.ts";
 
 const TENANT = process.env.KB_TEST_TENANT ?? "22222222-2222-4222-8222-222222222222";
 const HOST = process.env.SEED_DB_HOST ?? "127.0.0.1";
@@ -835,7 +835,39 @@ async function main() {
     `hits=${afterRestore.rows.map((row) => row.document_id).join(",")}`,
   );
 
-  // 25. 卡片回收站：作废进 99-回收站、可恢复、可彻底删除
+  // 25. 目录搜索：服务端检索绕开上限，且不跨部门
+  // 注意：不能用 resolveUserContext——它读 JXF_TENANT_ID（生产租户），
+  // 与验收数据所在的 KB_TEST_TENANT 不同，会被 RLS 全部过滤。
+  const memberAContext = {
+    userId: fx.uid["a1@kb.test"],
+    tenantId: TENANT,
+    activeMembership: null,
+    activeMemberships: [],
+    activeMembershipId: fx.membershipOf("a1@kb.test"),
+    activeDepartmentId: fx.departments.groupA,
+    activeDepartmentName: "知识库一组",
+    membershipDepartmentIds: [fx.departments.groupA],
+    departmentIds: [fx.departments.groupA],
+    subtreeDepartmentIds: [fx.departments.groupA, fx.departments.teamA1],
+    accessLevel: "L3",
+    permissionVersion: 0,
+    requestId: "kb-test",
+  };
+  const foundDocs = await searchWorkspace(memberAContext, "验收");
+  check(
+    "目录搜索：命中本部门文档",
+    foundDocs.some((item) => item.id === fx.docA),
+    `hits=${foundDocs.map((item) => item.id).join(",")}`,
+  );
+  const crossSearch = await searchWorkspace(memberAContext, "二组预算");
+  check(
+    "目录搜索：不返回兄弟部门条目",
+    !crossSearch.some((item) => item.id === fx.docB),
+    `hits=${crossSearch.map((item) => item.id).join(",")}`,
+  );
+  check("目录树：未达上限时不提示截断", trashedTree.totals.truncated === false);
+
+  // 26. 卡片回收站：作废进 99-回收站、可恢复、可彻底删除
   const collectTrashIds = (workspace) =>
     [
       ...workspace.shared.folders,
@@ -876,7 +908,7 @@ async function main() {
   });
   check("卡片彻底删除：行已消失", purgedCardRows === 0, `rows=${purgedCardRows}`);
 
-  // 26. 文档彻底删除与清空回收站
+  // 27. 文档彻底删除与清空回收站
   await trashDocument(bossContext, fx.docA);
   await purgeDocument(bossContext, fx.docA);
   const purgedDocRows = await withClient(OWNER_URL, async (owner) => {

@@ -50,7 +50,7 @@ export interface WorkspaceTree {
   /** 公司资料（共享）区：10 个标准目录常驻 */
   shared: { folders: TreeFolder[]; count: number };
   departments: TreeDepartment[];
-  totals: { items: number; shared: number; pending: number };
+  totals: { items: number; shared: number; pending: number; truncated: boolean };
 }
 
 interface NodeRow {
@@ -109,6 +109,9 @@ function orderedFolders(folders: Map<string, TreeFolder>): TreeFolder[] {
   );
 }
 
+/** 左侧目录单侧最多加载的条目数；命中上限时 totals.truncated = true，由搜索兜底 */
+const NODE_LIMIT = 500;
+
 /** 左侧目录：共享区 + 部门 → 岗位 → 10 个标准目录 */
 export async function loadWorkspaceTree(context: UserContext): Promise<WorkspaceTree> {
   return withUserContext(context, async (client) => {
@@ -123,14 +126,14 @@ export async function loadWorkspaceTree(context: UserContext): Promise<Workspace
         `select id, title, status, department_id, role_key, folder_key, visibility, deleted_at
            from documents
           order by created_at desc
-          limit 500`,
+          limit ${NODE_LIMIT}`,
       ),
       client.query<NodeRow>(
         `select id, title, status, department_id, role_key, folder_key, visibility
            from knowledge_cards
           where status in ('pending', 'confirmed', 'dropped')
           order by created_at desc
-          limit 500`,
+          limit ${NODE_LIMIT}`,
       ),
     ]);
 
@@ -257,8 +260,47 @@ export async function loadWorkspaceTree(context: UserContext): Promise<Workspace
         items: deptCount,
         shared: sharedCount,
         pending: pendingDocs.length + pendingCards,
+        // 两侧都取最近 500 条：命中上限说明还有更早的条目，界面必须如实提示
+        truncated: documents.rows.length >= NODE_LIMIT || cards.rows.length >= NODE_LIMIT,
       },
     };
+  });
+}
+
+/** 全库标题搜索：绕开目录树单侧上限，只返回当前账号可读范围内的匹配项 */
+export async function searchWorkspace(context: UserContext, query: string): Promise<TreeItem[]> {
+  const keyword = query.trim().slice(0, 60);
+  if (keyword.length === 0) {
+    return [];
+  }
+  const escaped = keyword.replace(/[\\%_]/g, (char) => `\\${char}`);
+  const like = `%${escaped}%`;
+
+  return withUserContext(context, async (client) => {
+    const { rows } = await client.query<{
+      id: string;
+      title: string;
+      status: string;
+      kind: string;
+    }>(
+      `select id, title, status::text as status, 'document' as kind
+         from documents
+        where deleted_at is null and title ilike $1
+        union all
+       select id, title, status::text as status, 'card' as kind
+         from knowledge_cards
+        where status <> 'dropped' and title ilike $1
+        order by title
+        limit 50`,
+      [like],
+    );
+
+    return rows.map((row) => ({
+      kind: row.kind === "card" ? ("card" as const) : ("document" as const),
+      id: row.id,
+      title: row.title,
+      status: row.status,
+    }));
   });
 }
 
