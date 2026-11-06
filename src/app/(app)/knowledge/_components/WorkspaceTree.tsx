@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import {
@@ -10,6 +11,8 @@ import {
   LayersIcon,
 } from "@/components/ui/icons";
 import type { TreeFolder, TreeItem, WorkspaceTree } from "@/lib/knowledge/workspace";
+
+import { emptyTrashAction } from "../actions";
 
 interface WorkspaceTreeProps {
   tree: WorkspaceTree;
@@ -43,6 +46,7 @@ function itemStatusLabel(item: TreeItem): string {
 
 /** 左侧常驻目录：公司资料（共享） + 部门 → 岗位 → 10 个标准目录 */
 export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
+  const router = useRouter();
   const firstDepartment = tree.departments[0];
   const firstRole = firstDepartment?.roles[0];
 
@@ -51,11 +55,30 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
     ...(firstDepartment ? { [`dep:${firstDepartment.id}`]: true } : {}),
     ...(firstDepartment && firstRole ? { [`role:${firstDepartment.id}:${firstRole.name}`]: true } : {}),
   }));
+  /** 待二次确认清空的部门 */
+  const [emptyingFor, setEmptyingFor] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const [notice, setNotice] = useState("");
 
   const isOpen = (key: string, fallback = false) => expanded[key] ?? fallback;
 
   function toggle(key: string) {
     setExpanded((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  async function emptyTrash(departmentId: string) {
+    if (emptyingFor !== departmentId) {
+      setEmptyingFor(departmentId);
+      return;
+    }
+    setEmptyingFor(null);
+    setClearing(true);
+    const result = await emptyTrashAction(departmentId);
+    setClearing(false);
+    setNotice(result.message);
+    if (result.ok) {
+      router.refresh();
+    }
   }
 
   function itemRow(item: TreeItem, depth: number) {
@@ -89,7 +112,12 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
     );
   }
 
-  function folderBlock(folder: TreeFolder, depth: number, keyPrefix: string) {
+  function folderBlock(
+    folder: TreeFolder,
+    depth: number,
+    keyPrefix: string,
+    departmentId?: string,
+  ) {
     const key = `${keyPrefix}:${folder.key}`;
     const open = isOpen(key);
     const hasItems = folder.items.length > 0;
@@ -116,7 +144,30 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
             {folder.items.length}
           </span>
         </button>
-        {open && hasItems ? folder.items.map((item) => itemRow(item, depth + 1)) : null}
+        {open && hasItems ? (
+          <>
+            {folder.items.map((item) => itemRow(item, depth + 1))}
+            {folder.key === "99-trash" && departmentId ? (
+              <div
+                className="flex justify-end pr-1"
+                style={{ paddingLeft: `${(depth + 1) * 10 + 6}px` }}
+              >
+                <button
+                  type="button"
+                  disabled={clearing}
+                  onClick={() => emptyTrash(departmentId)}
+                  className="rounded-md px-1 py-0.5 text-[10px] text-zinc-400 transition-colors hover:text-zinc-700 disabled:opacity-50"
+                >
+                  {clearing
+                    ? "清空中…"
+                    : emptyingFor === departmentId
+                      ? "确认清空"
+                      : "清空回收站"}
+                </button>
+              </div>
+            ) : null}
+          </>
+        ) : null}
       </div>
     );
   }
@@ -194,7 +245,7 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
             {isOpen(deptKey) ? (
               <div className="mb-1">
                 {department.roles.length === 0
-                  ? department.folders.map((folder) => folderBlock(folder, 2, deptKey))
+                  ? department.folders.map((folder) => folderBlock(folder, 2, deptKey, department.id))
                   : department.roles.map((role) => {
                       const roleKey = `role:${department.id}:${role.name}`;
                       const roleCount = role.folders.reduce((sum, folder) => sum + folder.items.length, 0);
@@ -202,7 +253,9 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
                         <div key={roleKey}>
                           {groupHead(roleKey, `角色·${role.name}`, roleCount, 2)}
                           {isOpen(roleKey)
-                            ? role.folders.map((folder) => folderBlock(folder, 3, roleKey))
+                            ? role.folders.map((folder) =>
+                                folderBlock(folder, 3, roleKey, department.id),
+                              )
                             : null}
                         </div>
                       );
@@ -212,6 +265,12 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
           </div>
         );
       })}
+
+      {notice ? (
+        <p role="status" className="px-2 py-1 text-[11px] text-zinc-500">
+          {notice}
+        </p>
+      ) : null}
     </aside>
   );
 }

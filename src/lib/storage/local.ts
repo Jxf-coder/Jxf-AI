@@ -9,7 +9,7 @@
  * - 目录段做规范化（去空白 / 保留中英文数字），空值落兜底段，保证每级目录都存在。
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const UPLOAD_ROOT = path.join(process.cwd(), "public", "uploads");
@@ -78,4 +78,13 @@ export async function getObject(key: string): Promise<{ body: Uint8Array; conten
   const body = new Uint8Array(await readFile(target));
   const extension = path.extname(target).replace(/^\./, "").toLowerCase();
   return { body, contentType: CONTENT_TYPES[extension] ?? "application/octet-stream" };
+}
+
+/** 删除对象：文件本就不存在时视为成功；非本地存储的旧 key（如对象存储路径）直接跳过 */
+export async function deleteObject(key: string): Promise<void> {
+  if (!key.startsWith(KEY_PREFIX)) {
+    return;
+  }
+  const target = resolveKey(key);
+  await unlink(target).catch(() => undefined);
 }

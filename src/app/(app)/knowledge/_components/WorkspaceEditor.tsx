@@ -9,6 +9,9 @@ import type { CardDetail, DocumentContent } from "@/lib/knowledge/workspace";
 
 import { DistillButton } from "../DistillButton";
 import {
+  purgeCardAction,
+  purgeDocumentAction,
+  restoreCardAction,
   restoreDocumentAction,
   setCardVisibilityAction,
   setDocumentVisibilityAction,
@@ -54,8 +57,12 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
   const [confirmTrash, setConfirmTrash] = useState(false);
+  const [confirmPurge, setConfirmPurge] = useState(false);
 
   const trashed = isDocument && props.document.deletedAt !== null;
+  const cardTrashed = !isDocument && props.card.status === "dropped";
+  /** 在 99-回收站：只允许恢复或彻底删除 */
+  const recycled = trashed || cardTrashed;
 
   const readOnlyReason = (() => {
     if (!props.canWrite) {
@@ -74,6 +81,8 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
       if (props.document.text.trim().length === 0) {
         return "这份文档还没有切片正文";
       }
+    } else if (cardTrashed) {
+      return "这张知识卡已作废，在 99-回收站，恢复后才能编辑";
     }
     return null;
   })();
@@ -93,6 +102,7 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
         .join(" · ")
     : [
         props.card.departmentName,
+        cardTrashed ? "99-回收站" : "",
         props.card.roleKey ? `角色·${props.card.roleKey}` : "",
         props.card.folderLabel,
         CARD_STATUS_LABEL[props.card.status] ?? props.card.status,
@@ -165,56 +175,87 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
             <a className={`${linkBtn} text-[11px]`} href={`/api/knowledge/documents/${props.document.id}`}>
               下载原件
             </a>
-            {!trashed ? (
+            {!recycled ? (
               <DistillButton documentId={props.document.id} disabled={!props.aiEnabled} />
-            ) : null}
-            {props.canWrite ? (
-              trashed ? (
-                <button
-                  type="button"
-                  className={`${linkBtn} text-[11px]`}
-                  disabled={pending}
-                  onClick={() =>
-                    startTransition(async () => {
-                      const result = await restoreDocumentAction(props.document.id);
-                      setFailed(!result.ok);
-                      setMessage(result.message);
-                      if (result.ok) {
-                        router.refresh();
-                      }
-                    })
-                  }
-                >
-                  从回收站恢复
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className={`${linkBtn} text-[11px]`}
-                  disabled={pending}
-                  onClick={() => {
-                    if (!confirmTrash) {
-                      setConfirmTrash(true);
-                      return;
-                    }
-                    setConfirmTrash(false);
-                    startTransition(async () => {
-                      const result = await trashDocumentAction(props.document.id);
-                      setFailed(!result.ok);
-                      setMessage(result.message);
-                      if (result.ok) {
-                        router.refresh();
-                      }
-                    });
-                  }}
-                >
-                  {confirmTrash ? "确认移入回收站" : "移入回收站"}
-                </button>
-              )
             ) : null}
           </>
         ) : null}
-        {!trashed && props.canWrite ? (
+
+        {props.canWrite ? (
+          recycled ? (
+            <>
+              <button
+                type="button"
+                className={`${linkBtn} text-[11px]`}
+                disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    const result = isDocument
+                      ? await restoreDocumentAction(props.document.id)
+                      : await restoreCardAction(props.card.id);
+                    setFailed(!result.ok);
+                    setMessage(result.message);
+                    if (result.ok) {
+                      router.refresh();
+                    }
+                  })
+                }
+              >
+                {isDocument ? "从回收站恢复" : "恢复为待确认"}
+              </button>
+              <button
+                type="button"
+                className={`${linkBtn} text-[11px]`}
+                disabled={pending}
+                onClick={() => {
+                  if (!confirmPurge) {
+                    setConfirmPurge(true);
+                    return;
+                  }
+                  setConfirmPurge(false);
+                  startTransition(async () => {
+                    const result = isDocument
+                      ? await purgeDocumentAction(props.document.id)
+                      : await purgeCardAction(props.card.id);
+                    setFailed(!result.ok);
+                    setMessage(result.message);
+                    if (result.ok) {
+                      router.push("/knowledge?tab=scout");
+                      router.refresh();
+                    }
+                  });
+                }}
+              >
+                {confirmPurge ? "确认彻底删除" : "彻底删除"}
+              </button>
+            </>
+          ) : isDocument ? (
+            <button
+              type="button"
+              className={`${linkBtn} text-[11px]`}
+              disabled={pending}
+              onClick={() => {
+                if (!confirmTrash) {
+                  setConfirmTrash(true);
+                  return;
+                }
+                setConfirmTrash(false);
+                startTransition(async () => {
+                  const result = await trashDocumentAction(props.document.id);
+                  setFailed(!result.ok);
+                  setMessage(result.message);
+                  if (result.ok) {
+                    router.refresh();
+                  }
+                });
+              }}
+            >
+              {confirmTrash ? "确认移入回收站" : "移入回收站"}
+            </button>
+          ) : null
+        ) : null}
+
+        {!recycled && props.canWrite ? (
           <button
             type="button"
             className={`${linkBtn} text-[11px]`}
@@ -237,8 +278,10 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
           </button>
         ) : null}
         <span className="text-[11px] text-zinc-400">
-          {trashed
-            ? "已软删 · 切片与原件仍保留，恢复后回到原目录"
+          {recycled
+            ? isDocument
+              ? "在 99-回收站 · 切片与原件仍保留，恢复后回到原目录"
+              : "在 99-回收站 · 恢复后回到待确认"
             : shared
               ? "公司资料（共享） · 全员可读"
               : "仅本部门及下级可见"}

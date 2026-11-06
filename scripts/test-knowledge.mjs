@@ -16,11 +16,14 @@ import { verifyQuoteInChunk } from "../src/lib/knowledge/evidence.ts";
 import { answerQuestion } from "../src/lib/knowledge/qa.ts";
 import { runRegression, seedRegressionQuestions } from "../src/lib/knowledge/regression.ts";
 import {
-  loadWorkspaceTree,
+  emptyTrash,
+  purgeCard,
+  purgeDocument,
+  restoreCard,
   restoreDocument,
-  setCardVisibility,
   trashDocument,
-} from "../src/lib/knowledge/workspace.ts";
+} from "../src/lib/knowledge/trash.ts";
+import { loadWorkspaceTree, setCardVisibility } from "../src/lib/knowledge/workspace.ts";
 
 const TENANT = process.env.KB_TEST_TENANT ?? "22222222-2222-4222-8222-222222222222";
 const HOST = process.env.SEED_DB_HOST ?? "127.0.0.1";
@@ -830,6 +833,69 @@ async function main() {
     "恢复后：关键词召回重新命中",
     afterRestore.rows.some((row) => row.document_id === fx.docA),
     `hits=${afterRestore.rows.map((row) => row.document_id).join(",")}`,
+  );
+
+  // 25. 卡片回收站：作废进 99-回收站、可恢复、可彻底删除
+  const collectTrashIds = (workspace) =>
+    [
+      ...workspace.shared.folders,
+      ...workspace.departments.flatMap((department) => [
+        ...department.folders,
+        ...department.roles.flatMap((role) => role.folders),
+      ]),
+    ]
+      .filter((folder) => folder.key === "99-trash")
+      .flatMap((folder) => folder.items.map((item) => item.id));
+
+  await withClient(OWNER_URL, (owner) =>
+    owner.query("update knowledge_cards set status = 'dropped' where id = $1", [fx.cardBare]),
+  );
+  const cardTrashTree = await loadWorkspaceTree(bossContext);
+  check(
+    "卡片作废：进入 99-回收站",
+    collectTrashIds(cardTrashTree).includes(fx.cardBare),
+    `trash=${collectTrashIds(cardTrashTree).join(",")}`,
+  );
+
+  await restoreCard(bossContext, fx.cardBare);
+  const restoredCardStatus = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query("select status from knowledge_cards where id = $1", [
+      fx.cardBare,
+    ]);
+    return rows[0]?.status;
+  });
+  check("卡片恢复：回到待确认", restoredCardStatus === "pending", restoredCardStatus);
+
+  await withClient(OWNER_URL, (owner) =>
+    owner.query("update knowledge_cards set status = 'dropped' where id = $1", [fx.cardBare]),
+  );
+  await purgeCard(bossContext, fx.cardBare);
+  const purgedCardRows = await withClient(OWNER_URL, async (owner) => {
+    const { rowCount } = await owner.query("select 1 from knowledge_cards where id = $1", [fx.cardBare]);
+    return rowCount;
+  });
+  check("卡片彻底删除：行已消失", purgedCardRows === 0, `rows=${purgedCardRows}`);
+
+  // 26. 文档彻底删除与清空回收站
+  await trashDocument(bossContext, fx.docA);
+  await purgeDocument(bossContext, fx.docA);
+  const purgedDocRows = await withClient(OWNER_URL, async (owner) => {
+    const { rowCount } = await owner.query("select 1 from documents where id = $1", [fx.docA]);
+    return rowCount;
+  });
+  check("文档彻底删除：行已消失", purgedDocRows === 0, `rows=${purgedDocRows}`);
+
+  await withClient(OWNER_URL, (owner) =>
+    owner.query("update documents set deleted_at = now() where id = $1", [fx.docRevoked]),
+  );
+  await withClient(OWNER_URL, (owner) =>
+    owner.query("update knowledge_cards set status = 'dropped' where id = $1", [fx.cardHuman]),
+  );
+  const emptied = await emptyTrash(bossContext, fx.departments.groupA);
+  check(
+    "清空回收站：文档与卡片一并删除",
+    emptied.documents >= 1 && emptied.cards >= 1,
+    JSON.stringify(emptied),
   );
 
   if (process.env.KEEP_KB_FIXTURES !== "1") {

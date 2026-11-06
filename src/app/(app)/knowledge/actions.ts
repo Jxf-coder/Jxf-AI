@@ -9,11 +9,14 @@ import { addGap, closeGap, reopenGap } from "@/lib/knowledge/gaps";
 import { revokeIngestRun } from "@/lib/knowledge/ingest";
 import { answerQuestion, type QaAnswer } from "@/lib/knowledge/qa";
 import {
+  emptyTrash,
+  purgeCard,
+  purgeDocument,
+  restoreCard,
   restoreDocument,
-  setCardVisibility,
-  setDocumentVisibility,
   trashDocument,
-} from "@/lib/knowledge/workspace";
+} from "@/lib/knowledge/trash";
+import { setCardVisibility, setDocumentVisibility } from "@/lib/knowledge/workspace";
 import {
   addRegressionQuestion,
   removeRegressionQuestion,
@@ -299,6 +302,53 @@ export async function restoreDocumentAction(documentId: string): Promise<ActionR
     await restoreDocument(await resolveCurrentContext(), documentId);
     revalidatePath("/knowledge");
     return { ok: true, message: "已恢复到原目录" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 作废卡恢复为待确认 */
+export async function restoreCardAction(cardId: string): Promise<ActionResult> {
+  try {
+    await restoreCard(await resolveCurrentContext(), cardId);
+    revalidatePath("/knowledge");
+    return { ok: true, message: "已恢复为待确认" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 彻底删除回收站内的文档（连带原件） */
+export async function purgeDocumentAction(documentId: string): Promise<ActionResult> {
+  try {
+    await purgeDocument(await resolveCurrentContext(), documentId);
+    revalidatePath("/knowledge");
+    return { ok: true, message: "已彻底删除" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 彻底删除已作废的知识卡 */
+export async function purgeCardAction(cardId: string): Promise<ActionResult> {
+  try {
+    await purgeCard(await resolveCurrentContext(), cardId);
+    revalidatePath("/knowledge");
+    return { ok: true, message: "已彻底删除" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 清空某部门的回收站 */
+export async function emptyTrashAction(departmentId: string): Promise<ActionResult> {
+  try {
+    const result = await emptyTrash(await resolveCurrentContext(), departmentId);
+    revalidatePath("/knowledge");
+    return {
+      ok: true,
+      message: `已清空：文档 ${result.documents} 份、知识卡 ${result.cards} 张`,
+    };
   } catch (error) {
     return { ok: false, message: toPermissionMessage(error) };
   }

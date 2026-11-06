@@ -128,7 +128,7 @@ export async function loadWorkspaceTree(context: UserContext): Promise<Workspace
       client.query<NodeRow>(
         `select id, title, status, department_id, role_key, folder_key, visibility
            from knowledge_cards
-          where status in ('pending', 'confirmed')
+          where status in ('pending', 'confirmed', 'dropped')
           order by created_at desc
           limit 500`,
       ),
@@ -176,8 +176,11 @@ export async function loadWorkspaceTree(context: UserContext): Promise<Workspace
     function addNode(row: NodeRow, kind: "card" | "document") {
       const item: TreeItem = { kind, id: row.id, title: row.title, status: row.status };
       const name = roleName(row.role_key);
-      // 软删文档一律落本部门「99-回收站」：不留在原目录，也不留在共享区
-      const trashed = kind === "document" && (row.deleted_at ?? null) !== null;
+      // 回收站：软删文档 + 已作废卡片，一律落本部门「99-回收站」，
+      // 不留在原目录、岗位层或共享区
+      const trashed =
+        (kind === "document" && (row.deleted_at ?? null) !== null) ||
+        (kind === "card" && row.status === "dropped");
       const target = trashed
         ? departmentEntry(row.department_id).direct
         : row.visibility === "shared"
@@ -449,80 +452,6 @@ export async function loadCardDetail(
       evidenceCount: Number(card.evidence_count) || 0,
       visibility: card.visibility,
     };
-  });
-}
-
-/** 软删进 99-回收站：只置 deleted_at，切片与原文件保留，可随时恢复 */
-export async function trashDocument(context: UserContext, documentId: string): Promise<void> {
-  await withUserContext(context, async (client) => {
-    const { rows } = await client.query<{ department_id: string; deleted_at: Date | null }>(
-      `select department_id, deleted_at from documents where id = $1`,
-      [documentId],
-    );
-    const row = rows[0];
-    if (!row) {
-      throw new Error("文档不存在或无权操作");
-    }
-
-    await requireContextPermission(client, context, "knowledge:write", {
-      kind: "department",
-      id: row.department_id,
-      departmentId: row.department_id,
-    });
-
-    if (row.deleted_at) {
-      return;
-    }
-
-    await client.query(
-      `update documents set deleted_at = now(), deleted_by = $2 where id = $1 and department_id = $3`,
-      [documentId, context.userId, row.department_id],
-    );
-
-    await auditInTx(client, context, {
-      actorUserId: context.userId,
-      action: "knowledge.document_trashed",
-      targetType: "document",
-      targetId: documentId,
-      departmentId: row.department_id,
-    });
-  });
-}
-
-/** 从 99-回收站恢复：回到原岗位与目录（role_key / folder_key 从未改动） */
-export async function restoreDocument(context: UserContext, documentId: string): Promise<void> {
-  await withUserContext(context, async (client) => {
-    const { rows } = await client.query<{ department_id: string; deleted_at: Date | null }>(
-      `select department_id, deleted_at from documents where id = $1`,
-      [documentId],
-    );
-    const row = rows[0];
-    if (!row) {
-      throw new Error("文档不存在或无权操作");
-    }
-
-    await requireContextPermission(client, context, "knowledge:write", {
-      kind: "department",
-      id: row.department_id,
-      departmentId: row.department_id,
-    });
-
-    if (!row.deleted_at) {
-      return;
-    }
-
-    await client.query(
-      `update documents set deleted_at = null, deleted_by = null where id = $1 and department_id = $2`,
-      [documentId, row.department_id],
-    );
-
-    await auditInTx(client, context, {
-      actorUserId: context.userId,
-      action: "knowledge.document_restored",
-      targetType: "document",
-      targetId: documentId,
-      departmentId: row.department_id,
-    });
   });
 }
 
