@@ -524,7 +524,7 @@ as $fn$
            c.text,
            (select count(*) from unnest(p.pats) as pat where c.text like pat) as hits
       from doc_chunks c
-      join documents d0 on d0.id = c.document_id and d0.status <> 'revoked'
+      join documents d0 on d0.id = c.document_id and d0.status <> 'revoked' and d0.deleted_at is null
       cross join patterns p
       cross join scope s
      where c.department_id = any (s.ids)
@@ -541,7 +541,7 @@ as $fn$
     select c.id,
            row_number() over (order by c.embedding <=> p_embedding) as rnk
       from doc_chunks c
-      join documents d0 on d0.id = c.document_id and d0.status <> 'revoked'
+      join documents d0 on d0.id = c.document_id and d0.status <> 'revoked' and d0.deleted_at is null
       cross join scope s
      where p_embedding is not null
        and c.embedding is not null
@@ -632,7 +632,7 @@ as $fn$
     select c.id,
            c.embedding <=> p_embedding as distance
       from doc_chunks c
-      join documents d0 on d0.id = c.document_id and d0.status <> 'revoked'
+      join documents d0 on d0.id = c.document_id and d0.status <> 'revoked' and d0.deleted_at is null
       cross join scope s
      where p_embedding is not null
        and c.embedding is not null

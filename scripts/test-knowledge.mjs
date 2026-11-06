@@ -15,7 +15,12 @@ import { createManualCard } from "../src/lib/knowledge/cards.ts";
 import { verifyQuoteInChunk } from "../src/lib/knowledge/evidence.ts";
 import { answerQuestion } from "../src/lib/knowledge/qa.ts";
 import { runRegression, seedRegressionQuestions } from "../src/lib/knowledge/regression.ts";
-import { setCardVisibility } from "../src/lib/knowledge/workspace.ts";
+import {
+  loadWorkspaceTree,
+  restoreDocument,
+  setCardVisibility,
+  trashDocument,
+} from "../src/lib/knowledge/workspace.ts";
 
 const TENANT = process.env.KB_TEST_TENANT ?? "22222222-2222-4222-8222-222222222222";
 const HOST = process.env.SEED_DB_HOST ?? "127.0.0.1";
@@ -777,6 +782,55 @@ async function main() {
     client.query("select id from knowledge_cards where id = $1", [fx.cardHuman]),
   );
   check("卡片共享：收回后跨部门不可见", afterRevoke.rowCount === 0, `rowCount=${afterRevoke.rowCount}`);
+
+  // 24. 软删进 99-回收站：退出检索、树中移位、可恢复
+  const beforeTrash = await runAs(memberA, (client) =>
+    client.query("select * from app.hybrid_search($1, null, 10, 60)", ["迁移量"]),
+  );
+  check(
+    "软删前：关键词召回含该文档切片",
+    beforeTrash.rows.some((row) => row.document_id === fx.docA),
+    `hits=${beforeTrash.rows.map((row) => row.document_id).join(",")}`,
+  );
+
+  await trashDocument(bossContext, fx.docA);
+
+  const afterTrash = await runAs(memberA, (client) =>
+    client.query("select * from app.hybrid_search($1, null, 10, 60)", ["迁移量"]),
+  );
+  check(
+    "软删后：关键词召回不再含该文档",
+    !afterTrash.rows.some((row) => row.document_id === fx.docA),
+    `hits=${afterTrash.rows.map((row) => row.document_id).join(",")}`,
+  );
+
+  const trashedTree = await loadWorkspaceTree(bossContext);
+  const folders = [
+    ...trashedTree.shared.folders,
+    ...trashedTree.departments.flatMap((department) => [
+      ...department.folders,
+      ...department.roles.flatMap((role) => role.folders),
+    ]),
+  ];
+  const trashIds = folders
+    .filter((folder) => folder.key === "99-trash")
+    .flatMap((folder) => folder.items.map((item) => item.id));
+  const liveIds = folders
+    .filter((folder) => folder.key !== "99-trash")
+    .flatMap((folder) => folder.items.map((item) => item.id));
+  check("软删后：树中移入 99-回收站", trashIds.includes(fx.docA), `trash=${trashIds.join(",")}`);
+  check("软删后：原目录不再出现", !liveIds.includes(fx.docA), `live=${liveIds.join(",")}`);
+
+  await restoreDocument(bossContext, fx.docA);
+
+  const afterRestore = await runAs(memberA, (client) =>
+    client.query("select * from app.hybrid_search($1, null, 10, 60)", ["迁移量"]),
+  );
+  check(
+    "恢复后：关键词召回重新命中",
+    afterRestore.rows.some((row) => row.document_id === fx.docA),
+    `hits=${afterRestore.rows.map((row) => row.document_id).join(",")}`,
+  );
 
   if (process.env.KEEP_KB_FIXTURES !== "1") {
     await withClient(OWNER_URL, cleanup);

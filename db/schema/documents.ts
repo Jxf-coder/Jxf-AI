@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { assets } from "./assets";
+import { users } from "./auth";
 import { departments } from "./departments";
 import { docStatus } from "./enums";
 import { ingestRuns } from "./ingest";
@@ -41,12 +42,16 @@ export const documents = pgTable(
     lang: text("lang").default("zh"),
     status: docStatus("status").notNull().default("parsed"),
     sha256: text("sha256").notNull(),
+    /** 软删除时间：非空表示在 99-回收站，可恢复；常规目录与检索都必须排除 */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("documents_department_status_idx").on(table.departmentId, table.status),
     index("documents_ingest_run_idx").on(table.ingestRunId),
     index("documents_folder_idx").on(table.departmentId, table.roleKey, table.folderKey),
+    index("documents_deleted_idx").on(table.departmentId, table.deletedAt),
   ],
 );
 

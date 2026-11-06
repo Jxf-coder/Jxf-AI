@@ -8,7 +8,12 @@ import { patchCards, type CardMetaPatch } from "@/lib/knowledge/cards";
 import { addGap, closeGap, reopenGap } from "@/lib/knowledge/gaps";
 import { revokeIngestRun } from "@/lib/knowledge/ingest";
 import { answerQuestion, type QaAnswer } from "@/lib/knowledge/qa";
-import { setCardVisibility, setDocumentVisibility } from "@/lib/knowledge/workspace";
+import {
+  restoreDocument,
+  setCardVisibility,
+  setDocumentVisibility,
+  trashDocument,
+} from "@/lib/knowledge/workspace";
 import {
   addRegressionQuestion,
   removeRegressionQuestion,
@@ -272,6 +277,28 @@ export async function setDocumentVisibilityAction(
     await setDocumentVisibility(await resolveCurrentContext(), documentId, shared);
     revalidatePath("/knowledge");
     return { ok: true, message: shared ? "已加入公司资料（共享）" : "已收回为部门内可见" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 文档移入 99-回收站（软删）：切片与原件保留，可随时恢复 */
+export async function trashDocumentAction(documentId: string): Promise<ActionResult> {
+  try {
+    await trashDocument(await resolveCurrentContext(), documentId);
+    revalidatePath("/knowledge");
+    return { ok: true, message: "已移入 99-回收站，可随时恢复" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 从 99-回收站恢复：回到原岗位与原目录 */
+export async function restoreDocumentAction(documentId: string): Promise<ActionResult> {
+  try {
+    await restoreDocument(await resolveCurrentContext(), documentId);
+    revalidatePath("/knowledge");
+    return { ok: true, message: "已恢复到原目录" };
   } catch (error) {
     return { ok: false, message: toPermissionMessage(error) };
   }

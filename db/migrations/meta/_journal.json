@@ -85,6 +85,13 @@
       "when": 1793951994576,
       "tag": "0011_kb_card_source_document",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793954110941,
+      "tag": "0012_kb_document_trash",
+      "breakpoints": true
     }
   ]
 }

@@ -8,7 +8,12 @@ import { btnBlue, btnGhost, fieldLabel, input, linkBtn } from "@/components/know
 import type { CardDetail, DocumentContent } from "@/lib/knowledge/workspace";
 
 import { DistillButton } from "../DistillButton";
-import { setCardVisibilityAction, setDocumentVisibilityAction } from "../actions";
+import {
+  restoreDocumentAction,
+  setCardVisibilityAction,
+  setDocumentVisibilityAction,
+  trashDocumentAction,
+} from "../actions";
 import { createCardAction, updateCardAction } from "../cards/actions";
 
 type WorkspaceEditorProps =
@@ -48,12 +53,18 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
   );
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
+  const [confirmTrash, setConfirmTrash] = useState(false);
+
+  const trashed = isDocument && props.document.deletedAt !== null;
 
   const readOnlyReason = (() => {
     if (!props.canWrite) {
       return "当前账号没有「知识库写入」权限，只能查看";
     }
     if (isDocument) {
+      if (trashed) {
+        return "这份文档在 99-回收站，恢复后才能继续编辑";
+      }
       if (props.document.status === "needs_ocr") {
         return "扫描件没有可解析正文，先补 OCR 再来编辑";
       }
@@ -70,6 +81,7 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
   const metaLine = isDocument
     ? [
         props.document.departmentName,
+        trashed ? "99-回收站" : "",
         props.document.roleKey ? `角色·${props.document.roleKey}` : "",
         props.document.folderLabel,
         DOC_STATUS_LABEL[props.document.status] ?? props.document.status,
@@ -153,10 +165,56 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
             <a className={`${linkBtn} text-[11px]`} href={`/api/knowledge/documents/${props.document.id}`}>
               下载原件
             </a>
-            <DistillButton documentId={props.document.id} disabled={!props.aiEnabled} />
+            {!trashed ? (
+              <DistillButton documentId={props.document.id} disabled={!props.aiEnabled} />
+            ) : null}
+            {props.canWrite ? (
+              trashed ? (
+                <button
+                  type="button"
+                  className={`${linkBtn} text-[11px]`}
+                  disabled={pending}
+                  onClick={() =>
+                    startTransition(async () => {
+                      const result = await restoreDocumentAction(props.document.id);
+                      setFailed(!result.ok);
+                      setMessage(result.message);
+                      if (result.ok) {
+                        router.refresh();
+                      }
+                    })
+                  }
+                >
+                  从回收站恢复
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={`${linkBtn} text-[11px]`}
+                  disabled={pending}
+                  onClick={() => {
+                    if (!confirmTrash) {
+                      setConfirmTrash(true);
+                      return;
+                    }
+                    setConfirmTrash(false);
+                    startTransition(async () => {
+                      const result = await trashDocumentAction(props.document.id);
+                      setFailed(!result.ok);
+                      setMessage(result.message);
+                      if (result.ok) {
+                        router.refresh();
+                      }
+                    });
+                  }}
+                >
+                  {confirmTrash ? "确认移入回收站" : "移入回收站"}
+                </button>
+              )
+            ) : null}
           </>
         ) : null}
-        {props.canWrite ? (
+        {!trashed && props.canWrite ? (
           <button
             type="button"
             className={`${linkBtn} text-[11px]`}
@@ -179,7 +237,11 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
           </button>
         ) : null}
         <span className="text-[11px] text-zinc-400">
-          {shared ? "公司资料（共享） · 全员可读" : "仅本部门及下级可见"}
+          {trashed
+            ? "已软删 · 切片与原件仍保留，恢复后回到原目录"
+            : shared
+              ? "公司资料（共享） · 全员可读"
+              : "仅本部门及下级可见"}
         </span>
       </div>
 
@@ -223,7 +285,7 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
         </label>
       </div>
 
-      {isDocument ? (
+      {isDocument && !trashed ? (
         <p className="mt-3 text-[11px] leading-relaxed text-zinc-400">
           保存不会改动原始文件：内容是切片按顺序拼出的正文，保存后生成一张「待确认」知识卡，可在 00-知识卡
           里继续补充证据并确认。

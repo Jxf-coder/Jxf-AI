@@ -61,6 +61,8 @@ interface NodeRow {
   role_key: string | null;
   folder_key: string;
   visibility: string;
+  /** 仅 documents 有：非空表示在 99-回收站 */
+  deleted_at?: Date | null;
 }
 
 interface DepartmentRow {
@@ -118,7 +120,7 @@ export async function loadWorkspaceTree(context: UserContext): Promise<Workspace
           where status = 'active' and nullif(trim(position), '') is not null`,
       ),
       client.query<NodeRow>(
-        `select id, title, status, department_id, role_key, folder_key, visibility
+        `select id, title, status, department_id, role_key, folder_key, visibility, deleted_at
            from documents
           order by created_at desc
           limit 500`,
@@ -174,18 +176,23 @@ export async function loadWorkspaceTree(context: UserContext): Promise<Workspace
     function addNode(row: NodeRow, kind: "card" | "document") {
       const item: TreeItem = { kind, id: row.id, title: row.title, status: row.status };
       const name = roleName(row.role_key);
-      const target =
-        row.visibility === "shared"
+      // 软删文档一律落本部门「99-回收站」：不留在原目录，也不留在共享区
+      const trashed = kind === "document" && (row.deleted_at ?? null) !== null;
+      const target = trashed
+        ? departmentEntry(row.department_id).direct
+        : row.visibility === "shared"
           ? sharedFolders
           : name
             ? ensureRole(row.department_id, name)
             : departmentEntry(row.department_id).direct;
-      const folder = target.get(row.folder_key) ?? target.get(kind === "card" ? "02-cards" : "01-original");
+      const folder = trashed
+        ? target.get("99-trash")
+        : target.get(row.folder_key) ?? target.get(kind === "card" ? "02-cards" : "01-original");
       if (!folder) {
         return;
       }
       folder.items.push(item);
-      if (kind === "document" && (row.status === "needs_ocr" || row.status === "failed")) {
+      if (!trashed && kind === "document" && (row.status === "needs_ocr" || row.status === "failed")) {
         pendingDocs.push(item);
       }
     }
@@ -266,6 +273,8 @@ export interface DocumentContent {
   folderLabel: string;
   visibility: string;
   chunkCount: number;
+  /** 非空表示在 99-回收站：编辑器只允许恢复，不允许继续生成卡片 */
+  deletedAt: string | null;
   /** 切片按 ord 拼接；扫描件没有切片，返回空串 */
   text: string;
 }
@@ -288,9 +297,10 @@ export async function loadDocumentContent(
       folder_key: string;
       visibility: string;
       department_name: string;
+      deleted_at: Date | null;
     }>(
       `select d.id, d.title, d.status, d.mime, d.page_count, d.char_count,
-              d.department_id, d.role_key, d.folder_key, d.visibility,
+              d.department_id, d.role_key, d.folder_key, d.visibility, d.deleted_at,
               dep.name as department_name
          from documents d
          join departments dep on dep.id = d.department_id
@@ -327,6 +337,7 @@ export async function loadDocumentContent(
       folderLabel: folderLabel(document.folder_key),
       visibility: document.visibility,
       chunkCount: chunks.rowCount ?? chunks.rows.length,
+      deletedAt: document.deleted_at ? document.deleted_at.toISOString() : null,
       text,
     };
   });
@@ -438,6 +449,80 @@ export async function loadCardDetail(
       evidenceCount: Number(card.evidence_count) || 0,
       visibility: card.visibility,
     };
+  });
+}
+
+/** 软删进 99-回收站：只置 deleted_at，切片与原文件保留，可随时恢复 */
+export async function trashDocument(context: UserContext, documentId: string): Promise<void> {
+  await withUserContext(context, async (client) => {
+    const { rows } = await client.query<{ department_id: string; deleted_at: Date | null }>(
+      `select department_id, deleted_at from documents where id = $1`,
+      [documentId],
+    );
+    const row = rows[0];
+    if (!row) {
+      throw new Error("文档不存在或无权操作");
+    }
+
+    await requireContextPermission(client, context, "knowledge:write", {
+      kind: "department",
+      id: row.department_id,
+      departmentId: row.department_id,
+    });
+
+    if (row.deleted_at) {
+      return;
+    }
+
+    await client.query(
+      `update documents set deleted_at = now(), deleted_by = $2 where id = $1 and department_id = $3`,
+      [documentId, context.userId, row.department_id],
+    );
+
+    await auditInTx(client, context, {
+      actorUserId: context.userId,
+      action: "knowledge.document_trashed",
+      targetType: "document",
+      targetId: documentId,
+      departmentId: row.department_id,
+    });
+  });
+}
+
+/** 从 99-回收站恢复：回到原岗位与目录（role_key / folder_key 从未改动） */
+export async function restoreDocument(context: UserContext, documentId: string): Promise<void> {
+  await withUserContext(context, async (client) => {
+    const { rows } = await client.query<{ department_id: string; deleted_at: Date | null }>(
+      `select department_id, deleted_at from documents where id = $1`,
+      [documentId],
+    );
+    const row = rows[0];
+    if (!row) {
+      throw new Error("文档不存在或无权操作");
+    }
+
+    await requireContextPermission(client, context, "knowledge:write", {
+      kind: "department",
+      id: row.department_id,
+      departmentId: row.department_id,
+    });
+
+    if (!row.deleted_at) {
+      return;
+    }
+
+    await client.query(
+      `update documents set deleted_at = null, deleted_by = null where id = $1 and department_id = $2`,
+      [documentId, row.department_id],
+    );
+
+    await auditInTx(client, context, {
+      actorUserId: context.userId,
+      action: "knowledge.document_restored",
+      targetType: "document",
+      targetId: documentId,
+      departmentId: row.department_id,
+    });
   });
 }
 
