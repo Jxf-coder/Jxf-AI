@@ -10,5 +10,7 @@ docs
 scripts
 *.md
 data
+# 上传件属于运行时数据，由 uploads 命名卷承载，不进镜像
+public/uploads
 *.log
 *.tsbuildinfo

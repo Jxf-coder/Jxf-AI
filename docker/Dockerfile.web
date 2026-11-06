@@ -39,6 +39,10 @@ RUN addgroup -g 1001 -S nodejs \
  && adduser -S -u 1001 -G nodejs nextjs
 
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# 上传目录由命名卷承载：卷首次创建时按镜像内该目录的属主复制，
+# 因此目录必须先存在且属于运行用户，否则 nextjs 无法写入。
+RUN mkdir -p /app/public/uploads \
+ && chown -R nextjs:nodejs /app/public/uploads
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 

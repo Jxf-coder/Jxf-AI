@@ -15,6 +15,7 @@ import { createManualCard } from "../src/lib/knowledge/cards.ts";
 import { verifyQuoteInChunk } from "../src/lib/knowledge/evidence.ts";
 import { answerQuestion } from "../src/lib/knowledge/qa.ts";
 import { runRegression, seedRegressionQuestions } from "../src/lib/knowledge/regression.ts";
+import { setCardVisibility } from "../src/lib/knowledge/workspace.ts";
 
 const TENANT = process.env.KB_TEST_TENANT ?? "22222222-2222-4222-8222-222222222222";
 const HOST = process.env.SEED_DB_HOST ?? "127.0.0.1";
@@ -753,6 +754,27 @@ async function main() {
     return rows[0]?.body;
   });
   check("建卡幂等：已确认内容保持不变", keptBody === "第二版正文", keptBody);
+
+  // 23. 卡片共享开关：本部门可开，共享后跨部门可读，非本部门不可改
+  await setCardVisibility(bossContext, fx.cardHuman, true);
+  const sharedReadable = await runAs(memberB, (client) =>
+    client.query("select id, visibility from knowledge_cards where id = $1", [fx.cardHuman]),
+  );
+  check("卡片共享：共享后跨部门可读", sharedReadable.rowCount === 1, `rowCount=${sharedReadable.rowCount}`);
+
+  let crossShareBlocked = false;
+  try {
+    await setCardVisibility(memberB, fx.cardHuman, false);
+  } catch {
+    crossShareBlocked = true;
+  }
+  check("卡片共享：非本部门不可改", crossShareBlocked);
+
+  await setCardVisibility(bossContext, fx.cardHuman, false);
+  const afterRevoke = await runAs(memberB, (client) =>
+    client.query("select id from knowledge_cards where id = $1", [fx.cardHuman]),
+  );
+  check("卡片共享：收回后跨部门不可见", afterRevoke.rowCount === 0, `rowCount=${afterRevoke.rowCount}`);
 
   if (process.env.KEEP_KB_FIXTURES !== "1") {
     await withClient(OWNER_URL, cleanup);

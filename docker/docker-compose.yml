@@ -196,6 +196,9 @@ services:
         condition: service_completed_successfully
     expose:
       - "3000"
+    volumes:
+      # 知识库原件落盘目录：必须独立于容器可写层，否则重建容器即丢文件
+      - uploads:/app/public/uploads
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1"]
       interval: 15s
@@ -244,5 +247,7 @@ networks:
 volumes:
   pgdata:
   miniodata:
+  # 知识库原件（public/uploads）：备份时必须与 pgdata 一起覆盖
+  uploads:
   caddy_data:
   caddy_config:

@@ -8,7 +8,7 @@ import { patchCards, type CardMetaPatch } from "@/lib/knowledge/cards";
 import { addGap, closeGap, reopenGap } from "@/lib/knowledge/gaps";
 import { revokeIngestRun } from "@/lib/knowledge/ingest";
 import { answerQuestion, type QaAnswer } from "@/lib/knowledge/qa";
-import { setDocumentVisibility } from "@/lib/knowledge/workspace";
+import { setCardVisibility, setDocumentVisibility } from "@/lib/knowledge/workspace";
 import {
   addRegressionQuestion,
   removeRegressionQuestion,
@@ -270,6 +270,20 @@ export async function setDocumentVisibilityAction(
 ): Promise<ActionResult> {
   try {
     await setDocumentVisibility(await resolveCurrentContext(), documentId, shared);
+    revalidatePath("/knowledge");
+    return { ok: true, message: shared ? "已加入公司资料（共享）" : "已收回为部门内可见" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 知识卡共享开关：只改 visibility，写仍限本部门 */
+export async function setCardVisibilityAction(
+  cardId: string,
+  shared: boolean,
+): Promise<ActionResult> {
+  try {
+    await setCardVisibility(await resolveCurrentContext(), cardId, shared);
     revalidatePath("/knowledge");
     return { ok: true, message: shared ? "已加入公司资料（共享）" : "已收回为部门内可见" };
   } catch (error) {

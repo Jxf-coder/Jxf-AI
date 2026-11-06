@@ -382,6 +382,8 @@ export interface CardDetail {
   folderLabel: string;
   source: string;
   evidenceCount: number;
+  /** department | shared */
+  visibility: string;
 }
 
 /** 卡片详情：编辑器初始值，同样只读 */
@@ -402,9 +404,10 @@ export async function loadCardDetail(
       extra: Record<string, unknown> | null;
       department_name: string;
       evidence_count: string;
+      visibility: string;
     }>(
       `select c.id, c.title, c.body, c.status, c.category, c.product,
-              c.role_key, c.folder_key, c.extra,
+              c.role_key, c.folder_key, c.extra, c.visibility,
               dep.name as department_name,
               (select count(*) from card_evidence e where e.card_id = c.id)::text as evidence_count
          from knowledge_cards c
@@ -433,7 +436,45 @@ export async function loadCardDetail(
       folderLabel: folderLabel(card.folder_key),
       source,
       evidenceCount: Number(card.evidence_count) || 0,
+      visibility: card.visibility,
     };
+  });
+}
+
+/** 知识卡共享开关：写仍限本部门（knowledge:write），只改 visibility 一列 */
+export async function setCardVisibility(
+  context: UserContext,
+  cardId: string,
+  shared: boolean,
+): Promise<void> {
+  await withUserContext(context, async (client) => {
+    const { rows } = await client.query<{ department_id: string }>(
+      `select department_id from knowledge_cards where id = $1`,
+      [cardId],
+    );
+    const departmentId = rows[0]?.department_id;
+    if (!departmentId) {
+      throw new Error("知识卡不存在或无权操作");
+    }
+
+    await requireContextPermission(client, context, "knowledge:write", {
+      kind: "department",
+      id: departmentId,
+      departmentId,
+    });
+
+    await client.query(
+      `update knowledge_cards set visibility = $2 where id = $1 and department_id = $3`,
+      [cardId, shared ? "shared" : "department", departmentId],
+    );
+
+    await auditInTx(client, context, {
+      actorUserId: context.userId,
+      action: shared ? "knowledge.card_shared" : "knowledge.card_unshared",
+      targetType: "knowledge_card",
+      targetId: cardId,
+      departmentId,
+    });
   });
 }
 

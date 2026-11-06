@@ -8,7 +8,7 @@ import { btnBlue, btnGhost, fieldLabel, input, linkBtn } from "@/components/know
 import type { CardDetail, DocumentContent } from "@/lib/knowledge/workspace";
 
 import { DistillButton } from "../DistillButton";
-import { setDocumentVisibilityAction } from "../actions";
+import { setCardVisibilityAction, setDocumentVisibilityAction } from "../actions";
 import { createCardAction, updateCardAction } from "../cards/actions";
 
 type WorkspaceEditorProps =
@@ -42,7 +42,9 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
   const [body, setBody] = useState(initialBody);
   const [source, setSource] = useState(initialSource);
   const [shared, setShared] = useState(
-    props.mode === "document" ? props.document.visibility === "shared" : false,
+    props.mode === "document"
+      ? props.document.visibility === "shared"
+      : props.card.visibility === "shared",
   );
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
@@ -145,37 +147,41 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
         </div>
       </div>
 
-      {isDocument ? (
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <a className={`${linkBtn} text-[11px]`} href={`/api/knowledge/documents/${props.document.id}`}>
-            下载原件
-          </a>
-          <DistillButton documentId={props.document.id} disabled={!props.aiEnabled} />
-          {props.canWrite ? (
-            <button
-              type="button"
-              className={`${linkBtn} text-[11px]`}
-              disabled={pending}
-              onClick={() =>
-                startTransition(async () => {
-                  const result = await setDocumentVisibilityAction(props.document.id, !shared);
-                  setFailed(!result.ok);
-                  setMessage(result.message);
-                  if (result.ok) {
-                    setShared(!shared);
-                    router.refresh();
-                  }
-                })
-              }
-            >
-              {shared ? "收回共享" : "加入公司共享"}
-            </button>
-          ) : null}
-          <span className="text-[11px] text-zinc-400">
-            {shared ? "公司资料（共享） · 全员可读" : "仅本部门及下级可见"}
-          </span>
-        </div>
-      ) : null}
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        {isDocument ? (
+          <>
+            <a className={`${linkBtn} text-[11px]`} href={`/api/knowledge/documents/${props.document.id}`}>
+              下载原件
+            </a>
+            <DistillButton documentId={props.document.id} disabled={!props.aiEnabled} />
+          </>
+        ) : null}
+        {props.canWrite ? (
+          <button
+            type="button"
+            className={`${linkBtn} text-[11px]`}
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                const result = isDocument
+                  ? await setDocumentVisibilityAction(props.document.id, !shared)
+                  : await setCardVisibilityAction(props.card.id, !shared);
+                setFailed(!result.ok);
+                setMessage(result.message);
+                if (result.ok) {
+                  setShared(!shared);
+                  router.refresh();
+                }
+              })
+            }
+          >
+            {shared ? "收回共享" : "加入公司共享"}
+          </button>
+        ) : null}
+        <span className="text-[11px] text-zinc-400">
+          {shared ? "公司资料（共享） · 全员可读" : "仅本部门及下级可见"}
+        </span>
+      </div>
 
       {readOnlyReason ? (
         <InlineMessage className="mt-3 mb-0">{readOnlyReason}</InlineMessage>
