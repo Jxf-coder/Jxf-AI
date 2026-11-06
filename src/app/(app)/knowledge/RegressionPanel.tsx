@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { Field } from "@/components/knowledge/Field";
@@ -9,6 +10,7 @@ import { actions, badge, btnBlue, btnGhost, input } from "@/components/knowledge
 import { runRegressionAction, seedRegressionAction } from "./actions";
 
 export function RegressionPanel() {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buildTag, setBuildTag] = useState("");
   const [message, setMessage] = useState("");
@@ -41,6 +43,9 @@ export function RegressionPanel() {
               const result = await seedRegressionAction();
               setFailed(!result.ok);
               setMessage(result.message);
+              if (result.ok) {
+                router.refresh();
+              }
             })
           }
         >
@@ -55,6 +60,9 @@ export function RegressionPanel() {
               const result = await runRegressionAction(buildTag);
               setFailed(!result.ok);
               setMessage(result.message);
+              if (result.ok) {
+                router.refresh();
+              }
             })
           }
         >

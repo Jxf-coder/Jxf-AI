@@ -214,3 +214,173 @@ export async function listRegressionRuns(context: UserContext, limit = 5): Promi
     }));
   });
 }
+
+export interface RegressionQuestionView {
+  id: string;
+  q: string;
+  source: string;
+  baselineCount: number;
+  createdAt: Date;
+}
+
+export async function listRegressionQuestions(
+  context: UserContext,
+  limit = 50,
+): Promise<RegressionQuestionView[]> {
+  return withUserContext(context, async (client) => {
+    const { rows } = await client.query<{
+      id: string;
+      q: string;
+      source: string;
+      baseline_count: number;
+      created_at: Date;
+    }>(
+      `select id, q, source, cardinality(baseline_ids) as baseline_count, created_at
+         from regression_questions
+        order by created_at desc
+        limit $1`,
+      [limit],
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      q: row.q,
+      source: row.source,
+      baselineCount: row.baseline_count,
+      createdAt: row.created_at,
+    }));
+  });
+}
+
+/** 手工加一道回归题：基线取当前检索命中的前 3 张卡 */
+export async function addRegressionQuestion(context: UserContext, rawQuestion: string): Promise<string> {
+  const question = rawQuestion.trim();
+  if (question.length < 2) {
+    throw new Error("题目太短（至少 2 个字）");
+  }
+  if (question.length > 200) {
+    throw new Error("题目太长（≤ 200 字）");
+  }
+
+  const departmentId = context.activeDepartmentId;
+  if (!departmentId) {
+    throw new Error("当前账号没有有效部门上下文");
+  }
+
+  return withUserContext(context, async (client) => {
+    await requireContextPermission(client, context, "knowledge:write", {
+      kind: "department",
+      id: departmentId,
+      departmentId,
+    });
+
+    const existing = await client.query(
+      "select 1 from regression_questions where department_id = $1 and q = $2 limit 1",
+      [departmentId, question],
+    );
+    if (existing.rowCount && existing.rowCount > 0) {
+      throw new Error("这道题已经在题集里");
+    }
+
+    const hits = await client.query<{ card_id: string }>(
+      "select card_id from app.hybrid_search_cards($1, null, 5, 60)",
+      [question],
+    );
+    const baseline = hits.rows.slice(0, 3).map((row) => row.card_id);
+    if (baseline.length === 0) {
+      throw new Error("这道题现在一条知识卡都召不回，先补卡片再出题");
+    }
+
+    const created = await client.query<{ id: string }>(
+      `insert into regression_questions (tenant_id, department_id, q, source, baseline_ids)
+       values ($1, $2, $3, 'manual', $4::uuid[])
+       returning id`,
+      [context.tenantId, departmentId, question, baseline],
+    );
+
+    await auditInTx(client, context, {
+      actorUserId: context.userId,
+      action: "knowledge.regression_question_added",
+      targetType: "regression_question",
+      targetId: created.rows[0].id,
+      departmentId,
+      payload: { baseline: baseline.length },
+    });
+
+    return created.rows[0].id;
+  });
+}
+
+export async function removeRegressionQuestion(context: UserContext, questionId: string): Promise<void> {
+  const departmentId = context.activeDepartmentId;
+  if (!departmentId) {
+    throw new Error("当前账号没有有效部门上下文");
+  }
+
+  await withUserContext(context, async (client) => {
+    await requireContextPermission(client, context, "knowledge:write", {
+      kind: "department",
+      id: departmentId,
+      departmentId,
+    });
+
+    const deleted = await client.query(
+      "delete from regression_questions where id = $1 and department_id = $2 returning id",
+      [questionId, departmentId],
+    );
+    if (!deleted.rowCount) {
+      throw new Error("题目不存在或不属于当前部门");
+    }
+
+    await auditInTx(client, context, {
+      actorUserId: context.userId,
+      action: "knowledge.regression_question_removed",
+      targetType: "regression_question",
+      targetId: questionId,
+      departmentId,
+    });
+  });
+}
+
+export interface RegressionItemView {
+  question: string;
+  retained: number;
+  pass: boolean;
+  hitCount: number;
+}
+
+/** 最近一次运行的逐题结果 */
+export async function listLastRunItems(
+  context: UserContext,
+): Promise<{ run: RegressionRunView; items: RegressionItemView[] } | null> {
+  const runs = await listRegressionRuns(context, 1);
+  const run = runs[0];
+  if (!run) {
+    return null;
+  }
+
+  const items = await withUserContext(context, async (client) => {
+    const { rows } = await client.query<{
+      q: string;
+      retained: string;
+      pass: boolean;
+      hit_count: number;
+    }>(
+      `select q.q, i.retained, i.pass, cardinality(i.hit_ids) as hit_count
+         from regression_items i
+         join regression_questions q on q.id = i.question_id
+        where i.run_id = $1
+        order by q.created_at`,
+      [run.id],
+    );
+
+    return rows.map((row) => ({
+      question: row.q,
+      retained: Number(row.retained),
+      pass: row.pass,
+      hitCount: row.hit_count,
+    }));
+  });
+
+  return { run, items };
+}

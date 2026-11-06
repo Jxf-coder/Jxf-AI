@@ -265,3 +265,50 @@ async function recordMiss(
     return true;
   });
 }
+
+export interface QaLogView {
+  id: string;
+  question: string;
+  answer: string;
+  citedCards: Array<{ id: string; title: string }>;
+  invalidCites: string[];
+  unverifiedNumbers: string[];
+  gapId: string | null;
+  createdAt: Date;
+}
+
+/** 问答来源（只读）：引用卡片 + 越界引用 + 未核实数字 */
+export async function listQaLogs(context: UserContext, limit = 50): Promise<QaLogView[]> {
+  return withUserContext(context, async (client) => {
+    const { rows } = await client.query<{
+      id: string;
+      question: string;
+      answer: string;
+      invalid_cites: string[];
+      unverified_numbers: string[];
+      gap_id: string | null;
+      created_at: Date;
+      cited: Array<{ id: string; title: string }> | null;
+    }>(
+      `select q.id, q.question, q.answer, q.invalid_cites, q.unverified_numbers, q.gap_id, q.created_at,
+              (select coalesce(json_agg(json_build_object('id', c.id, 'title', c.title) order by c.title), '[]'::json)
+                 from knowledge_cards c
+                where c.id = any(q.cited_card_ids)) as cited
+         from qa_logs q
+        order by q.created_at desc
+        limit $1`,
+      [Math.min(Math.max(limit, 1), 200)],
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      question: row.question,
+      answer: row.answer,
+      citedCards: row.cited ?? [],
+      invalidCites: row.invalid_cites,
+      unverifiedNumbers: row.unverified_numbers,
+      gapId: row.gap_id,
+      createdAt: row.created_at,
+    }));
+  });
+}

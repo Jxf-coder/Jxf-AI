@@ -4,14 +4,26 @@ import { revalidatePath } from "next/cache";
 
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
+import { patchCards, type CardMetaPatch } from "@/lib/knowledge/cards";
+import { addGap, closeGap, reopenGap } from "@/lib/knowledge/gaps";
 import { revokeIngestRun } from "@/lib/knowledge/ingest";
 import { answerQuestion, type QaAnswer } from "@/lib/knowledge/qa";
-import { runRegression, seedRegressionQuestions } from "@/lib/knowledge/regression";
+import {
+  addRegressionQuestion,
+  removeRegressionQuestion,
+  runRegression,
+  seedRegressionQuestions,
+} from "@/lib/knowledge/regression";
 import { toPermissionMessage } from "@/lib/permissions/guard";
 
 export interface ActionResult {
   ok: boolean;
   message: string;
+}
+
+async function resolveCurrentContext() {
+  const session = await requireSession();
+  return resolveUserContext(session.userId);
 }
 
 export interface AskResult {
@@ -178,6 +190,73 @@ export async function loadRunDetailAction(runId: string): Promise<RunDetailResul
       return { ok: false, message: "批次不存在或无权查看" };
     }
     return { ok: true, detail };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+export async function addGapAction(question: string): Promise<ActionResult> {
+  try {
+    await addGap(await resolveCurrentContext(), question);
+    revalidatePath("/knowledge");
+    return { ok: true, message: "已记入知识缺口" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+async function setGapStatusAction(gapId: string, close: boolean): Promise<ActionResult> {
+  try {
+    const context = await resolveCurrentContext();
+    if (close) {
+      await closeGap(context, gapId);
+    } else {
+      await reopenGap(context, gapId);
+    }
+    revalidatePath("/knowledge");
+    return { ok: true, message: close ? "已标记为已补" : "已重开" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+export async function closeGapAction(gapId: string): Promise<ActionResult> {
+  return setGapStatusAction(gapId, true);
+}
+
+export async function reopenGapAction(gapId: string): Promise<ActionResult> {
+  return setGapStatusAction(gapId, false);
+}
+
+export async function addRegressionQuestionAction(question: string): Promise<ActionResult> {
+  try {
+    await addRegressionQuestion(await resolveCurrentContext(), question);
+    revalidatePath("/knowledge");
+    return { ok: true, message: "已加入题集" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+export async function removeRegressionQuestionAction(questionId: string): Promise<ActionResult> {
+  try {
+    await removeRegressionQuestion(await resolveCurrentContext(), questionId);
+    revalidatePath("/knowledge");
+    return { ok: true, message: "已删除" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 条目四字段：来源 / 版本 / 负责人 / 有效期（写入 extra jsonb） */
+export async function patchCardMetaAction(cardId: string, patch: CardMetaPatch): Promise<ActionResult> {
+  try {
+    const result = await patchCards(await resolveCurrentContext(), [cardId], patch);
+    revalidatePath("/knowledge");
+    if (result.failed.length > 0) {
+      return { ok: false, message: result.failed[0].reason };
+    }
+    return { ok: true, message: "已保存" };
   } catch (error) {
     return { ok: false, message: toPermissionMessage(error) };
   }
