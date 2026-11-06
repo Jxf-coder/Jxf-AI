@@ -16,7 +16,10 @@ export interface AiEnvConfig {
   enabled: boolean;
   baseUrl: string;
   apiKey: string;
+  /** 深度推理模型：顾问问答、复杂检索生成 */
   chatModel: string;
+  /** 高频轻量模型：文档巡读抽取、蒸馏建卡、摘要 */
+  fastModel: string;
   timeoutMs: number;
   topK: number;
   maxTokens: number;
@@ -122,7 +125,10 @@ function readAiConfig(): AiEnvConfig {
     enabled: readOptional("JXF_AI_ENABLED", "false") === "true" && apiKey !== "",
     baseUrl: readOptional("JXF_AI_BASE_URL", "https://api.openai.com/v1").replace(/\/+$/, ""),
     apiKey,
-    chatModel: readOptional("JXF_AI_CHAT_MODEL", "gpt-4o-mini"),
+    // 深度推理（pro）：问答、复杂检索生成；JXF_AI_CHAT_MODEL 为向后兼容旧名
+    chatModel: readOptional("JXF_AI_MODEL_PRO", readOptional("JXF_AI_CHAT_MODEL", "deepseek-v4.1-pro")),
+    // 高频轻量（flash）：巡读抽取、蒸馏建卡、摘要
+    fastModel: readOptional("JXF_AI_MODEL_FLASH", "deepseek-v4.1-flash"),
     timeoutMs: readOptionalInt("JXF_AI_TIMEOUT_MS", 30_000),
     topK: readOptionalInt("JXF_AI_TOP_K", 6),
     maxTokens: readOptionalInt("JXF_AI_MAX_TOKENS", 1024),

@@ -16,7 +16,10 @@ export interface ChatMessage {
 export interface AiStatus {
   chatEnabled: boolean;
   embeddingEnabled: boolean;
+  /** 深度推理模型（问答） */
   chatModel: string;
+  /** 高频轻量模型（巡读抽取 / 蒸馏） */
+  fastModel: string;
   embeddingModel: string;
 }
 
@@ -26,6 +29,7 @@ export function aiStatus(): AiStatus {
     chatEnabled: ai.enabled,
     embeddingEnabled: ai.embedding.apiKey !== "",
     chatModel: ai.chatModel,
+    fastModel: ai.fastModel,
     embeddingModel: ai.embedding.model,
   };
 }
@@ -101,23 +105,33 @@ export async function embedTexts(texts: string[]): Promise<number[][] | null> {
 }
 
 /**
+ * 模型分工档位：
+ * - deep：深度推理，顾问问答、复杂检索生成（pro）
+ * - fast：高频轻量，巡读抽取、蒸馏建卡、摘要（flash）
+ */
+export type ChatTier = "deep" | "fast";
+
+/**
  * 单轮问答生成。返回 null 表示未启用或调用失败。
  */
 export async function chatCompletion(
   messages: ChatMessage[],
-  options: { temperature?: number; maxTokens?: number } = {},
+  options: { temperature?: number; maxTokens?: number; tier?: ChatTier } = {},
 ): Promise<string | null> {
   const ai = loadEnv().ai;
   if (!ai.enabled) {
     return null;
   }
 
+  const tier: ChatTier = options.tier ?? "deep";
+  const model = tier === "fast" ? ai.fastModel : ai.chatModel;
+
   try {
     const payload = (await postJson(
       `${ai.baseUrl}/chat/completions`,
       ai.apiKey,
       {
-        model: ai.chatModel,
+        model,
         messages,
         temperature: options.temperature ?? 0.2,
         max_tokens: options.maxTokens ?? ai.maxTokens,
@@ -128,7 +142,7 @@ export async function chatCompletion(
     const content = payload.choices?.[0]?.message?.content?.trim();
     return content ? content : null;
   } catch (error) {
-    log("warn", "ai_chat_failed", { error: errorMessage(error), model: ai.chatModel });
+    log("warn", "ai_chat_failed", { error: errorMessage(error), model, tier });
     return null;
   }
 }

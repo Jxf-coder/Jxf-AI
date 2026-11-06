@@ -127,7 +127,7 @@ export async function answerQuestion(context: UserContext, rawQuestion: string):
           { role: "system", content: buildSystemPrompt() },
           { role: "user", content: buildUserPrompt(question, recalled) },
         ],
-        { temperature: 0.1 },
+        { temperature: 0.1, tier: "deep" },
       )
     : null;
 

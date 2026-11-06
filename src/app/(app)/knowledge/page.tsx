@@ -139,7 +139,10 @@ export default async function KnowledgePage({
           向量检索 · {ai.embeddingEnabled ? `${ai.embeddingModel} 已启用` : "未配置（仅关键词）"}
         </span>
         <span className={ai.chatEnabled ? badge("ok") : badge("warn")}>
-          问答生成 · {ai.chatEnabled ? ai.chatModel : "未启用"}
+          顾问问答 · {ai.chatEnabled ? ai.chatModel : "未启用"}
+        </span>
+        <span className={ai.chatEnabled ? badge("ok") : badge("warn")}>
+          巡读抽取 · {ai.chatEnabled ? ai.fastModel : "未启用"}
         </span>
       </div>
 

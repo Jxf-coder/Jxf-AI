@@ -596,6 +596,8 @@ async function main() {
   );
 
   // 19. 单轮 RAG：无 AI 时退化为检索结果；未命中沉淀知识缺口
+  // 门禁不依赖外部 AI：强制关闭生成通道，保证断言可重复、不产生 API 费用
+  process.env.JXF_AI_ENABLED = "false";
   process.env.APP_DATABASE_URL = process.env.APP_DATABASE_URL ?? APP_URL;
   process.env.S3_ENDPOINT = process.env.S3_ENDPOINT ?? "http://127.0.0.1:9000";
   process.env.S3_BUCKET = process.env.S3_BUCKET ?? process.env.MINIO_BUCKET ?? "jxf-assets";

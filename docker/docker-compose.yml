@@ -177,7 +177,10 @@ services:
       JXF_AI_ENABLED: ${JXF_AI_ENABLED:-false}
       JXF_AI_BASE_URL: ${JXF_AI_BASE_URL:-https://api.openai.com/v1}
       JXF_AI_API_KEY: ${JXF_AI_API_KEY:-}
-      JXF_AI_CHAT_MODEL: ${JXF_AI_CHAT_MODEL:-gpt-4o-mini}
+      # 深度推理模型（顾问问答 / 复杂检索生成）
+      JXF_AI_MODEL_PRO: ${JXF_AI_MODEL_PRO:-deepseek-v4.1-pro}
+      # 高频轻量模型（文档巡读、抽取、蒸馏建卡、摘要）
+      JXF_AI_MODEL_FLASH: ${JXF_AI_MODEL_FLASH:-deepseek-v4.1-flash}
       JXF_AI_TIMEOUT_MS: ${JXF_AI_TIMEOUT_MS:-30000}
       JXF_AI_TOP_K: ${JXF_AI_TOP_K:-6}
       JXF_AI_MAX_TOKENS: ${JXF_AI_MAX_TOKENS:-1024}

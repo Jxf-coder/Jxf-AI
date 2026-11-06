@@ -98,7 +98,7 @@ export async function distillDocument(context: UserContext, documentId: string):
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: prompt },
     ],
-    { temperature: 0.1 },
+    { temperature: 0.1, tier: "fast" },
   );
 
   if (!answer) {
