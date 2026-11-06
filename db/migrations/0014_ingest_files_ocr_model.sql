@@ -1,0 +1,1 @@
+ALTER TABLE "ingest_files" ADD COLUMN "ocr_model" text;

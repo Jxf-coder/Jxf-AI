@@ -64,6 +64,40 @@ export function splitOcrPages(raw: string): string[] {
   return pages;
 }
 
+export interface ParsedPages {
+  pages: string[];
+  hasText: boolean;
+}
+
+export interface OcrPages {
+  text: string;
+  model: string;
+}
+
+/**
+ * 合并「解析结果」与「自动 OCR 结果」——入库决策的唯一出口。
+ *
+ * 规则：
+ * - 有文本层：永远用解析结果，OCR 结果不参与（不让模型改写原生文本）；
+ * - 扫描件 + 识别成功且切出页：按 OCR 正文入库，并记录模型名；
+ * - 扫描件 + 未识别 / 识别为空：返回空页，调用方如实标 needs_ocr，绝不假装读过。
+ */
+export function mergeScannedPages(
+  parsed: ParsedPages,
+  scanned: OcrPages | null,
+): { pages: string[]; ocrModel: string | null } {
+  if (parsed.hasText) {
+    return { pages: parsed.pages, ocrModel: null };
+  }
+  if (!scanned) {
+    return { pages: [], ocrModel: null };
+  }
+  const pages = splitOcrPages(scanned.text);
+  return pages.length > 0
+    ? { pages, ocrModel: scanned.model }
+    : { pages: [], ocrModel: null };
+}
+
 /** 待 OCR 清单：只读当前账号可见范围，按上传时间倒序 */
 export async function listNeedsOcrDocuments(
   context: UserContext,

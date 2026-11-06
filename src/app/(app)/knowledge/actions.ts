@@ -123,6 +123,8 @@ export interface RunDetailFileView {
   reason: string | null;
   error: string | null;
   documentId: string | null;
+  /** 非空表示正文由视觉模型自动识别（存模型名） */
+  ocrModel: string | null;
 }
 
 export interface RunDetailView {
@@ -174,8 +176,9 @@ export async function loadRunDetailAction(runId: string): Promise<RunDetailResul
         reason: string | null;
         error: string | null;
         document_id: string | null;
+        ocr_model: string | null;
       }>(
-        `select id, source_path, decision, reason, error, document_id
+        `select id, source_path, decision, reason, error, document_id, ocr_model
            from ingest_files
           where run_id = $1
           order by created_at, source_path`,
@@ -196,6 +199,7 @@ export async function loadRunDetailAction(runId: string): Promise<RunDetailResul
           reason: file.reason,
           error: file.error,
           documentId: file.document_id,
+          ocrModel: file.ocr_model,
         })),
       } satisfies RunDetailView;
     });

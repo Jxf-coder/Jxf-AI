@@ -18,7 +18,8 @@ import {
   updateCard,
 } from "../src/lib/knowledge/cards.ts";
 import { addCardEvidence, removeCardEvidence } from "../src/lib/knowledge/card-evidence.ts";
-import { submitOcrText } from "../src/lib/knowledge/ocr.ts";
+import { mergeScannedPages, submitOcrText } from "../src/lib/knowledge/ocr.ts";
+import { parseDocument } from "../src/lib/knowledge/parse.ts";
 import { verifyQuoteInChunk } from "../src/lib/knowledge/evidence.ts";
 import { answerQuestion } from "../src/lib/knowledge/qa.ts";
 import { runRegression, seedRegressionQuestions } from "../src/lib/knowledge/regression.ts";
@@ -1235,6 +1236,75 @@ async function main() {
     return rows[0].count;
   });
   check("OCR 补录：审计已落库", ocrAudit === 1, `count=${ocrAudit}`);
+
+  // 25f. 自动 OCR：图片解析与「识别结果 / 回落待补录」的入库决策（纯函数，不依赖外网）
+  const parsedImage = await parseDocument(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), "image/png", "scan.png");
+  check(
+    "自动 OCR：图片不产生文本层，交给识别通道",
+    parsedImage.pages.length === 0 && parsedImage.hasText === false,
+    JSON.stringify(parsedImage),
+  );
+
+  const mergedNative = mergeScannedPages(
+    { pages: ["原生文本层正文"], hasText: true },
+    { text: "【第 1 页】\n模型改写后的正文", model: "gemini-test" },
+  );
+  check(
+    "自动 OCR：有文本层时不采用识别结果",
+    mergedNative.pages.length === 1 &&
+      mergedNative.pages[0] === "原生文本层正文" &&
+      mergedNative.ocrModel === null,
+    JSON.stringify(mergedNative),
+  );
+
+  const mergedScan = mergeScannedPages(
+    { pages: [], hasText: false },
+    {
+      text: "【第 1 页】\n设备点检必须在开机前完成。\n【第 2 页】\n点检记录保存三年。",
+      model: "gemini-test",
+    },
+  );
+  check(
+    "自动 OCR：识别成功后按页入库并记录模型",
+    mergedScan.pages.length === 2 && mergedScan.ocrModel === "gemini-test",
+    JSON.stringify(mergedScan),
+  );
+
+  const mergedFailed = mergeScannedPages({ pages: [], hasText: false }, null);
+  check(
+    "自动 OCR：识别失败回落待补录（不生成正文）",
+    mergedFailed.pages.length === 0 && mergedFailed.ocrModel === null,
+    JSON.stringify(mergedFailed),
+  );
+
+  const mergedEmpty = mergeScannedPages(
+    { pages: [], hasText: false },
+    { text: "   ", model: "gemini-test" },
+  );
+  check(
+    "自动 OCR：识别结果为空不写入正文",
+    mergedEmpty.pages.length === 0 && mergedEmpty.ocrModel === null,
+    JSON.stringify(mergedEmpty),
+  );
+
+  const mergedSingle = mergeScannedPages(
+    { pages: [], hasText: false },
+    { text: "没有分页标记的整篇正文", model: "gemini-test" },
+  );
+  check(
+    "自动 OCR：无分页标记时整篇记一页",
+    mergedSingle.pages.length === 1 && mergedSingle.ocrModel === "gemini-test",
+    JSON.stringify(mergedSingle),
+  );
+
+  const ocrColumn = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      `select data_type from information_schema.columns
+        where table_schema = 'public' and table_name = 'ingest_files' and column_name = 'ocr_model'`,
+    );
+    return rows[0]?.data_type ?? "";
+  });
+  check("自动 OCR：批次明细可记录识别模型", ocrColumn === "text", `type=${ocrColumn || "missing"}`);
 
   // 26. 卡片回收站：作废进 99-回收站、可恢复、可彻底删除
   const collectTrashIds = (workspace) =>

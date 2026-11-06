@@ -59,6 +59,8 @@ export const ingestFiles = pgTable(
     error: text("error"),
     /** documents.id：解析成功后回填；不建外键，避免与 documents 表互相依赖 */
     documentId: uuid("document_id"),
+    /** 非空表示正文由视觉模型自动识别（存模型名），用于批次明细区分「自动 OCR / 待人工」 */
+    ocrModel: text("ocr_model"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("ingest_files_run_decision_idx").on(table.runId, table.decision)],

@@ -57,6 +57,17 @@ function decisionTone(decision: string): "ok" | "warn" | "error" | "muted" {
   return "muted";
 }
 
+/** 批次明细的处置标签：自动 OCR 成功与待人工补录必须一眼可分 */
+function fileLabel(file: RunDetailView["files"][number]): string {
+  if (file.ocrModel) return "已自动 OCR";
+  if (file.decision === "ask") return "待补录";
+  return DECISION_LABEL[file.decision] ?? file.decision;
+}
+
+function fileTone(file: RunDetailView["files"][number]): "ok" | "warn" | "error" | "muted" {
+  return file.ocrModel ? "ok" : decisionTone(file.decision);
+}
+
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", {
     timeZone: "Asia/Shanghai",
@@ -225,7 +236,7 @@ export function ScoutTab({ runs, canWrite, needsOcr }: ScoutTabProps) {
         <SectionCard
           title={`待 OCR · ${needsOcr.length}`}
           right={<span className={badge("warn")}>扫描件</span>}
-          desc="没有文本层的扫描件不会生成切片。点「补录正文」粘贴 OCR 结果，保存后自动重建切片与向量。"
+          desc="扫描件会先尝试自动识别；仍没有文本层时才进入这里。点「补录正文」粘贴 OCR 结果，保存后自动重建切片与向量。"
         >
           <ul className="grid list-none gap-1.5 p-0">
             {needsOcr.map((doc) => (
@@ -487,8 +498,10 @@ export function ScoutTab({ runs, canWrite, needsOcr }: ScoutTabProps) {
                           key={file.id}
                           className="flex flex-wrap items-center gap-2 border-t border-black/[0.04] py-1.5 text-[11px]"
                         >
-                          <Pill tone={decisionTone(file.decision)}>
-                            {DECISION_LABEL[file.decision] ?? file.decision}
+                          <Pill tone={fileTone(file)}>
+                            <span title={file.ocrModel ? `识别模型：${file.ocrModel}` : undefined}>
+                              {fileLabel(file)}
+                            </span>
                           </Pill>
                           <span className="min-w-0 flex-1 truncate text-zinc-900" title={file.sourcePath}>
                             {file.sourcePath}

@@ -18,7 +18,7 @@ import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
 import { chunkPages, type TextChunk } from "@/lib/knowledge/chunk";
-import { splitOcrPages } from "@/lib/knowledge/ocr";
+import { mergeScannedPages } from "@/lib/knowledge/ocr";
 import {
   DEFAULT_DOCUMENT_FOLDER,
   isFolderKey,
@@ -67,6 +67,8 @@ export interface IngestFileResult {
   documentId?: string;
   chunkCount?: number;
   embedded?: boolean;
+  /** 非空表示正文来自自动 OCR（模型名） */
+  ocrModel?: string;
 }
 
 export interface IngestCounts {
@@ -185,18 +187,10 @@ export async function ingestUpload(
       const parsed = await parseDocument(input.bytes, input.mime, input.name);
 
       // 扫描件 / 图片：先尝试 Gemini 视觉 OCR，失败再如实标 needs_ocr
-      let pages = parsed.pages;
-      let ocrModel: string | null = null;
-      if (!parsed.hasText) {
-        const scanned = await ocrDocument(input.bytes, input.mime, input.name);
-        if (scanned) {
-          const ocrPages = splitOcrPages(scanned.text);
-          if (ocrPages.length > 0) {
-            pages = ocrPages;
-            ocrModel = scanned.model;
-          }
-        }
-      }
+      const scanned = parsed.hasText
+        ? null
+        : await ocrDocument(input.bytes, input.mime, input.name);
+      const { pages, ocrModel } = mergeScannedPages(parsed, scanned);
 
       if (pages.length === 0) {
         prepared.push({
@@ -427,9 +421,9 @@ export async function ingestUpload(
             ? `扫描件已自动 OCR（${item.ocrModel}）`
             : null;
       await client.query(
-        `insert into ingest_files (run_id, asset_id, source_path, decision, reason, document_id)
-         values ($1, $2, $3, $4, $5, $6)`,
-        [createdRunId, asset.rows[0].id, item.input.name, decision, reason, documentId],
+        `insert into ingest_files (run_id, asset_id, source_path, decision, reason, document_id, ocr_model)
+         values ($1, $2, $3, $4, $5, $6, $7)`,
+        [createdRunId, asset.rows[0].id, item.input.name, decision, reason, documentId, item.ocrModel],
       );
 
       const embedded = Boolean(item.embeddings);
@@ -455,6 +449,7 @@ export async function ingestUpload(
         documentId,
         chunkCount: item.chunks.length,
         embedded,
+        ocrModel: item.ocrModel ?? undefined,
       });
     }
 
