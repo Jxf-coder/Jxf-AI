@@ -1,6 +1,8 @@
 # 依赖与构建产物
 node_modules/
 .next/
+# 知识库本地分级存储：用户上传的原始文件，不入仓库
+public/uploads/
 out/
 *.tsbuildinfo
 

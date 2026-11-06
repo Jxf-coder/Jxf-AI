@@ -299,8 +299,11 @@ export async function createManualCard(context: UserContext, input: CreateCardIn
     const card = await client.query<{ id: string }>(
       `insert into knowledge_cards
          (tenant_id, department_id, kind, title, body, status, origin, human_edited, rev,
-          category, product, external_ok, valid_until, extra)
-       values ($1, $2, $3, $4, $5, 'pending', 'manual', true, 1, $6, $7, $8, $9, $10::jsonb)
+          category, product, external_ok, valid_until, extra, role_key)
+       values ($1, $2, $3, $4, $5, 'pending', 'manual', true, 1, $6, $7, $8, $9, $10::jsonb,
+               coalesce((select nullif(trim(m.position), '') from memberships m
+                          where m.user_id = $11 and m.department_id = $2 and m.status = 'active'
+                          limit 1), '未分配岗位'))
        returning id`,
       [
         context.tenantId,
@@ -313,6 +316,7 @@ export async function createManualCard(context: UserContext, input: CreateCardIn
         input.externalOk ?? false,
         normText(input.validUntil),
         JSON.stringify(extra),
+        context.userId,
       ],
     );
 

@@ -9,6 +9,7 @@ import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { Pill } from "@/components/knowledge/Pill";
 import { SectionCard } from "@/components/knowledge/SectionCard";
 import { badge, btnBlue, btnGhost, formGrid, input, linkBtn, meta } from "@/components/knowledge/tokens";
+import { DEFAULT_DOCUMENT_FOLDER, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
 
 import { loadRunDetailAction, revokeRunAction, type RunDetailView } from "../actions";
 import { filesFromDataTransfer, filesFromInput, type DroppedFile } from "./file-drop";
@@ -77,6 +78,7 @@ export function ScoutTab({ runs, canWrite }: ScoutTabProps) {
 
   const [goal, setGoal] = useState("");
   const [maxFiles, setMaxFiles] = useState("40");
+  const [folder, setFolder] = useState<string>(DEFAULT_DOCUMENT_FOLDER);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number; name: string } | null>(null);
   const [message, setMessage] = useState("");
@@ -138,6 +140,7 @@ export function ScoutTab({ runs, canWrite }: ScoutTabProps) {
         const body = new FormData();
         body.set("file", item.file);
         body.set("path", item.path);
+        body.set("folder", folder);
         if (runId) body.set("runId", runId);
         if (goal.trim()) body.set("goal", goal.trim());
 
@@ -233,6 +236,19 @@ export function ScoutTab({ runs, canWrite }: ScoutTabProps) {
                   onChange={(event) => setGoal(event.target.value)}
                 />
               </Field>
+              <Field label="目标目录">
+                <select
+                  className={input}
+                  value={folder}
+                  onChange={(event) => setFolder(event.target.value)}
+                >
+                  {STANDARD_FOLDERS.map((item) => (
+                    <option key={item.key} value={item.key}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
               <Field label="本次最多上传">
                 <input
                   className={input}
@@ -243,6 +259,9 @@ export function ScoutTab({ runs, canWrite }: ScoutTabProps) {
                 />
               </Field>
             </div>
+            <p className={`${meta} mt-2`}>
+              落盘路径：public/uploads/部门/岗位/目录/文件名；岗位取上传时所在部门的在职岗位。
+            </p>
 
             <div
               className={`mt-3 flex min-h-[180px] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-6 text-center transition-colors ${

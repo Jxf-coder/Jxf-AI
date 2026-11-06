@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 import { errorMessage, log } from "@/lib/logger";
-import { getObject } from "@/lib/storage/s3";
+import { getObject } from "@/lib/storage/local";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

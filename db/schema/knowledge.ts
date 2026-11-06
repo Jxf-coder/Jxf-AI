@@ -39,8 +39,12 @@ export const knowledgeCards = pgTable(
     origin: cardOrigin("origin").notNull(),
     product: text("product"),
     category: text("category"),
-    /** shared | admins */
-    visibility: text("visibility").notNull().default("shared"),
+    /** 冻结生成时的岗位（memberships.position）；用于目录树第二层 */
+    roleKey: text("role_key"),
+    /** 10 个标准目录的 key，默认落在「02-知识卡片」 */
+    folderKey: text("folder_key").notNull().default("02-cards"),
+    /** department | shared；此前该列未被 RLS 使用，0010 起真正生效 */
+    visibility: text("visibility").notNull().default("department"),
     /** 是否允许对外（送外部模型 / 导出） */
     externalOk: boolean("external_ok").notNull().default(false),
     validUntil: date("valid_until"),
@@ -58,6 +62,7 @@ export const knowledgeCards = pgTable(
   (table) => [
     index("knowledge_cards_department_status_idx").on(table.departmentId, table.status),
     index("knowledge_cards_ingest_run_idx").on(table.ingestRunId),
+    index("knowledge_cards_folder_idx").on(table.departmentId, table.roleKey, table.folderKey),
     index("knowledge_cards_extra_gin_idx").using("gin", table.extra),
   ],
 );

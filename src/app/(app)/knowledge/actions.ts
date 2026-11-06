@@ -8,6 +8,7 @@ import { patchCards, type CardMetaPatch } from "@/lib/knowledge/cards";
 import { addGap, closeGap, reopenGap } from "@/lib/knowledge/gaps";
 import { revokeIngestRun } from "@/lib/knowledge/ingest";
 import { answerQuestion, type QaAnswer } from "@/lib/knowledge/qa";
+import { setDocumentVisibility } from "@/lib/knowledge/workspace";
 import {
   addRegressionQuestion,
   removeRegressionQuestion,
@@ -257,6 +258,20 @@ export async function patchCardMetaAction(cardId: string, patch: CardMetaPatch):
       return { ok: false, message: result.failed[0].reason };
     }
     return { ok: true, message: "已保存" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 文档共享开关：只改 visibility，写仍限本部门 */
+export async function setDocumentVisibilityAction(
+  documentId: string,
+  shared: boolean,
+): Promise<ActionResult> {
+  try {
+    await setDocumentVisibility(await resolveCurrentContext(), documentId, shared);
+    revalidatePath("/knowledge");
+    return { ok: true, message: shared ? "已加入公司资料（共享）" : "已收回为部门内可见" };
   } catch (error) {
     return { ok: false, message: toPermissionMessage(error) };
   }

@@ -177,8 +177,9 @@ export async function distillDocument(context: UserContext, documentId: string):
       const card = await client.query<{ id: string }>(
         `insert into knowledge_cards
            (tenant_id, department_id, kind, title, body, status, origin, human_edited,
-            conflict_with, ingest_run_id, rev)
-         values ($1, $2, $3, $4, $5, 'pending', 'distill', false, $6::uuid[], $7, 1)
+            conflict_with, ingest_run_id, rev, role_key)
+         values ($1, $2, $3, $4, $5, 'pending', 'distill', false, $6::uuid[], $7, 1,
+                 (select role_key from documents where id = $8::uuid))
          returning id`,
         [
           context.tenantId,
@@ -188,6 +189,7 @@ export async function distillDocument(context: UserContext, documentId: string):
           body,
           conflictIds,
           loaded.document.ingest_run_id,
+          loaded.document.id,
         ],
       );
       const cardId = card.rows[0].id;

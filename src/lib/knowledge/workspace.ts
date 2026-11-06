@@ -3,12 +3,15 @@
  *
  * 红线：
  * - 全部在 withUserContext 的 jxf_app 连接内执行，隔离只由 RLS 决定；
- * - 只读，不写库，不改任何既有服务；
- * - 左侧目录、文档正文、图谱关系各自独立取数，互不依赖。
+ * - 只读（setDocumentVisibility 除外，它复用既有写权限校验）；
+ * - 目录树按「共享区 / 部门 → 岗位 → 10 个标准目录」组装，空目录也常驻。
  */
 
+import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
+import { folderLabel, STANDARD_FOLDERS, UNASSIGNED_ROLE } from "@/lib/knowledge/folders";
+import { requireContextPermission } from "@/lib/permissions/server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -16,167 +19,187 @@ export function isUuid(value: string | undefined): value is string {
   return typeof value === "string" && UUID_RE.test(value);
 }
 
-export interface TreeCard {
+export interface TreeItem {
+  kind: "card" | "document";
   id: string;
   title: string;
   status: string;
-  category: string;
 }
 
-export interface TreeDocument {
-  id: string;
-  title: string;
-  status: string;
-  mime: string;
-  pageCount: number | null;
-  charCount: number;
-}
-
-export interface TreeRun {
-  id: string;
+export interface TreeFolder {
+  key: string;
   label: string;
-  createdAt: Date | null;
-  documents: TreeDocument[];
+  items: TreeItem[];
+}
+
+export interface TreeRole {
+  name: string;
+  folders: TreeFolder[];
 }
 
 export interface TreeDepartment {
   id: string;
   name: string;
-  runs: TreeRun[];
+  roles: TreeRole[];
 }
 
 export interface WorkspaceTree {
-  cardGroups: Array<{ category: string; cards: TreeCard[] }>;
+  /** 公司资料（共享）区：10 个标准目录常驻 */
+  shared: { folders: TreeFolder[]; count: number };
   departments: TreeDepartment[];
-  pending: {
-    needsOcr: TreeDocument[];
-    failed: TreeDocument[];
-    pendingCards: TreeCard[];
-  };
-  totals: { cards: number; documents: number; pending: number };
+  totals: { items: number; shared: number; pending: number };
 }
 
-interface CardRow {
+interface NodeRow {
   id: string;
   title: string;
   status: string;
-  category: string | null;
-}
-
-interface DocumentRow {
-  id: string;
-  title: string;
-  status: string;
-  mime: string;
-  page_count: number | null;
-  char_count: number;
-  ingest_run_id: string | null;
   department_id: string;
-  department_name: string;
-  run_goal: string | null;
-  run_created_at: Date | null;
+  role_key: string | null;
+  folder_key: string;
+  visibility: string;
 }
 
-function toCard(row: CardRow): TreeCard {
-  return {
-    id: row.id,
-    title: row.title,
-    status: row.status,
-    category: (row.category ?? "").trim() || "未分类",
-  };
+interface DepartmentRow {
+  id: string;
+  name: string;
 }
 
-function toDocument(row: DocumentRow): TreeDocument {
-  return {
-    id: row.id,
-    title: row.title,
-    status: row.status,
-    mime: row.mime,
-    pageCount: row.page_count,
-    charCount: row.char_count,
-  };
+interface RoleRow {
+  department_id: string;
+  role: string;
 }
 
-function sortByCategory(groups: Array<{ category: string; cards: TreeCard[] }>) {
-  return groups.sort((a, b) => {
-    if (a.category === "未分类") return 1;
-    if (b.category === "未分类") return -1;
-    return a.category.localeCompare(b.category, "zh");
+function emptyFolders(): TreeFolder[] {
+  return STANDARD_FOLDERS.map((folder) => ({
+    key: folder.key,
+    label: folder.label,
+    items: [] as TreeItem[],
+  }));
+}
+
+function folderMap(): Map<string, TreeFolder> {
+  return new Map(emptyFolders().map((folder) => [folder.key, folder]));
+}
+
+function roleName(value: string | null): string {
+  return (value ?? "").trim() || UNASSIGNED_ROLE;
+}
+
+function sortRoles(names: string[]): string[] {
+  return names.sort((a, b) => {
+    if (a === UNASSIGNED_ROLE) return 1;
+    if (b === UNASSIGNED_ROLE) return -1;
+    return a.localeCompare(b, "zh");
   });
 }
 
-/** 左侧目录：知识卡按分类、文档按「部门 → 入库批次」、待处理按状态归集 */
+/** 左侧目录：共享区 + 部门 → 岗位 → 10 个标准目录 */
 export async function loadWorkspaceTree(context: UserContext): Promise<WorkspaceTree> {
   return withUserContext(context, async (client) => {
-    const [cards, documents] = await Promise.all([
-      client.query<CardRow>(
-        `select id, title, status, category
+    const [departments, roles, documents, cards] = await Promise.all([
+      client.query<DepartmentRow>(`select id, name from departments order by sort_order, name`),
+      client.query<RoleRow>(
+        `select distinct department_id, coalesce(nullif(trim(position), ''), $1) as role
+           from memberships
+          where status = 'active'`,
+        [UNASSIGNED_ROLE],
+      ),
+      client.query<NodeRow>(
+        `select id, title, status, department_id, role_key, folder_key, visibility
+           from documents
+          order by created_at desc
+          limit 500`,
+      ),
+      client.query<NodeRow>(
+        `select id, title, status, department_id, role_key, folder_key, visibility
            from knowledge_cards
           where status in ('pending', 'confirmed')
-          order by coalesce(category, '未分类'), title
-          limit 300`,
-      ),
-      client.query<DocumentRow>(
-        `select d.id, d.title, d.status, d.mime, d.page_count, d.char_count,
-                d.ingest_run_id, d.department_id,
-                dep.name as department_name,
-                r.goal as run_goal, r.created_at as run_created_at
-           from documents d
-           join departments dep on dep.id = d.department_id
-           left join ingest_runs r on r.id = d.ingest_run_id
-          order by dep.name, r.created_at desc nulls last, d.created_at desc
-          limit 300`,
+          order by created_at desc
+          limit 500`,
       ),
     ]);
 
-    const cardBuckets = new Map<string, TreeCard[]>();
-    for (const row of cards.rows) {
-      const card = toCard(row);
-      const bucket = cardBuckets.get(card.category) ?? [];
-      bucket.push(card);
-      cardBuckets.set(card.category, bucket);
-    }
+    const sharedFolders = folderMap();
+    const deptTree = new Map<string, { name: string; roles: Map<string, Map<string, TreeFolder>> }>();
 
-    const departments = new Map<string, { id: string; name: string; runs: Map<string, TreeRun> }>();
-    for (const row of documents.rows) {
+    function ensureRole(departmentId: string, name: string) {
       const department =
-        departments.get(row.department_id) ??
-        { id: row.department_id, name: row.department_name, runs: new Map<string, TreeRun>() };
-      departments.set(row.department_id, department);
-
-      const runKey = row.ingest_run_id ?? "unassigned";
-      const run =
-        department.runs.get(runKey) ??
+        deptTree.get(departmentId) ??
         {
-          id: runKey,
-          label: row.run_goal?.trim() || (row.ingest_run_id ? "未命名批次" : "未归批次"),
-          createdAt: row.run_created_at,
-          documents: [] as TreeDocument[],
+          name: departments.rows.find((row) => row.id === departmentId)?.name ?? "未命名部门",
+          roles: new Map<string, Map<string, TreeFolder>>(),
         };
-      run.documents.push(toDocument(row));
-      department.runs.set(runKey, run);
+      deptTree.set(departmentId, department);
+
+      const role = department.roles.get(name) ?? folderMap();
+      department.roles.set(name, role);
+      return role;
     }
 
-    const allDocuments = documents.rows.map(toDocument);
-    const allCards = cards.rows.map(toCard);
-    const pendingCards = allCards.filter((card) => card.status === "pending");
-    const needsOcr = allDocuments.filter((document) => document.status === "needs_ocr");
-    const failed = allDocuments.filter((document) => document.status === "failed");
+    // 先把「有成员但还没有资料」的部门 / 岗位也建出来，保证结构完整
+    for (const row of roles.rows) {
+      if (!departments.rows.some((department) => department.id === row.department_id)) {
+        continue;
+      }
+      ensureRole(row.department_id, roleName(row.role));
+    }
+
+    const pendingDocs: TreeItem[] = [];
+
+    function addNode(row: NodeRow, kind: "card" | "document") {
+      const item: TreeItem = { kind, id: row.id, title: row.title, status: row.status };
+      const target = row.visibility === "shared" ? sharedFolders : ensureRole(row.department_id, roleName(row.role_key));
+      const folder = target.get(row.folder_key) ?? target.get(kind === "card" ? "02-cards" : "01-original");
+      if (!folder) {
+        return;
+      }
+      folder.items.push(item);
+      if (kind === "document" && (row.status === "needs_ocr" || row.status === "failed")) {
+        pendingDocs.push(item);
+      }
+    }
+
+    for (const row of documents.rows) {
+      addNode(row, "document");
+    }
+    for (const row of cards.rows) {
+      addNode(row, "card");
+    }
+
+    const departmentsOut: TreeDepartment[] = Array.from(deptTree.entries()).map(([id, entry]) => ({
+      id,
+      name: entry.name,
+      roles: sortRoles(Array.from(entry.roles.keys())).map((name) => ({
+        name,
+        folders: STANDARD_FOLDERS.map((folder) => entry.roles.get(name)?.get(folder.key) ?? {
+          key: folder.key,
+          label: folder.label,
+          items: [],
+        }),
+      })),
+    }));
+
+    const sharedFoldersOut = STANDARD_FOLDERS.map(
+      (folder) =>
+        sharedFolders.get(folder.key) ?? { key: folder.key, label: folder.label, items: [] },
+    );
+
+    const sharedCount = sharedFoldersOut.reduce((sum, folder) => sum + folder.items.length, 0);
+    const deptCount = departmentsOut.reduce(
+      (sum, department) =>
+        sum + department.roles.reduce((roleSum, role) => roleSum + role.folders.reduce((n, f) => n + f.items.length, 0), 0),
+      0,
+    );
+    const pendingCards = cards.rows.filter((row) => row.status === "pending").length;
 
     return {
-      cardGroups: sortByCategory(
-        Array.from(cardBuckets.entries()).map(([category, list]) => ({ category, cards: list })),
-      ),
-      departments: Array.from(departments.values()).map((department) => ({
-        id: department.id,
-        name: department.name,
-        runs: Array.from(department.runs.values()),
-      })),
-      pending: { needsOcr, failed, pendingCards },
+      shared: { folders: sharedFoldersOut, count: sharedCount },
+      departments: departmentsOut,
       totals: {
-        cards: allCards.length,
-        documents: allDocuments.length,
-        pending: needsOcr.length + failed.length + pendingCards.length,
+        items: deptCount,
+        shared: sharedCount,
+        pending: pendingDocs.length + pendingCards,
       },
     };
   });
@@ -190,6 +213,11 @@ export interface DocumentContent {
   pageCount: number | null;
   charCount: number;
   departmentName: string;
+  departmentId: string;
+  roleKey: string;
+  folderKey: string;
+  folderLabel: string;
+  visibility: string;
   chunkCount: number;
   /** 切片按 ord 拼接；扫描件没有切片，返回空串 */
   text: string;
@@ -208,9 +236,14 @@ export async function loadDocumentContent(
       mime: string;
       page_count: number | null;
       char_count: number;
+      department_id: string;
+      role_key: string | null;
+      folder_key: string;
+      visibility: string;
       department_name: string;
     }>(
       `select d.id, d.title, d.status, d.mime, d.page_count, d.char_count,
+              d.department_id, d.role_key, d.folder_key, d.visibility,
               dep.name as department_name
          from documents d
          join departments dep on dep.id = d.department_id
@@ -240,10 +273,52 @@ export async function loadDocumentContent(
       mime: document.mime,
       pageCount: document.page_count,
       charCount: document.char_count,
+      departmentId: document.department_id,
       departmentName: document.department_name,
+      roleKey: roleName(document.role_key),
+      folderKey: document.folder_key,
+      folderLabel: folderLabel(document.folder_key),
+      visibility: document.visibility,
       chunkCount: chunks.rowCount ?? chunks.rows.length,
       text,
     };
+  });
+}
+
+/** 共享开关：写仍限本部门（knowledge:write），只改 visibility 一列 */
+export async function setDocumentVisibility(
+  context: UserContext,
+  documentId: string,
+  shared: boolean,
+): Promise<void> {
+  await withUserContext(context, async (client) => {
+    const { rows } = await client.query<{ department_id: string }>(
+      `select department_id from documents where id = $1`,
+      [documentId],
+    );
+    const departmentId = rows[0]?.department_id;
+    if (!departmentId) {
+      throw new Error("文档不存在或无权操作");
+    }
+
+    await requireContextPermission(client, context, "knowledge:write", {
+      kind: "department",
+      id: departmentId,
+      departmentId,
+    });
+
+    await client.query(
+      `update documents set visibility = $2 where id = $1 and department_id = $3`,
+      [documentId, shared ? "shared" : "department", departmentId],
+    );
+
+    await auditInTx(client, context, {
+      actorUserId: context.userId,
+      action: shared ? "knowledge.document_shared" : "knowledge.document_unshared",
+      targetType: "document",
+      targetId: documentId,
+      departmentId,
+    });
   });
 }
 
@@ -255,6 +330,9 @@ export interface CardDetail {
   category: string;
   product: string;
   departmentName: string;
+  roleKey: string;
+  folderKey: string;
+  folderLabel: string;
   source: string;
   evidenceCount: number;
 }
@@ -272,11 +350,14 @@ export async function loadCardDetail(
       status: string;
       category: string | null;
       product: string | null;
+      role_key: string | null;
+      folder_key: string;
       extra: Record<string, unknown> | null;
       department_name: string;
       evidence_count: string;
     }>(
-      `select c.id, c.title, c.body, c.status, c.category, c.product, c.extra,
+      `select c.id, c.title, c.body, c.status, c.category, c.product,
+              c.role_key, c.folder_key, c.extra,
               dep.name as department_name,
               (select count(*) from card_evidence e where e.card_id = c.id)::text as evidence_count
          from knowledge_cards c
@@ -300,6 +381,9 @@ export async function loadCardDetail(
       category: card.category ?? "",
       product: card.product ?? "",
       departmentName: card.department_name,
+      roleKey: roleName(card.role_key),
+      folderKey: card.folder_key,
+      folderLabel: folderLabel(card.folder_key),
       source,
       evidenceCount: Number(card.evidence_count) || 0,
     };

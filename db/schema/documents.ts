@@ -30,6 +30,12 @@ export const documents = pgTable(
     ingestRunId: uuid("ingest_run_id").references(() => ingestRuns.id, { onDelete: "set null" }),
     title: text("title").notNull(),
     mime: text("mime").notNull(),
+    /** 冻结上传时的岗位（memberships.position）；用于目录树第二层 */
+    roleKey: text("role_key"),
+    /** 10 个标准目录的 key，见 src/lib/knowledge/folders.ts */
+    folderKey: text("folder_key").notNull().default("01-original"),
+    /** department：仅本部门及下级可见；shared：全员共享区可读 */
+    visibility: text("visibility").notNull().default("department"),
     pageCount: integer("page_count"),
     charCount: integer("char_count").notNull().default(0),
     lang: text("lang").default("zh"),
@@ -40,6 +46,7 @@ export const documents = pgTable(
   (table) => [
     index("documents_department_status_idx").on(table.departmentId, table.status),
     index("documents_ingest_run_idx").on(table.ingestRunId),
+    index("documents_folder_idx").on(table.departmentId, table.roleKey, table.folderKey),
   ],
 );
 

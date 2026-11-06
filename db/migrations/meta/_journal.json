@@ -71,6 +71,13 @@
       "when": 1793873864499,
       "tag": "0009_qa_invalid_cites_text",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793949609267,
+      "tag": "0010_kb_folders_shared",
+      "breakpoints": true
     }
   ]
 }

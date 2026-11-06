@@ -8,6 +8,7 @@
  */
 
 import { createHash } from "node:crypto";
+import path from "node:path";
 
 import type { PoolClient } from "pg";
 
@@ -16,10 +17,16 @@ import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
 import { chunkPages, type TextChunk } from "@/lib/knowledge/chunk";
+import {
+  DEFAULT_DOCUMENT_FOLDER,
+  isFolderKey,
+  UNASSIGNED_ROLE,
+  type FolderKey,
+} from "@/lib/knowledge/folders";
 import { fileExtension, parseDocument, UnsupportedDocumentError } from "@/lib/knowledge/parse";
 import { errorMessage, log } from "@/lib/logger";
 import { requireContextPermission } from "@/lib/permissions/server";
-import { putObject } from "@/lib/storage/s3";
+import { putObject, uploadKey } from "@/lib/storage/local";
 
 export const MAX_FILE_BYTES = 20 * 1024 * 1024;
 export const MAX_FILES_PER_RUN = 20;
@@ -81,6 +88,8 @@ interface ExistingAsset {
 export interface IngestOptions {
   /** 追加到已有批次：逐文件上传时复用同一个 run */
   runId?: string;
+  /** 目标标准目录；缺省落「01-原始素材」 */
+  folderKey?: string;
 }
 
 export async function ingestUpload(
@@ -103,6 +112,29 @@ export async function ingestUpload(
   const results: IngestFileResult[] = [];
   const prepared: PreparedDocument[] = [];
 
+  // 0. 冻结落盘维度：部门 slug + 上传者当前岗位 + 目标标准目录
+  const scope = await withUserContext(context, async (client) => {
+    const department = await client.query<{ slug: string }>(
+      `select slug from departments where id = $1`,
+      [departmentId],
+    );
+    const membership = await client.query<{ position: string | null }>(
+      `select position from memberships
+        where user_id = $1 and department_id = $2 and status = 'active'
+        limit 1`,
+      [context.userId, departmentId],
+    );
+    return {
+      departmentSlug: department.rows[0]?.slug ?? departmentId.slice(0, 8),
+      role: (membership.rows[0]?.position ?? "").trim(),
+    };
+  });
+
+  const roleKey = scope.role || UNASSIGNED_ROLE;
+  const folderKey: FolderKey = isFolderKey(options.folderKey)
+    ? options.folderKey
+    : DEFAULT_DOCUMENT_FOLDER;
+
   // 1. 规则筛 + 解析 + 分块 + 向量化（事务外）
   for (const input of inputs) {
     const extension = fileExtension(input.name);
@@ -121,7 +153,13 @@ export async function ingestUpload(
     }
 
     const sha256 = createHash("sha256").update(input.bytes).digest("hex");
-    const storageKey = `${context.tenantId}/${departmentId}/knowledge/${sha256}${extension ? `.${extension}` : ""}`;
+    // 物理路径：public/uploads/{部门}/{岗位}/{标准目录}/{sha8}-文件名
+    const storageKey = uploadKey({
+      department: scope.departmentSlug,
+      role: roleKey,
+      folder: folderKey,
+      filename: `${sha256.slice(0, 8)}-${path.basename(input.name)}`,
+    });
 
     try {
       const parsed = await parseDocument(input.bytes, input.mime, input.name);
@@ -214,7 +252,7 @@ export async function ingestUpload(
       continue;
     }
     batchShas.add(item.sha256);
-    await putObject(item.storageKey, item.input.bytes, item.input.mime || "application/octet-stream");
+    await putObject(item.storageKey, item.input.bytes);
     fresh.push(item);
   }
 
@@ -303,8 +341,9 @@ export async function ingestUpload(
 
       const document = await client.query<{ id: string }>(
         `insert into documents
-           (tenant_id, department_id, asset_id, ingest_run_id, title, mime, page_count, char_count, status, sha256)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           (tenant_id, department_id, asset_id, ingest_run_id, title, mime, role_key, folder_key,
+            page_count, char_count, status, sha256)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          returning id`,
         [
           context.tenantId,
@@ -313,6 +352,8 @@ export async function ingestUpload(
           createdRunId,
           item.input.name,
           item.input.mime || "application/octet-stream",
+          roleKey,
+          folderKey,
           item.pageCount,
           item.charCount,
           item.status,

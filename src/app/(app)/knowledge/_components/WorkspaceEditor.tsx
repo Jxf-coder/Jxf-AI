@@ -8,6 +8,7 @@ import { btnBlue, btnGhost, fieldLabel, input, linkBtn } from "@/components/know
 import type { CardDetail, DocumentContent } from "@/lib/knowledge/workspace";
 
 import { DistillButton } from "../DistillButton";
+import { setDocumentVisibilityAction } from "../actions";
 import { createCardAction, updateCardAction } from "../cards/actions";
 
 type WorkspaceEditorProps =
@@ -40,6 +41,9 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
   const [title, setTitle] = useState(initialTitle);
   const [body, setBody] = useState(initialBody);
   const [source, setSource] = useState(initialSource);
+  const [shared, setShared] = useState(
+    props.mode === "document" ? props.document.visibility === "shared" : false,
+  );
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
 
@@ -64,6 +68,8 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
   const metaLine = isDocument
     ? [
         props.document.departmentName,
+        `角色·${props.document.roleKey}`,
+        props.document.folderLabel,
         DOC_STATUS_LABEL[props.document.status] ?? props.document.status,
         props.document.pageCount ? `${props.document.pageCount} 页` : "",
         `${props.document.charCount} 字`,
@@ -73,6 +79,8 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
         .join(" · ")
     : [
         props.card.departmentName,
+        `角色·${props.card.roleKey}`,
+        props.card.folderLabel,
         CARD_STATUS_LABEL[props.card.status] ?? props.card.status,
         props.card.category ? `分类 ${props.card.category}` : "",
         props.card.product ? `产品 ${props.card.product}` : "",
@@ -139,6 +147,29 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
             下载原件
           </a>
           <DistillButton documentId={props.document.id} disabled={!props.aiEnabled} />
+          {props.canWrite ? (
+            <button
+              type="button"
+              className={`${linkBtn} text-[11px]`}
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const result = await setDocumentVisibilityAction(props.document.id, !shared);
+                  setFailed(!result.ok);
+                  setMessage(result.message);
+                  if (result.ok) {
+                    setShared(!shared);
+                    router.refresh();
+                  }
+                })
+              }
+            >
+              {shared ? "收回共享" : "加入公司共享"}
+            </button>
+          ) : null}
+          <span className="text-[11px] text-zinc-400">
+            {shared ? "公司资料（共享） · 全员可读" : "仅本部门及下级可见"}
+          </span>
         </div>
       ) : null}
 

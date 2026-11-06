@@ -3,8 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { ChevronRightIcon, FileTextIcon, FolderIcon, LayersIcon } from "@/components/ui/icons";
-import type { TreeCard, TreeDocument, WorkspaceTree } from "@/lib/knowledge/workspace";
+import {
+  ChevronRightIcon,
+  FileTextIcon,
+  FolderIcon,
+  LayersIcon,
+} from "@/components/ui/icons";
+import type { TreeFolder, TreeItem, WorkspaceTree } from "@/lib/knowledge/workspace";
 
 interface WorkspaceTreeProps {
   tree: WorkspaceTree;
@@ -31,33 +36,40 @@ function statusDot(status: string): string {
   return "bg-zinc-400";
 }
 
-/** 左侧常驻目录：00-知识卡 / 01-文档 / 02-待处理 */
+function itemStatusLabel(item: TreeItem): string {
+  const table = item.kind === "card" ? CARD_STATUS_LABEL : DOC_STATUS_LABEL;
+  return table[item.status] ?? item.status;
+}
+
+/** 左侧常驻目录：公司资料（共享） + 部门 → 岗位 → 10 个标准目录 */
 export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
-  const [sections, setSections] = useState<Record<string, boolean>>({
-    cards: true,
-    docs: true,
-    pending: false,
-  });
-  const [groups, setGroups] = useState<Record<string, boolean>>({});
+  const firstDepartment = tree.departments[0];
+  const firstRole = firstDepartment?.roles[0];
 
-  const isOpen = (key: string, fallback = false) => groups[key] ?? fallback;
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => ({
+    "shared": true,
+    ...(firstDepartment ? { [`dep:${firstDepartment.id}`]: true } : {}),
+    ...(firstDepartment && firstRole ? { [`role:${firstDepartment.id}:${firstRole.name}`]: true } : {}),
+  }));
 
-  function toggleSection(key: string) {
-    setSections((current) => ({ ...current, [key]: !current[key] }));
+  const isOpen = (key: string, fallback = false) => expanded[key] ?? fallback;
+
+  function toggle(key: string) {
+    setExpanded((current) => ({ ...current, [key]: !current[key] }));
   }
 
-  function toggleGroup(key: string) {
-    setGroups((current) => ({ ...current, [key]: !current[key] }));
-  }
-
-  function cardRow(card: TreeCard, depth: number) {
-    const active = selected?.kind === "card" && selected.id === card.id;
+  function itemRow(item: TreeItem, depth: number) {
+    const active = selected?.kind === (item.kind === "card" ? "card" : "doc") && selected.id === item.id;
+    const href =
+      item.kind === "card"
+        ? `/knowledge?tab=scout&card=${item.id}`
+        : `/knowledge?tab=scout&doc=${item.id}`;
     return (
       <Link
-        key={card.id}
-        href={`/knowledge?tab=scout&card=${card.id}`}
+        key={`${item.kind}:${item.id}`}
+        href={href}
         scroll={false}
-        title={`${card.title} · ${CARD_STATUS_LABEL[card.status] ?? card.status}`}
+        title={`${item.title} · ${itemStatusLabel(item)}`}
         aria-current={active ? "true" : undefined}
         className={`flex items-center gap-2 rounded-lg py-1.5 pr-2 text-[12px] transition-colors ${
           active
@@ -66,50 +78,55 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
         }`}
         style={{ paddingLeft: `${depth * 10 + 6}px` }}
       >
-        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot(card.status)}`} />
-        <span className="truncate">{card.title}</span>
+        {item.kind === "card" ? (
+          <LayersIcon size={13} className="shrink-0 text-zinc-400" />
+        ) : (
+          <FileTextIcon size={13} className="shrink-0 text-zinc-400" />
+        )}
+        <span className="truncate">{item.title}</span>
+        <span className={`ml-2 h-1.5 w-1.5 shrink-0 rounded-full ${statusDot(item.status)}`} />
       </Link>
     );
   }
 
-  function documentRow(document: TreeDocument, depth: number) {
-    const active = selected?.kind === "doc" && selected.id === document.id;
+  function folderBlock(folder: TreeFolder, depth: number, keyPrefix: string) {
+    const key = `${keyPrefix}:${folder.key}`;
+    const open = isOpen(key);
+    const hasItems = folder.items.length > 0;
     return (
-      <Link
-        key={document.id}
-        href={`/knowledge?tab=scout&doc=${document.id}`}
-        scroll={false}
-        title={`${document.title} · ${DOC_STATUS_LABEL[document.status] ?? document.status}`}
-        aria-current={active ? "true" : undefined}
-        className={`flex items-center gap-2 rounded-lg py-1.5 pr-2 text-[12px] transition-colors ${
-          active
-            ? "bg-white text-zinc-900 ring-1 ring-black/5"
-            : "text-zinc-600 hover:bg-white/70 hover:text-zinc-900"
-        }`}
-        style={{ paddingLeft: `${depth * 10 + 6}px` }}
-      >
-        <FileTextIcon size={13} className="shrink-0 text-zinc-400" />
-        <span className="truncate">{document.title}</span>
-      </Link>
+      <div key={key}>
+        <button
+          type="button"
+          onClick={() => hasItems && toggle(key)}
+          aria-expanded={hasItems ? open : undefined}
+          className={`flex w-full items-center gap-1.5 rounded-lg py-1 pr-2 text-left text-[12px] transition-colors ${
+            hasItems ? "text-zinc-600 hover:bg-white/70 hover:text-zinc-900" : "text-zinc-400"
+          }`}
+          style={{ paddingLeft: `${depth * 10 + 6}px` }}
+        >
+          <ChevronRightIcon
+            size={12}
+            className={`shrink-0 text-zinc-400 transition-transform ${open ? "rotate-90" : ""} ${
+              hasItems ? "" : "invisible"
+            }`}
+          />
+          <FolderIcon size={13} className="shrink-0 text-zinc-400" />
+          <span className="truncate">{folder.label}</span>
+          <span className="ml-auto shrink-0 text-[10px] tabular-nums text-zinc-400">
+            {folder.items.length}
+          </span>
+        </button>
+        {open && hasItems ? folder.items.map((item) => itemRow(item, depth + 1)) : null}
+      </div>
     );
   }
 
-  function GroupHead({
-    groupKey,
-    label,
-    count,
-    depth,
-  }: {
-    groupKey: string;
-    label: string;
-    count: number;
-    depth: number;
-  }) {
-    const open = isOpen(groupKey);
+  function groupHead(key: string, label: string, count: number, depth: number) {
+    const open = isOpen(key);
     return (
       <button
         type="button"
-        onClick={() => toggleGroup(groupKey)}
+        onClick={() => toggle(key)}
         aria-expanded={open}
         className="flex w-full items-center gap-1.5 rounded-lg py-1.5 pr-2 text-left text-[12px] text-zinc-600 transition-colors hover:bg-white/70 hover:text-zinc-900"
         style={{ paddingLeft: `${depth * 10 + 6}px` }}
@@ -118,27 +135,18 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
           size={13}
           className={`shrink-0 text-zinc-400 transition-transform ${open ? "rotate-90" : ""}`}
         />
-        <FolderIcon size={13} className="shrink-0 text-zinc-400" />
         <span className="truncate">{label}</span>
         <span className="ml-auto shrink-0 text-[10px] tabular-nums text-zinc-400">{count}</span>
       </button>
     );
   }
 
-  function SectionHead({
-    sectionKey,
-    label,
-    count,
-  }: {
-    sectionKey: string;
-    label: string;
-    count: number;
-  }) {
-    const open = sections[sectionKey] ?? false;
+  function sectionHead(key: string, label: string, count: number) {
+    const open = isOpen(key);
     return (
       <button
         type="button"
-        onClick={() => toggleSection(sectionKey)}
+        onClick={() => toggle(key)}
         aria-expanded={open}
         className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-[12px] font-semibold text-zinc-700 transition-colors hover:bg-white/70"
       >
@@ -146,7 +154,6 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
           size={14}
           className={`shrink-0 text-zinc-400 transition-transform ${open ? "rotate-90" : ""}`}
         />
-        <LayersIcon size={14} className="shrink-0 text-zinc-400" />
         <span className="truncate">{label}</span>
         <span className="ml-auto shrink-0 text-[10px] font-normal tabular-nums text-zinc-400">
           {count}
@@ -155,8 +162,6 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
     );
   }
 
-  const pendingEmpty = tree.totals.pending === 0;
-
   return (
     <aside
       aria-label="知识库目录"
@@ -164,96 +169,48 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
     >
       <p className="px-2 pb-1 pt-1 text-[11px] font-medium text-zinc-500">知识库目录</p>
 
-      <SectionHead sectionKey="cards" label="00-知识卡" count={tree.totals.cards} />
-      {sections.cards ? (
+      {sectionHead("shared", "公司资料（共享）", tree.shared.count)}
+      {isOpen("shared") ? (
         <div className="mb-1">
-          {tree.cardGroups.length === 0 ? (
-            <p className="px-2 py-1.5 text-[11px] text-zinc-400">还没有知识卡</p>
-          ) : (
-            tree.cardGroups.map((group) => {
-              const key = `cards:${group.category}`;
-              const open = isOpen(key, tree.cardGroups.length <= 3);
-              return (
-                <div key={key}>
-                  <GroupHead groupKey={key} label={group.category} count={group.cards.length} depth={1} />
-                  {open ? group.cards.map((card) => cardRow(card, 3)) : null}
-                </div>
-              );
-            })
-          )}
+          {tree.shared.folders.map((folder) => folderBlock(folder, 2, "shared"))}
         </div>
       ) : null}
 
-      <SectionHead sectionKey="docs" label="01-文档" count={tree.totals.documents} />
-      {sections.docs ? (
-        <div className="mb-1">
-          {tree.departments.length === 0 ? (
-            <p className="px-2 py-1.5 text-[11px] text-zinc-400">还没有文档</p>
-          ) : (
-            tree.departments.map((department) => {
-              const key = `dep:${department.id}`;
-              const open = isOpen(key, tree.departments.length === 1);
-              return (
-                <div key={department.id}>
-                  <GroupHead
-                    groupKey={key}
-                    label={department.name}
-                    count={department.runs.reduce((sum, run) => sum + run.documents.length, 0)}
-                    depth={1}
-                  />
-                  {open
-                    ? department.runs.map((run) => {
-                        const runKey = `run:${run.id}`;
-                        const runOpen = isOpen(runKey, department.runs.length === 1);
-                        return (
-                          <div key={runKey}>
-                            <GroupHead
-                              groupKey={runKey}
-                              label={run.label}
-                              count={run.documents.length}
-                              depth={2}
-                            />
-                            {runOpen ? run.documents.map((document) => documentRow(document, 3)) : null}
-                          </div>
-                        );
-                      })
-                    : null}
-                </div>
-              );
-            })
-          )}
-        </div>
+      {tree.departments.length === 0 ? (
+        <p className="px-2 py-2 text-[11px] text-zinc-400">当前账号没有可见部门</p>
       ) : null}
 
-      <SectionHead sectionKey="pending" label="02-待处理" count={tree.totals.pending} />
-      {sections.pending ? (
-        <div className="pb-1">
-          {pendingEmpty ? (
-            <p className="px-2 py-1.5 text-[11px] text-zinc-400">没有待处理项</p>
-          ) : (
-            <>
-              {tree.pending.needsOcr.length > 0 ? (
-                <p className="px-2 pt-1 text-[11px] text-zinc-500">
-                  待 OCR {tree.pending.needsOcr.length}
-                </p>
-              ) : null}
-              {tree.pending.needsOcr.map((document) => documentRow(document, 2))}
-              {tree.pending.failed.length > 0 ? (
-                <p className="px-2 pt-2 text-[11px] text-zinc-500">
-                  解析失败 {tree.pending.failed.length}
-                </p>
-              ) : null}
-              {tree.pending.failed.map((document) => documentRow(document, 2))}
-              {tree.pending.pendingCards.length > 0 ? (
-                <p className="px-2 pt-2 text-[11px] text-zinc-500">
-                  待确认卡 {tree.pending.pendingCards.length}
-                </p>
-              ) : null}
-              {tree.pending.pendingCards.map((card) => cardRow(card, 2))}
-            </>
-          )}
-        </div>
-      ) : null}
+      {tree.departments.map((department) => {
+        const deptKey = `dep:${department.id}`;
+        const deptCount = department.roles.reduce(
+          (sum, role) => sum + role.folders.reduce((n, folder) => n + folder.items.length, 0),
+          0,
+        );
+        return (
+          <div key={department.id}>
+            {sectionHead(deptKey, department.name, deptCount)}
+            {isOpen(deptKey) ? (
+              <div className="mb-1">
+                {department.roles.length === 0 ? (
+                  <p className="px-2 py-1 text-[11px] text-zinc-400">该部门暂无岗位</p>
+                ) : null}
+                {department.roles.map((role) => {
+                  const roleKey = `role:${department.id}:${role.name}`;
+                  const roleCount = role.folders.reduce((sum, folder) => sum + folder.items.length, 0);
+                  return (
+                    <div key={roleKey}>
+                      {groupHead(roleKey, `角色·${role.name}`, roleCount, 2)}
+                      {isOpen(roleKey)
+                        ? role.folders.map((folder) => folderBlock(folder, 3, roleKey))
+                        : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
     </aside>
   );
 }

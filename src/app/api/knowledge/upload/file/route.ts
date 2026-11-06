@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { resolveUserContext } from "@/lib/db/user-context";
+import { isFolderKey } from "@/lib/knowledge/folders";
 import { ingestUpload, MAX_FILE_BYTES } from "@/lib/knowledge/ingest";
 import { errorMessage, log } from "@/lib/logger";
 import { PermissionDeniedError } from "@/lib/permissions/guard";
@@ -8,8 +9,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * 逐文件入库：multipart/form-data（file, runId?, goal?, path?）。
+ * 逐文件入库：multipart/form-data（file, runId?, goal?, path?, folder?）。
  * 带 runId 时追加到同一批次；不带则新建一个批次并返回 runId。
+ * folder 为 10 个标准目录的 key，落盘路径与数据库 key 都由服务端拼装。
  * 单文件同步解析，前端按顺序调用即可拿到逐文件进度。
  */
 export async function POST(request: Request) {
@@ -41,6 +43,7 @@ export async function POST(request: Request) {
   const runId = String(form.get("runId") ?? "").trim() || undefined;
   const goal = String(form.get("goal") ?? "");
   const relativePath = String(form.get("path") ?? "").trim() || file.name;
+  const folder = String(form.get("folder") ?? "").trim();
 
   try {
     const result = await ingestUpload(
@@ -53,7 +56,7 @@ export async function POST(request: Request) {
         },
       ],
       goal,
-      { runId },
+      { runId, folderKey: isFolderKey(folder) ? folder : undefined },
     );
 
     return Response.json({
