@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext } from "@/lib/db/user-context";
 import {
   bulkDecideCards,
+  CardConflictError,
   confirmCard,
   createManualCard,
   dropCard,
@@ -13,6 +14,7 @@ import {
   patchCards,
   updateCard,
   type BulkResult,
+  type CardConflictInfo,
   type CardMetaPatch,
 } from "@/lib/knowledge/cards";
 import { distillDocument } from "@/lib/knowledge/distill";
@@ -22,6 +24,26 @@ import { toPermissionMessage } from "@/lib/permissions/guard";
 export interface ActionResult {
   ok: boolean;
   message: string;
+  /** 乐观锁冲突：返回库中最新版本，供编辑器选择载入或确认覆盖 */
+  conflict?: CardConflictInfo;
+  /** 保存成功后的版本号 */
+  rev?: number;
+}
+
+/** 把冲突错误转换成可展示结果；其余错误沿用权限提示 */
+function failure(error: unknown): ActionResult {
+  if (error instanceof CardConflictError) {
+    return {
+      ok: false,
+      message: "保存被拦截：这张卡在你编辑期间已被他人修改",
+      conflict: error.current,
+    };
+  }
+  return { ok: false, message: toPermissionMessage(error) };
+}
+
+function isExpectedRev(value: number | undefined): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 export interface BulkActionResult extends BulkResult {
@@ -84,13 +106,16 @@ export async function updateCardAction(
   title: string,
   body: string,
   source?: string,
+  expectedRev?: number,
 ): Promise<ActionResult> {
   try {
-    await updateCard(await contextOf(), cardId, { title, body, source });
+    const result = await updateCard(await contextOf(), cardId, { title, body, source }, {
+      expectedRev: isExpectedRev(expectedRev) ? expectedRev : undefined,
+    });
     revalidateKnowledge();
-    return { ok: true, message: "已保存，可重新确认" };
+    return { ok: true, message: `已保存（v${result.rev}），可重新确认`, rev: result.rev };
   } catch (error) {
-    return { ok: false, message: toPermissionMessage(error) };
+    return failure(error);
   }
 }
 
@@ -100,6 +125,7 @@ export async function createCardAction(
   body: string,
   meta?: CardMetaPatch,
   sourceDocumentId?: string,
+  expectedRev?: number,
 ): Promise<ActionResult> {
   if (!isCardKind(kind)) {
     return { ok: false, message: "知识卡类型不合法" };
@@ -123,17 +149,23 @@ export async function createCardAction(
       version: patch.version,
       owner: patch.owner,
       sourceDocumentId,
+      expectedRev: isExpectedRev(expectedRev) ? expectedRev : undefined,
     });
     revalidateKnowledge();
     if (result.skipped === "confirmed") {
       return {
         ok: true,
         message: "该文档的卡片已确认，未重复创建；如需修改请在知识卡页直接编辑",
+        rev: result.rev,
       };
     }
-    return { ok: true, message: result.created ? "已创建，待确认" : "已更新该文档的待确认卡片" };
+    return {
+      ok: true,
+      message: result.created ? "已创建，待确认（v1）" : `已更新该文档的待确认卡片（v${result.rev}）`,
+      rev: result.rev,
+    };
   } catch (error) {
-    return { ok: false, message: toPermissionMessage(error) };
+    return failure(error);
   }
 }
 

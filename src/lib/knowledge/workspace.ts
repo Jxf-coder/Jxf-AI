@@ -10,6 +10,7 @@
 import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
+import { listCardVersions, type CardVersionView } from "@/lib/knowledge/cards";
 import { folderLabel, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
 import { requireContextPermission } from "@/lib/permissions/server";
 
@@ -322,6 +323,16 @@ export interface DocumentContent {
   deletedAt: string | null;
   /** 切片按 ord 拼接；扫描件没有切片，返回空串 */
   text: string;
+  /**
+   * 该文档已保存的卡片（同一文档只会有一张）。
+   * 编辑器用它的 rev 作为乐观锁基线；未保存过时为 null。
+   */
+  sourceCard: {
+    id: string;
+    rev: number;
+    updatedAt: string;
+    updatedByName: string | null;
+  } | null;
 }
 
 /** 文档正文：只读，由 doc_chunks 按 ord 拼接，原文不落库也就能编辑 */
@@ -368,6 +379,22 @@ export async function loadDocumentContent(
       .filter((chunk) => chunk.length > 0)
       .join("\n\n");
 
+    // 同一文档只会有一张来源卡（部分唯一索引保证）；读不到就是还没保存过
+    const sourceCards = await client.query<{
+      id: string;
+      rev: number;
+      updated_at: Date;
+      updated_by_name: string | null;
+    }>(
+      `select c.id, c.rev, c.updated_at,
+              (select name from users where id = c.updated_by) as updated_by_name
+         from knowledge_cards c
+        where c.source_document_id = $1
+        limit 1`,
+      [documentId],
+    );
+    const sourceCardRow = sourceCards.rows[0];
+
     return {
       id: document.id,
       title: document.title,
@@ -384,6 +411,14 @@ export async function loadDocumentContent(
       chunkCount: chunks.rowCount ?? chunks.rows.length,
       deletedAt: document.deleted_at ? document.deleted_at.toISOString() : null,
       text,
+      sourceCard: sourceCardRow
+        ? {
+            id: sourceCardRow.id,
+            rev: sourceCardRow.rev,
+            updatedAt: sourceCardRow.updated_at.toISOString(),
+            updatedByName: sourceCardRow.updated_by_name,
+          }
+        : null,
     };
   });
 }
@@ -440,6 +475,12 @@ export interface CardDetail {
   evidenceCount: number;
   /** department | shared */
   visibility: string;
+  /** 当前版本：编辑器保存时作为乐观锁基线 */
+  rev: number;
+  updatedAt: string;
+  updatedByName: string | null;
+  /** 最近若干条版本快照（含当前版本） */
+  versions: CardVersionView[];
 }
 
 /** 卡片详情：编辑器初始值，同样只读 */
@@ -447,7 +488,7 @@ export async function loadCardDetail(
   context: UserContext,
   cardId: string,
 ): Promise<CardDetail | null> {
-  return withUserContext(context, async (client) => {
+  const card = await withUserContext(context, async (client) => {
     const { rows } = await client.query<{
       id: string;
       title: string;
@@ -461,9 +502,13 @@ export async function loadCardDetail(
       department_name: string;
       evidence_count: string;
       visibility: string;
+      rev: number;
+      updated_at: Date;
+      updated_by_name: string | null;
     }>(
       `select c.id, c.title, c.body, c.status, c.category, c.product,
-              c.role_key, c.folder_key, c.extra, c.visibility,
+              c.role_key, c.folder_key, c.extra, c.visibility, c.rev, c.updated_at,
+              (select name from users where id = c.updated_by) as updated_by_name,
               dep.name as department_name,
               (select count(*) from card_evidence e where e.card_id = c.id)::text as evidence_count
          from knowledge_cards c
@@ -472,29 +517,38 @@ export async function loadCardDetail(
       [cardId],
     );
 
-    const card = rows[0];
-    if (!card) {
+    const row = rows[0];
+    if (!row) {
       return null;
     }
 
-    const source = typeof card.extra?.source === "string" ? card.extra.source : "";
+    const source = typeof row.extra?.source === "string" ? row.extra.source : "";
 
     return {
-      id: card.id,
-      title: card.title,
-      body: card.body,
-      status: card.status,
-      category: card.category ?? "",
-      product: card.product ?? "",
-      departmentName: card.department_name,
-      roleKey: roleName(card.role_key),
-      folderKey: card.folder_key,
-      folderLabel: folderLabel(card.folder_key),
+      id: row.id,
+      title: row.title,
+      body: row.body,
+      status: row.status,
+      category: row.category ?? "",
+      product: row.product ?? "",
+      departmentName: row.department_name,
+      roleKey: roleName(row.role_key),
+      folderKey: row.folder_key,
+      folderLabel: folderLabel(row.folder_key),
       source,
-      evidenceCount: Number(card.evidence_count) || 0,
-      visibility: card.visibility,
-    };
+      evidenceCount: Number(row.evidence_count) || 0,
+      visibility: row.visibility,
+      rev: row.rev,
+      updatedAt: row.updated_at.toISOString(),
+      updatedByName: row.updated_by_name,
+    } satisfies Omit<CardDetail, "versions">;
   });
+
+  if (!card) {
+    return null;
+  }
+
+  return { ...card, versions: await listCardVersions(context, cardId, 6) };
 }
 
 /** 知识卡共享开关：写仍限本部门（knowledge:write），只改 visibility 一列 */

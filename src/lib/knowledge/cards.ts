@@ -56,6 +56,38 @@ export interface CardView {
   evidence: CardEvidenceView[];
 }
 
+/** 乐观锁冲突时的“当前版本”：用于提示与“载入最新内容” */
+export interface CardConflictInfo {
+  rev: number;
+  title: string;
+  body: string;
+  source: string;
+  updatedAt: string;
+  updatedByName: string | null;
+}
+
+/** 保存时 rev 已过期：拒绝静默覆盖，由上层提示用户选择载入或确认覆盖 */
+export class CardConflictError extends Error {
+  readonly current: CardConflictInfo;
+
+  constructor(current: CardConflictInfo) {
+    super(`该知识卡已被他人更新到第 ${current.rev} 版`);
+    this.name = "CardConflictError";
+    this.current = current;
+  }
+}
+
+/** 版本历史（只读快照，不含差异计算） */
+export interface CardVersionView {
+  id: string;
+  rev: number;
+  title: string;
+  body: string;
+  status: CardStatus;
+  editedByName: string | null;
+  createdAt: string;
+}
+
 export interface CardFilters {
   status?: CardFilterStatus;
   kind?: string;
@@ -130,6 +162,92 @@ function normText(value: string | null | undefined): string | null {
   }
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
+}
+
+interface CardStateRow {
+  id: string;
+  department_id: string;
+  rev: number;
+  title: string;
+  body: string;
+  status: CardStatus;
+  updated_at: Date;
+  updated_by_name: string | null;
+  source: string | null;
+}
+
+const CARD_STATE_COLUMNS = `c.id, c.department_id, c.rev, c.title, c.body, c.status, c.updated_at,
+  (select name from users where id = c.updated_by) as updated_by_name,
+  c.extra->>'source' as source`;
+
+function conflictOf(row: CardStateRow): CardConflictInfo {
+  return {
+    rev: row.rev,
+    title: row.title,
+    body: row.body,
+    source: row.source ?? "",
+    updatedAt: row.updated_at.toISOString(),
+    updatedByName: row.updated_by_name,
+  };
+}
+
+/** 锁住卡片行：乐观锁校验与更新必须在同一把行锁内完成 */
+async function lockCardState(client: PoolClient, cardId: string): Promise<CardStateRow | null> {
+  const { rows } = await client.query<CardStateRow>(
+    `select ${CARD_STATE_COLUMNS}
+       from knowledge_cards c
+      where c.id = $1
+      for update`,
+    [cardId],
+  );
+  return rows[0] ?? null;
+}
+
+/** 按来源文档锁住「文档 → 卡片」那一行，避免并发保存各写一版 */
+async function lockSourceCardState(
+  client: PoolClient,
+  tenantId: string,
+  sourceDocumentId: string,
+): Promise<CardStateRow | null> {
+  const { rows } = await client.query<CardStateRow>(
+    `select ${CARD_STATE_COLUMNS}
+       from knowledge_cards c
+      where c.tenant_id = $1 and c.source_document_id = $2
+      for update`,
+    [tenantId, sourceDocumentId],
+  );
+  return rows[0] ?? null;
+}
+
+/** 版本快照：与业务更新同事务，失败则整体回滚 */
+async function snapshotCardVersion(
+  client: PoolClient,
+  context: UserContext,
+  input: {
+    cardId: string;
+    departmentId: string;
+    rev: number;
+    title: string;
+    body: string;
+    status: CardStatus;
+  },
+): Promise<void> {
+  await client.query(
+    `insert into knowledge_card_versions
+       (tenant_id, department_id, card_id, rev, title, body, status, edited_by)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
+     on conflict (card_id, rev) do nothing`,
+    [
+      context.tenantId,
+      input.departmentId,
+      input.cardId,
+      input.rev,
+      input.title,
+      input.body,
+      input.status,
+      context.userId,
+    ],
+  );
 }
 
 export async function listCards(context: UserContext, filters: CardFilters = {}): Promise<CardView[]> {
@@ -262,6 +380,11 @@ export interface CreateCardInput {
   externalOk?: boolean;
   /** 来源文档：传入时按「同一文档只保留一张草稿」做幂等 upsert */
   sourceDocumentId?: string | null;
+  /**
+   * 乐观锁：期望当前版本。0 表示「预期该文档还没有卡片」；
+   * undefined 表示不校验（仅限内部调用，编辑器一律传值）。
+   */
+  expectedRev?: number;
 }
 
 export interface CreateCardResult {
@@ -270,6 +393,8 @@ export interface CreateCardResult {
   created: boolean;
   /** 已存在且已确认时为 confirmed：此时不覆盖，返回原卡 id */
   skipped?: "confirmed";
+  /** 保存后的版本号：编辑器据此推进本地基线 */
+  rev: number;
 }
 
 /**
@@ -329,26 +454,123 @@ export async function createManualCard(
       departmentId,
     });
 
-    const saved = await client.query<{ id: string; created: boolean }>(
+    const roleKeySql = `coalesce((select nullif(trim(m.position), '') from memberships m
+                          where m.user_id = $11 and m.department_id = $2 and m.status = 'active'
+                          limit 1), null)`;
+
+    if (!sourceDocumentId) {
+      // 普通建卡：每次都是新行，没有并发语义
+      const inserted = await client.query<{ id: string; rev: number }>(
+        `insert into knowledge_cards
+           (tenant_id, department_id, kind, title, body, status, origin, human_edited, rev,
+            category, product, external_ok, valid_until, extra, role_key, updated_by)
+         values ($1, $2, $3, $4, $5, 'pending', 'manual', true, 1, $6, $7, $8, $9, $10::jsonb,
+                 ${roleKeySql}, $11)
+         returning id, rev`,
+        [
+          context.tenantId,
+          departmentId,
+          input.kind,
+          title,
+          body,
+          normText(input.category),
+          normText(input.product),
+          input.externalOk ?? false,
+          normText(input.validUntil),
+          JSON.stringify(extra),
+          context.userId,
+        ],
+      );
+      const created = inserted.rows[0];
+      await snapshotCardVersion(client, context, {
+        cardId: created.id,
+        departmentId,
+        rev: created.rev,
+        title,
+        body,
+        status: "pending",
+      });
+      await auditInTx(client, context, {
+        actorUserId: context.userId,
+        action: "knowledge.card_created",
+        targetType: "knowledge_card",
+        targetId: created.id,
+        departmentId,
+        payload: { kind: input.kind },
+      });
+      return { id: created.id, created: true, rev: created.rev } satisfies CreateCardResult;
+    }
+
+    // 文档 → 待确认卡片：按来源文档幂等，行锁 + rev 校验保证不静默覆盖
+    const applyUpdate = async (state: CardStateRow): Promise<CreateCardResult> => {
+      const nextStatus: CardStatus = state.status === "dropped" ? "pending" : state.status;
+      const updated = await client.query<{ rev: number }>(
+        `update knowledge_cards
+            set title = $2, body = $3, human_edited = true, rev = rev + 1,
+                updated_at = now(), updated_by = $4, status = $5,
+                extra = extra || $6::jsonb
+          where id = $1
+          returning rev`,
+        [state.id, title, body, context.userId, nextStatus, JSON.stringify(extra)],
+      );
+      const rev = updated.rows[0].rev;
+      await snapshotCardVersion(client, context, {
+        cardId: state.id,
+        departmentId: state.department_id,
+        rev,
+        title,
+        body,
+        status: nextStatus,
+      });
+      await auditInTx(client, context, {
+        actorUserId: context.userId,
+        action: "knowledge.card_updated",
+        targetType: "knowledge_card",
+        targetId: state.id,
+        departmentId: state.department_id,
+        payload: { kind: input.kind, sourceDocumentId, rev },
+      });
+      return { id: state.id, created: false, rev } satisfies CreateCardResult;
+    };
+
+    const existing = await lockSourceCardState(client, context.tenantId, sourceDocumentId);
+
+    if (existing) {
+      // 已确认的卡不覆盖内容，避免已采纳知识被草稿悄然替换
+      if (existing.status === "confirmed") {
+        return {
+          id: existing.id,
+          created: false,
+          skipped: "confirmed",
+          rev: existing.rev,
+        } satisfies CreateCardResult;
+      }
+      if (input.expectedRev !== undefined && input.expectedRev !== existing.rev) {
+        throw new CardConflictError(conflictOf(existing));
+      }
+      return applyUpdate(existing);
+    }
+
+    if (input.expectedRev !== undefined && input.expectedRev !== 0) {
+      // 客户端预期这里已有一张卡，实际没有：按冲突处理，不静默新建
+      throw new CardConflictError({
+        rev: 0,
+        title: "",
+        body: "",
+        source: "",
+        updatedAt: new Date().toISOString(),
+        updatedByName: null,
+      });
+    }
+
+    const inserted = await client.query<{ id: string; rev: number }>(
       `insert into knowledge_cards
          (tenant_id, department_id, kind, title, body, status, origin, human_edited, rev,
-          category, product, external_ok, valid_until, extra, role_key, source_document_id)
+          category, product, external_ok, valid_until, extra, role_key, source_document_id, updated_by)
        values ($1, $2, $3, $4, $5, 'pending', 'manual', true, 1, $6, $7, $8, $9, $10::jsonb,
-               coalesce((select nullif(trim(m.position), '') from memberships m
-                          where m.user_id = $11 and m.department_id = $2 and m.status = 'active'
-                          limit 1), null),
-               $12::uuid)
-       on conflict (tenant_id, source_document_id) where source_document_id is not null
-       do update set
-         title = excluded.title,
-         body = excluded.body,
-         human_edited = true,
-         rev = knowledge_cards.rev + 1,
-         updated_at = now(),
-         status = case when knowledge_cards.status = 'dropped' then 'pending' else knowledge_cards.status end,
-         extra = knowledge_cards.extra || excluded.extra
-       where knowledge_cards.status <> 'confirmed'
-       returning id, (xmax = 0) as created`,
+               ${roleKeySql}, $12::uuid, $11)
+       on conflict (tenant_id, source_document_id) where source_document_id is not null do nothing
+       returning id, rev`,
       [
         context.tenantId,
         departmentId,
@@ -365,28 +587,44 @@ export async function createManualCard(
       ],
     );
 
-    const row = saved.rows[0];
-    if (!row) {
-      // 唯一索引命中但被 where 挡住：该文档的卡片已确认，不覆盖
-      const existing = await client.query<{ id: string }>(
-        "select id from knowledge_cards where tenant_id = $1 and source_document_id = $2",
-        [context.tenantId, sourceDocumentId],
-      );
-      return { id: existing.rows[0].id, created: false, skipped: "confirmed" } satisfies CreateCardResult;
+    if (!inserted.rows[0]) {
+      // 极端并发：另一请求刚插入同一文档的卡；锁住后按更新路径处理
+      const fresh = await lockSourceCardState(client, context.tenantId, sourceDocumentId);
+      if (!fresh) {
+        throw new Error("保存失败，请重试");
+      }
+      if (fresh.status === "confirmed") {
+        return {
+          id: fresh.id,
+          created: false,
+          skipped: "confirmed",
+          rev: fresh.rev,
+        } satisfies CreateCardResult;
+      }
+      if (input.expectedRev !== undefined && input.expectedRev !== fresh.rev) {
+        throw new CardConflictError(conflictOf(fresh));
+      }
+      return applyUpdate(fresh);
     }
 
+    const created = inserted.rows[0];
+    await snapshotCardVersion(client, context, {
+      cardId: created.id,
+      departmentId,
+      rev: created.rev,
+      title,
+      body,
+      status: "pending",
+    });
     await auditInTx(client, context, {
       actorUserId: context.userId,
-      action: row.created ? "knowledge.card_created" : "knowledge.card_updated",
+      action: "knowledge.card_created",
       targetType: "knowledge_card",
-      targetId: row.id,
+      targetId: created.id,
       departmentId,
-      payload: row.created
-        ? { kind: input.kind }
-        : { kind: input.kind, sourceDocumentId },
+      payload: { kind: input.kind, sourceDocumentId },
     });
-
-    return { id: row.id, created: row.created } satisfies CreateCardResult;
+    return { id: created.id, created: true, rev: created.rev } satisfies CreateCardResult;
   });
 }
 
@@ -510,50 +748,115 @@ export async function dropCard(context: UserContext, cardId: string): Promise<vo
   });
 }
 
-/** 人工改写正文：置 human_edited，满足确认门槛；source 合并进 extra */
+export interface UpdateCardOptions {
+  /**
+   * 乐观锁：编辑器打开时的版本。与库中不一致时抛 CardConflictError，
+   * 绝不静默覆盖；undefined 表示不校验（仅限内部调用）。
+   */
+  expectedRev?: number;
+}
+
+/**
+ * 人工改写正文：置 human_edited，满足确认门槛；source 合并进 extra。
+ * 每次成功保存写一条版本快照，并推进 rev。
+ */
 export async function updateCard(
   context: UserContext,
   cardId: string,
   input: { title: string; body: string; source?: string | null },
-): Promise<void> {
+  options: UpdateCardOptions = {},
+): Promise<{ rev: number }> {
   const title = input.title.trim();
   const body = input.body.trim();
   if (title.length === 0 || body.length === 0) {
     throw new Error("标题与正文不能为空");
   }
 
-  await withUserContext(context, async (client) => {
-    const { rows } = await client.query<{ department_id: string }>(
-      "select department_id from knowledge_cards where id = $1",
-      [cardId],
-    );
-    const departmentId = rows[0]?.department_id;
-    if (!departmentId) {
+  return withUserContext(context, async (client) => {
+    const state = await lockCardState(client, cardId);
+    if (!state) {
       throw new Error("知识卡不存在");
     }
 
     await requireContextPermission(client, context, "knowledge:write", {
       kind: "knowledge_card",
       id: cardId,
-      departmentId,
+      departmentId: state.department_id,
     });
 
+    if (options.expectedRev !== undefined && options.expectedRev !== state.rev) {
+      throw new CardConflictError(conflictOf(state));
+    }
+
     const source = normText(input.source);
-    await client.query(
+    const updated = await client.query<{ rev: number }>(
       `update knowledge_cards
           set title = $2, body = $3, human_edited = true, rev = rev + 1, updated_at = now(),
+              updated_by = $5,
               extra = case when $4::text is null then extra else extra || jsonb_build_object('source', $4::text) end
-        where id = $1`,
-      [cardId, title, body, source],
+        where id = $1
+        returning rev`,
+      [cardId, title, body, source, context.userId],
     );
+    const rev = updated.rows[0].rev;
+
+    await snapshotCardVersion(client, context, {
+      cardId,
+      departmentId: state.department_id,
+      rev,
+      title,
+      body,
+      status: state.status,
+    });
 
     await auditInTx(client, context, {
       actorUserId: context.userId,
       action: "knowledge.card_updated",
       targetType: "knowledge_card",
       targetId: cardId,
-      departmentId,
+      departmentId: state.department_id,
+      payload: { rev, expectedRev: options.expectedRev ?? null },
     });
+
+    return { rev };
+  });
+}
+
+/** 版本历史：按 rev 倒序；RLS 跟随卡片可见范围 */
+export async function listCardVersions(
+  context: UserContext,
+  cardId: string,
+  limit = 6,
+): Promise<CardVersionView[]> {
+  const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 50);
+  return withUserContext(context, async (client) => {
+    const { rows } = await client.query<{
+      id: string;
+      rev: number;
+      title: string;
+      body: string;
+      status: CardStatus;
+      edited_by_name: string | null;
+      created_at: Date;
+    }>(
+      `select v.id, v.rev, v.title, v.body, v.status, v.created_at,
+              (select name from users where id = v.edited_by) as edited_by_name
+         from knowledge_card_versions v
+        where v.card_id = $1
+        order by v.rev desc
+        limit $2`,
+      [cardId, safeLimit],
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      rev: row.rev,
+      title: row.title,
+      body: row.body,
+      status: row.status,
+      editedByName: row.edited_by_name,
+      createdAt: row.created_at.toISOString(),
+    }));
   });
 }
 

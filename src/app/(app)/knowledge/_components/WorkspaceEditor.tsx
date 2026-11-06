@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { btnBlue, btnGhost, fieldLabel, input, linkBtn } from "@/components/knowledge/tokens";
+import type { CardConflictInfo } from "@/lib/knowledge/cards";
 import type { CardDetail, DocumentContent } from "@/lib/knowledge/workspace";
 
 import { DistillButton } from "../DistillButton";
@@ -58,6 +59,12 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
   const [failed, setFailed] = useState(false);
   const [confirmTrash, setConfirmTrash] = useState(false);
   const [confirmPurge, setConfirmPurge] = useState(false);
+  /** 乐观锁基线：文档模式取来源卡的 rev，没有卡时为 0（预期新建） */
+  const [baseRev, setBaseRev] = useState(
+    isDocument ? (props.document.sourceCard?.rev ?? 0) : props.card.rev,
+  );
+  const [conflict, setConflict] = useState<CardConflictInfo | null>(null);
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false);
 
   const trashed = isDocument && props.document.deletedAt !== null;
   const cardTrashed = !isDocument && props.card.status === "dropped";
@@ -106,6 +113,8 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
         props.card.roleKey ? `角色·${props.card.roleKey}` : "",
         props.card.folderLabel,
         CARD_STATUS_LABEL[props.card.status] ?? props.card.status,
+        `v${props.card.rev}`,
+        props.card.updatedByName ? `最后由 ${props.card.updatedByName}` : "",
         props.card.category ? `分类 ${props.card.category}` : "",
         props.card.product ? `产品 ${props.card.product}` : "",
         `证据 ${props.card.evidenceCount} 条`,
@@ -114,10 +123,13 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
         .join(" · ");
 
   const blocked = readOnlyReason !== null;
+  /** 冲突未处理前禁止再次保存：必须显式选择「载入最新」或「确认覆盖」 */
   const saveDisabled =
-    blocked || pending || title.trim().length === 0 || body.trim().length === 0;
+    blocked || pending || conflict !== null || title.trim().length === 0 || body.trim().length === 0;
 
-  function save() {
+  /** overrideRev：确认覆盖时用冲突版本作为新基线，只放行这一次 */
+  function save(overrideRev?: number) {
+    const expectedRev = overrideRev ?? baseRev;
     startTransition(async () => {
       const result =
         props.mode === "document"
@@ -127,15 +139,60 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
               body.trim(),
               { source: source.trim() || `文档：${props.document.title}` },
               props.document.id,
+              expectedRev,
             )
-          : await updateCardAction(props.card.id, title.trim(), body.trim(), source.trim());
+          : await updateCardAction(
+              props.card.id,
+              title.trim(),
+              body.trim(),
+              source.trim(),
+              expectedRev,
+            );
 
+      if (result.conflict) {
+        setConflict(result.conflict);
+        setConfirmOverwrite(false);
+        setFailed(false);
+        setMessage("");
+        return;
+      }
+
+      setConflict(null);
+      setConfirmOverwrite(false);
       setFailed(!result.ok);
       setMessage(result.message);
       if (result.ok) {
+        setBaseRev(typeof result.rev === "number" ? result.rev : expectedRev + 1);
         router.refresh();
       }
     });
+  }
+
+  /** 载入库中最新版本，丢弃本地未保存修改 */
+  function loadLatest() {
+    if (!conflict) {
+      return;
+    }
+    setTitle(conflict.title);
+    setBody(conflict.body);
+    if (!isDocument) {
+      setSource(conflict.source);
+    }
+    setBaseRev(conflict.rev);
+    setConflict(null);
+    setConfirmOverwrite(false);
+    setFailed(false);
+    setMessage(`已载入最新版本 v${conflict.rev}，本地未保存的修改已丢弃`);
+  }
+
+  function formatTime(value: string): string {
+    return new Intl.DateTimeFormat("zh-CN", {
+      timeZone: "Asia/Shanghai",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
   }
 
   return (
@@ -153,8 +210,8 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
             type="button"
             className={btnBlue}
             disabled={saveDisabled}
-            title={readOnlyReason ?? undefined}
-            onClick={save}
+            title={conflict ? "请先处理版本冲突" : (readOnlyReason ?? undefined)}
+            onClick={() => save()}
           >
             {pending ? "保存中…" : isDocument ? "保存为待确认卡片" : "保存"}
           </button>
@@ -288,6 +345,45 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
         </span>
       </div>
 
+      {conflict ? (
+        <div className="mt-3 rounded-xl border border-rose-200/80 bg-rose-50/50 p-3">
+          <p className="text-[12px] font-medium text-rose-700">
+            保存被拦截：{conflict.updatedByName ?? "其他人"}已把这张卡更新到 v{conflict.rev}
+          </p>
+          <p className="mt-1 text-[11px] leading-relaxed text-rose-600/80">
+            你的修改还没有写入，标题与正文仍是本地内容。可载入最新版本再改，或确认覆盖对方版本。
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className={`${linkBtn} text-[11px]`}
+              disabled={pending}
+              onClick={loadLatest}
+            >
+              载入最新内容
+            </button>
+            <button
+              type="button"
+              className={`${linkBtn} text-[11px]`}
+              disabled={pending}
+              onClick={() => {
+                if (!confirmOverwrite) {
+                  setConfirmOverwrite(true);
+                  return;
+                }
+                setConfirmOverwrite(false);
+                save(conflict.rev);
+              }}
+            >
+              {confirmOverwrite ? "确认覆盖对方版本" : "覆盖并保存"}
+            </button>
+            <span className="text-[10px] tabular-nums text-rose-500/80">
+              v{conflict.rev} · {formatTime(conflict.updatedAt)}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
       {readOnlyReason ? (
         <InlineMessage className="mt-3 mb-0">{readOnlyReason}</InlineMessage>
       ) : null}
@@ -339,6 +435,28 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
         <InlineMessage tone={failed ? "error" : "info"} className="mt-3 mb-0">
           {message}
         </InlineMessage>
+      ) : null}
+
+      {!isDocument && props.card.versions.length > 0 ? (
+        <details className="mt-4 rounded-xl border border-black/[0.06] bg-[#fafafa] px-3 py-2">
+          <summary className="cursor-pointer list-none text-[11px] text-zinc-500">
+            版本历史 · 最近 {props.card.versions.length} 条
+          </summary>
+          <ul className="mt-2 grid gap-1.5">
+            {props.card.versions.map((version) => (
+              <li key={version.id} className="flex items-center gap-2 text-[11px] text-zinc-500">
+                <span className="w-8 shrink-0 tabular-nums text-zinc-600">v{version.rev}</span>
+                <span className="truncate">{version.editedByName ?? "—"}</span>
+                {version.rev === props.card.rev ? (
+                  <span className="shrink-0 text-[10px] text-emerald-600">当前</span>
+                ) : null}
+                <span className="ml-auto shrink-0 tabular-nums text-zinc-400">
+                  {formatTime(version.createdAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
     </section>
   );

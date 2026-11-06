@@ -92,6 +92,13 @@
       "when": 1793954110941,
       "tag": "0012_kb_document_trash",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793957773528,
+      "tag": "0013_kb_card_versions",
+      "breakpoints": true
     }
   ]
 }

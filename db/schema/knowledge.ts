@@ -63,6 +63,8 @@ export const knowledgeCards = pgTable(
     extra: jsonb("extra").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /** 最近一次保存的人：并发冲突提示需要让用户知道该找谁对齐 */
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
   },
   (table) => [
     index("knowledge_cards_department_status_idx").on(table.departmentId, table.status),
@@ -73,6 +75,31 @@ export const knowledgeCards = pgTable(
       .on(table.tenantId, table.sourceDocumentId)
       .where(sql`"source_document_id" is not null`),
   ],
+);
+
+/**
+ * 知识卡版本快照：每次人工保存正文写入一条（rev 唯一）。
+ * 只记录内容版本；确认 / 作废 / 恢复只变更状态，不产生版本文档。
+ */
+export const knowledgeCardVersions = pgTable(
+  "knowledge_card_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull(),
+    departmentId: uuid("department_id")
+      .notNull()
+      .references(() => departments.id, { onDelete: "cascade" }),
+    cardId: uuid("card_id")
+      .notNull()
+      .references(() => knowledgeCards.id, { onDelete: "cascade" }),
+    rev: integer("rev").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    status: cardStatus("status").notNull(),
+    editedBy: uuid("edited_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("knowledge_card_versions_rev_unique").on(table.cardId, table.rev)],
 );
 
 /**

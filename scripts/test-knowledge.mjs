@@ -1,4 +1,4 @@
-/**
+﻿/**
  * M2-A3 知识库验收：RLS 隔离、sha256 去重、批次撤回、确认门槛、混合检索降级。
  *
  * 使用真实 PostgreSQL + jxf_app 角色；所有写入走 owner 连接播种（owner 绕过 RLS），
@@ -11,7 +11,12 @@ import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 
 import { chunkPages } from "../src/lib/knowledge/chunk.ts";
-import { createManualCard } from "../src/lib/knowledge/cards.ts";
+import {
+  CardConflictError,
+  createManualCard,
+  listCardVersions,
+  updateCard,
+} from "../src/lib/knowledge/cards.ts";
 import { verifyQuoteInChunk } from "../src/lib/knowledge/evidence.ts";
 import { answerQuestion } from "../src/lib/knowledge/qa.ts";
 import { runRegression, seedRegressionQuestions } from "../src/lib/knowledge/regression.ts";
@@ -866,6 +871,127 @@ async function main() {
     `hits=${crossSearch.map((item) => item.id).join(",")}`,
   );
   check("目录树：未达上限时不提示截断", trashedTree.totals.truncated === false);
+
+  // 25b. 并发编辑：乐观锁拒绝静默覆盖，版本历史逐次留痕
+  const concurrencyDoc = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      `insert into documents (tenant_id, department_id, title, mime, sha256)
+       values ($1, $2, '并发验收文档', 'text/plain', $3) returning id`,
+      [TENANT, fx.departments.groupA, "4".repeat(64)],
+    );
+    return rows[0].id;
+  });
+
+  const firstWrite = await createManualCard(bossContext, {
+    kind: "fact",
+    title: "并发验收卡",
+    body: "第一版正文",
+    sourceDocumentId: concurrencyDoc,
+    expectedRev: 0,
+  });
+  check(
+    "乐观锁：以 rev 0 建卡得到 v1",
+    firstWrite.created === true && firstWrite.rev === 1,
+    JSON.stringify(firstWrite),
+  );
+
+  const secondWrite = await createManualCard(bossContext, {
+    kind: "fact",
+    title: "并发验收卡",
+    body: "第二版正文",
+    sourceDocumentId: concurrencyDoc,
+    expectedRev: 1,
+  });
+  check(
+    "乐观锁：基线匹配时更新并推进版本",
+    secondWrite.created === false && secondWrite.rev === 2,
+    JSON.stringify(secondWrite),
+  );
+
+  let staleCreate = null;
+  try {
+    await createManualCard(bossContext, {
+      kind: "fact",
+      title: "并发验收卡",
+      body: "第三版（过期）",
+      sourceDocumentId: concurrencyDoc,
+      expectedRev: 1,
+    });
+  } catch (error) {
+    staleCreate = error;
+  }
+  check("乐观锁：过期基线的保存被拒绝", staleCreate instanceof CardConflictError, String(staleCreate));
+  check(
+    "乐观锁：冲突返回最新版本内容",
+    staleCreate?.current?.rev === 2 && staleCreate.current.body === "第二版正文",
+    JSON.stringify(staleCreate?.current),
+  );
+
+  const staleBody = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      "select body, rev from knowledge_cards where source_document_id = $1",
+      [concurrencyDoc],
+    );
+    return rows[0];
+  });
+  check(
+    "乐观锁：冲突时不写入任何内容",
+    staleBody?.body === "第二版正文" && staleBody?.rev === 2,
+    JSON.stringify(staleBody),
+  );
+
+  const editableCard = await createManualCard(bossContext, {
+    kind: "fact",
+    title: "版本验收卡",
+    body: "初版正文",
+  });
+  const editOnce = await updateCard(
+    bossContext,
+    editableCard.id,
+    { title: "版本验收卡", body: "第二稿" },
+    { expectedRev: editableCard.rev },
+  );
+  check("版本历史：保存推进到 v2", editOnce.rev === editableCard.rev + 1, JSON.stringify(editOnce));
+
+  let staleEdit = null;
+  try {
+    await updateCard(
+      bossContext,
+      editableCard.id,
+      { title: "版本验收卡", body: "过期覆盖" },
+      { expectedRev: editableCard.rev },
+    );
+  } catch (error) {
+    staleEdit = error;
+  }
+  check(
+    "版本历史：过期基线编辑被拒绝",
+    staleEdit instanceof CardConflictError && staleEdit.current.rev === editOnce.rev,
+    String(staleEdit),
+  );
+
+  const versions = await listCardVersions(bossContext, editableCard.id, 10);
+  check(
+    "版本历史：每次保存都留痕",
+    versions.length === 2 && versions[0].rev === 2 && versions[1].rev === 1,
+    JSON.stringify(versions.map((version) => version.rev)),
+  );
+  check(
+    "版本历史：记录编辑人与内容",
+    versions[0].editedByName === "知识库 L1" && versions[0].body === "第二稿",
+    JSON.stringify(versions[0]),
+  );
+
+  const crossVersions = await runAs(memberB, (client) =>
+    client.query("select count(*)::int as count from knowledge_card_versions where card_id = $1", [
+      editableCard.id,
+    ]),
+  );
+  check(
+    "版本历史：兄弟部门不可见",
+    crossVersions.rows[0]?.count === 0,
+    `count=${crossVersions.rows[0]?.count}`,
+  );
 
   // 26. 卡片回收站：作废进 99-回收站、可恢复、可彻底删除
   const collectTrashIds = (workspace) =>
