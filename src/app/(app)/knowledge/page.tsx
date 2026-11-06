@@ -231,6 +231,10 @@ export default async function KnowledgePage({
                       target={uploadTarget}
                       isL1={context.accessLevel === "L1"}
                       shareRequests={shareRequests}
+                      departments={tree.departments.map((department) => ({
+                        id: department.id,
+                        name: department.name,
+                      }))}
                       runs={runs.map((run) => ({
                         id: run.id,
                         status: run.status,

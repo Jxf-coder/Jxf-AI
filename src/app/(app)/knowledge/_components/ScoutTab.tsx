@@ -105,10 +105,20 @@ interface ScoutTabProps {
   /** L1 才能审批公司共享 */
   isL1: boolean;
   shareRequests: ShareRequestView[];
+  /** L1 在共享区可指定归属部门（当前可见部门） */
+  departments: Array<{ id: string; name: string }>;
 }
 
 /** 巡读上传：逐文件入库 + 批次详情 + 整批撤回 */
-export function ScoutTab({ runs, canWrite, needsOcr, target, isL1, shareRequests }: ScoutTabProps) {
+export function ScoutTab({
+  runs,
+  canWrite,
+  needsOcr,
+  target,
+  isL1,
+  shareRequests,
+  departments,
+}: ScoutTabProps) {
   const router = useRouter();
   const folderRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<HTMLInputElement>(null);
@@ -132,6 +142,17 @@ export function ScoutTab({ runs, canWrite, needsOcr, target, isL1, shareRequests
   useEffect(() => {
     setFolder(targetFolder);
   }, [targetFolder]);
+
+  // 共享区归属部门：L1 可改，其余角色固定为当前部门
+  const [sharedDeptId, setSharedDeptId] = useState(activeTarget?.departmentId ?? "");
+  useEffect(() => {
+    setSharedDeptId(activeTarget?.departmentId ?? "");
+  }, [activeTarget?.departmentId]);
+
+  const canPickSharedDept = Boolean(isL1 && activeTarget?.isShared);
+  const uploadDeptId = canPickSharedDept
+    ? sharedDeptId || (activeTarget?.departmentId ?? "")
+    : activeTarget?.departmentId;
 
   const [selected, setSelected] = useState(runs[0]?.id ?? "");
   const [detail, setDetail] = useState<RunDetailView | null>(null);
@@ -192,7 +213,7 @@ export function ScoutTab({ runs, canWrite, needsOcr, target, isL1, shareRequests
         if (runId) body.set("runId", runId);
         if (goal.trim()) body.set("goal", goal.trim());
         if (activeTarget) {
-          body.set("dept", activeTarget.departmentId);
+          if (uploadDeptId) body.set("dept", uploadDeptId);
           if (activeTarget.roleKey) body.set("role", activeTarget.roleKey);
           if (activeTarget.isShared) body.set("scope", "shared");
         }
@@ -293,7 +314,25 @@ export function ScoutTab({ runs, canWrite, needsOcr, target, isL1, shareRequests
           <InlineMessage tone="error">{targetError}</InlineMessage>
         ) : activeTarget ? (
           <div className="flex flex-wrap items-center gap-2">
-            <TargetChip label="部门" value={activeTarget.departmentName} />
+            {canPickSharedDept ? (
+              <label className="inline-flex items-center gap-1 rounded-full bg-apple-canvas px-2.5 py-1">
+                <span className="text-[10px] text-zinc-500">归属部门</span>
+                <select
+                  aria-label="共享资料归属部门"
+                  className="max-w-[14rem] cursor-pointer truncate bg-transparent text-[12px] font-medium text-zinc-900 outline-none"
+                  value={uploadDeptId ?? ""}
+                  onChange={(event) => setSharedDeptId(event.target.value)}
+                >
+                  {departments.map((department) => (
+                    <option key={department.id} value={department.id}>
+                      {department.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <TargetChip label="部门" value={activeTarget.departmentName} />
+            )}
             <TargetChip label="岗位" value={activeTarget.roleKey || "未指定岗位"} />
             <TargetChip label="目录" value={folderLabel(folder)} />
             {activeTarget.isShared ? (
