@@ -8,12 +8,13 @@ export const headerRow = "flex flex-wrap items-start justify-between gap-5";
 export const pageTitle = "text-2xl font-semibold tracking-tight text-zinc-900";
 export const pageSubtitle = "mt-2 max-w-2xl text-[13px] leading-relaxed text-zinc-500";
 
+/** 390px：两行胶囊；≥640px：单行胶囊并允许横向滚动 */
 export const tabBar =
-  "mt-5 inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-apple-canvas p-1 [scrollbar-width:none]";
+  "mt-5 flex max-w-full flex-wrap items-center gap-1 rounded-2xl bg-apple-canvas p-1 sm:inline-flex sm:flex-nowrap sm:overflow-x-auto sm:rounded-full [scrollbar-width:none]";
 export const tabActive =
-  "whitespace-nowrap rounded-full bg-apple-blue-soft px-4 py-1.5 text-[13px] font-semibold text-apple-blue";
+  "whitespace-nowrap rounded-full bg-apple-blue-soft px-3 py-1.5 text-[13px] font-semibold text-apple-blue sm:px-4";
 export const tabIdle =
-  "whitespace-nowrap rounded-full px-4 py-1.5 text-[13px] font-medium text-zinc-600 transition-colors hover:text-zinc-900";
+  "whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-medium text-zinc-600 transition-colors hover:text-zinc-900 sm:px-4";
 
 export const card = "mb-4 rounded-2xl border border-hairline bg-white p-4 shadow-card sm:p-6";
 export const cardHead = "mb-3 flex items-baseline justify-between gap-4";
@@ -23,8 +24,14 @@ export const divider = "my-4 h-px bg-black/[0.04]";
 
 export const formGrid = "grid gap-3.5 sm:grid-cols-2";
 export const fieldLabel = "mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-zinc-500";
-export const input =
-  "w-full rounded-2xl border-0 bg-apple-canvas px-3.5 py-2.5 text-[13px] text-zinc-900 outline-none transition-all duration-200 placeholder:text-zinc-400 focus:bg-white focus:ring-2 focus:ring-apple-blue/20";
+/**
+ * input 统一带 w-full；需要按内容或固定宽度的场景改用 inputInline，
+ * 否则 Tailwind 生成的 `.w-full` 排在 `w-auto` / `w-[120px]` 之后会把宽度覆盖回去。
+ */
+const inputBase =
+  "rounded-2xl border-0 bg-apple-canvas px-3.5 py-2.5 text-[13px] text-zinc-900 outline-none transition-all duration-200 placeholder:text-zinc-400 focus:bg-white focus:ring-2 focus:ring-apple-blue/20 disabled:cursor-not-allowed disabled:opacity-60";
+export const input = `w-full ${inputBase}`;
+export const inputInline = inputBase;
 export const fileInput =
   "w-full rounded-2xl bg-apple-canvas px-3 py-2 text-[13px] text-zinc-600 file:mr-3 file:rounded-xl file:border-0 file:bg-[#eef0f4] file:px-3.5 file:py-1.5 file:text-[12px] file:font-medium file:text-zinc-900 hover:file:bg-[#e6e9ee]";
 
@@ -35,7 +42,7 @@ export const btnDark = `${btn} bg-zinc-900 text-white hover:bg-black`;
 export const btnBlue = `${btn} bg-apple-blue text-white hover:bg-apple-blue-hover`;
 export const btnGhost = `${btn} bg-apple-canvas text-zinc-800 hover:bg-[#eef0f4]`;
 export const linkBtn =
-  "text-[13px] text-apple-blue transition-opacity hover:underline hover:opacity-75 disabled:cursor-default disabled:text-zinc-500 disabled:no-underline";
+  "rounded-lg px-1 py-1 text-[13px] text-apple-blue transition-opacity hover:underline hover:opacity-75 disabled:cursor-default disabled:text-zinc-500 disabled:no-underline";
 
 export type Tone = "ok" | "warn" | "error" | "blue" | "muted";
 const badgeBase =

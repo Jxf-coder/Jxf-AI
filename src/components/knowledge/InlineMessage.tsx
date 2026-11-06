@@ -9,7 +9,14 @@ interface InlineMessageProps {
   children: ReactNode;
 }
 
-/** 操作回执 / 提示条 */
+/** 操作回执 / 提示条：异步结果自动播报给读屏器 */
 export function InlineMessage({ tone = "info", className, children }: InlineMessageProps) {
-  return <div className={className ? `${alert(tone)} ${className}` : alert(tone)}>{children}</div>;
+  return (
+    <div
+      role={tone === "error" ? "alert" : "status"}
+      className={className ? `${alert(tone)} ${className}` : alert(tone)}
+    >
+      {children}
+    </div>
+  );
 }

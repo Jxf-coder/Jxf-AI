@@ -112,6 +112,7 @@ export function GapsClient({ gaps, status, canWrite }: GapsClientProps) {
             className={`${input} min-w-[240px] flex-1`}
             value={question}
             maxLength={300}
+            aria-label="知识缺口问题"
             placeholder="手动记一条缺口，例如：客户问 2027 年新规怎么执行"
             onChange={(event) => setQuestion(event.target.value)}
           />

@@ -8,7 +8,7 @@ export function StatBar({ stats }: { stats: KnowledgeStats }) {
     regression !== null && regression.passed === regression.total && regression.retained >= 0.9;
 
   return (
-    <section className="mb-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-6" aria-label="知识库概览">
+    <section className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" aria-label="知识库概览">
       <StatTile
         label="知识单元"
         value={stats.units}

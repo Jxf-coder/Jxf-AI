@@ -25,10 +25,10 @@ interface TabNavProps {
   counts?: Partial<Record<KnowledgeTab, number>>;
 }
 
-/** Tab 导航：状态全部由 URL 承载，刷新与分享不丢 */
+/** Tab 导航：状态全部由 URL 承载，刷新与分享不丢；键盘用普通 Tab 焦点顺序即可遍历 */
 export function TabNav({ active, counts }: TabNavProps) {
   return (
-    <nav className={`${tabBar} mb-4`} role="tablist" aria-label="知识库视图">
+    <nav className={`${tabBar} mb-4`} aria-label="知识库视图">
       {KNOWLEDGE_TABS.map((tab) => {
         const isActive = tab.key === active;
         const count = counts?.[tab.key];
@@ -36,8 +36,7 @@ export function TabNav({ active, counts }: TabNavProps) {
           <Link
             key={tab.key}
             href={`/knowledge?tab=${tab.key}`}
-            role="tab"
-            aria-selected={isActive}
+            aria-current={isActive ? "page" : undefined}
             className={isActive ? tabActive : tabIdle}
           >
             {tab.label}

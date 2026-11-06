@@ -6,7 +6,7 @@ import { useState, useTransition } from "react";
 import { EmptyState } from "@/components/knowledge/EmptyState";
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { SectionCard } from "@/components/knowledge/SectionCard";
-import { btnBlue, btnGhost, input } from "@/components/knowledge/tokens";
+import { btnBlue, btnGhost, input, inputInline } from "@/components/knowledge/tokens";
 import type { CardFacets, CardMetaPatch, CardView } from "@/lib/knowledge/cards";
 
 import { bulkDecideAction } from "../cards/actions";
@@ -207,7 +207,7 @@ export function CardsClient({ cards, facets, canWrite, canConfirm, filter }: Car
           <span className="text-[12px] text-zinc-500">已选 {picked.size}</span>
 
           <select
-            className={`${input} w-auto`}
+            className={`${inputInline} w-auto`}
             value={bulk.category}
             aria-label="批量分类"
             onChange={(event) => setBulk((current) => ({ ...current, category: event.target.value }))}
@@ -222,28 +222,28 @@ export function CardsClient({ cards, facets, canWrite, canConfirm, filter }: Car
               ))}
           </select>
           <input
-            className={`${input} w-[120px]`}
+            className={`${inputInline} w-[120px]`}
             value={bulk.product}
             placeholder="产品不变"
             aria-label="批量产品"
             onChange={(event) => setBulk((current) => ({ ...current, product: event.target.value }))}
           />
           <input
-            className={`${input} w-[100px]`}
+            className={`${inputInline} w-[100px]`}
             value={bulk.owner}
             placeholder="负责人不变"
             aria-label="批量负责人"
             onChange={(event) => setBulk((current) => ({ ...current, owner: event.target.value }))}
           />
           <input
-            className={`${input} w-[140px]`}
+            className={`${inputInline} w-[140px]`}
             type="date"
             value={bulk.validUntil}
             aria-label="批量有效期"
             onChange={(event) => setBulk((current) => ({ ...current, validUntil: event.target.value }))}
           />
           <select
-            className={`${input} w-auto`}
+            className={`${inputInline} w-auto`}
             value={bulk.external}
             aria-label="批量对外策略"
             onChange={(event) =>
