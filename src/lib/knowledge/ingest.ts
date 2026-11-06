@@ -69,6 +69,8 @@ export interface IngestFileResult {
   embedded?: boolean;
   /** 非空表示正文来自自动 OCR（模型名） */
   ocrModel?: string;
+  /** 共享审批状态：none / pending_approval / approved */
+  shareStatus?: "none" | "pending_approval" | "approved";
 }
 
 export interface IngestCounts {
@@ -112,6 +114,63 @@ export interface IngestOptions {
   runId?: string;
   /** 目标标准目录；缺省落「01-原始素材」 */
   folderKey?: string;
+  /** 目标部门：L1 可指定任意部门；其他角色只允许当前部门 */
+  departmentId?: string;
+  /** 目标岗位：必须是该部门在职岗位；缺省取上传者在该部门的岗位 */
+  roleKey?: string;
+  /** shared：上传即申请公司共享（L1 直接通过，其余待 L1 审批） */
+  scope?: "department" | "shared";
+}
+
+/**
+ * 解析入库目标：部门 + 岗位。
+ *
+ * 红线：非 L1 不能借目录预填越过当前部门（跨部门直接报错，不静默回落）；
+ * 岗位必须真实存在，避免把资料挂到虚构岗位。
+ */
+async function resolveIngestTarget(
+  context: UserContext,
+  options: IngestOptions,
+): Promise<{ departmentId: string; roleKey: string }> {
+  const activeDepartmentId = context.activeDepartmentId;
+  if (!activeDepartmentId) {
+    throw new Error("当前账号没有有效部门上下文，无法入库");
+  }
+
+  const requestedDepartment = (options.departmentId ?? "").trim();
+  const departmentId = requestedDepartment || activeDepartmentId;
+  if (context.accessLevel !== "L1" && departmentId !== activeDepartmentId) {
+    throw new Error("无权限写入该部门：请先切换到该部门再上传");
+  }
+
+  const requestedRole = (options.roleKey ?? "").trim().slice(0, 64);
+
+  return withUserContext(context, async (client) => {
+    const department = await client.query<{ id: string }>(
+      `select id from departments where id = $1`,
+      [departmentId],
+    );
+    if (!department.rows[0]) {
+      throw new Error("目标部门不存在或无权访问");
+    }
+
+    let roleKey = "";
+    if (requestedRole) {
+      const role = await client.query<{ exists: boolean }>(
+        `select exists(
+           select 1 from memberships
+            where department_id = $1 and status = 'active' and trim(position) = $2
+         ) as exists`,
+        [departmentId, requestedRole],
+      );
+      if (!role.rows[0]?.exists) {
+        throw new Error(`岗位「${requestedRole}」在该部门不存在或已停用`);
+      }
+      roleKey = requestedRole;
+    }
+
+    return { departmentId, roleKey };
+  });
 }
 
 export async function ingestUpload(
@@ -130,11 +189,12 @@ export async function ingestUpload(
     throw new Error(`单次最多上传 ${MAX_FILES_PER_RUN} 个文件`);
   }
 
-  const departmentId = context.activeDepartmentId;
+  const target = await resolveIngestTarget(context, options);
+  const departmentId = target.departmentId;
   const results: IngestFileResult[] = [];
   const prepared: PreparedDocument[] = [];
 
-  // 0. 冻结落盘维度：部门 slug + 上传者当前岗位 + 目标标准目录
+  // 0. 冻结落盘维度：部门 slug + 目标岗位 + 目标标准目录
   const scope = await withUserContext(context, async (client) => {
     const department = await client.query<{ slug: string }>(
       `select slug from departments where id = $1`,
@@ -148,7 +208,8 @@ export async function ingestUpload(
     );
     return {
       departmentSlug: department.rows[0]?.slug ?? departmentId.slice(0, 8),
-      role: (membership.rows[0]?.position ?? "").trim(),
+      // 目录预填的岗位优先；否则取上传者在该部门的在职岗位
+      role: target.roleKey || (membership.rows[0]?.position ?? "").trim(),
     };
   });
 
@@ -352,6 +413,13 @@ export async function ingestUpload(
     counts.skipped += skippedCount;
     counts.errors += errorCount;
 
+    // 共享范围：L1 直接生效；其他人只提交申请，审批前保持部门隔离
+    const sharedScope = options.scope === "shared";
+    const directShare = sharedScope && context.accessLevel === "L1";
+    const pendingShare = sharedScope && !directShare;
+    const shareVisibility = directShare ? "shared" : "department";
+    const shareState = directShare ? "approved" : pendingShare ? "pending_approval" : "none";
+
     for (const item of fresh) {
       const asset = await client.query<{ id: string }>(
         `insert into assets (tenant_id, department_id, title, storage_key, mime, byte_size, sha256, kind, created_by)
@@ -372,8 +440,11 @@ export async function ingestUpload(
       const document = await client.query<{ id: string }>(
         `insert into documents
            (tenant_id, department_id, asset_id, ingest_run_id, title, mime, role_key, folder_key,
-            page_count, char_count, status, sha256)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            page_count, char_count, status, sha256,
+            visibility, share_status, share_requested_by, share_requested_at,
+            share_reviewed_by, share_reviewed_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                 $13, $14, $15, $16, $17, $18)
          returning id`,
         [
           context.tenantId,
@@ -388,6 +459,12 @@ export async function ingestUpload(
           item.charCount,
           item.status,
           item.sha256,
+          shareVisibility,
+          shareState,
+          pendingShare ? context.userId : null,
+          pendingShare ? new Date() : null,
+          directShare ? context.userId : null,
+          directShare ? new Date() : null,
         ],
       );
       const documentId = document.rows[0].id;
@@ -414,12 +491,18 @@ export async function ingestUpload(
       }
 
       const decision: IngestDecision = item.status === "needs_ocr" ? "ask" : "rule_keep";
-      const reason =
+      const shareNote = pendingShare
+        ? "已提交公司共享审批"
+        : directShare
+          ? "已加入公司共享"
+          : "";
+      const baseReason =
         item.status === "needs_ocr"
           ? "扫描件，未能自动识别，待人工补录"
           : item.ocrModel
             ? `扫描件已自动 OCR（${item.ocrModel}）`
-            : null;
+            : "";
+      const reason = [baseReason, shareNote].filter(Boolean).join(" · ") || null;
       await client.query(
         `insert into ingest_files (run_id, asset_id, source_path, decision, reason, document_id, ocr_model)
          values ($1, $2, $3, $4, $5, $6, $7)`,
@@ -441,15 +524,21 @@ export async function ingestUpload(
         name: item.input.name,
         decision,
         reason:
-          item.status === "needs_ocr"
-            ? "扫描件待 OCR"
-            : item.ocrModel
-              ? "扫描件已自动 OCR"
-              : undefined,
+          [
+            item.status === "needs_ocr"
+              ? "扫描件待 OCR"
+              : item.ocrModel
+                ? "扫描件已自动 OCR"
+                : "",
+            shareNote,
+          ]
+            .filter(Boolean)
+            .join(" · ") || undefined,
         documentId,
         chunkCount: item.chunks.length,
         embedded,
         ocrModel: item.ocrModel ?? undefined,
+        shareStatus: shareState,
       });
     }
 
@@ -488,6 +577,18 @@ export async function ingestUpload(
       departmentId,
       payload: { ...counts },
     });
+
+    // 共享范围单独留痕：审批人需要在审计里看到「谁把什么传进了共享区」
+    if (sharedScope && fresh.length > 0) {
+      await auditInTx(client, context, {
+        actorUserId: context.userId,
+        action: pendingShare ? "knowledge.share_requested" : "knowledge.document_shared",
+        targetType: "ingest_run",
+        targetId: createdRunId,
+        departmentId,
+        payload: { scope: "shared", pending: pendingShare, documents: fresh.length },
+      });
+    }
 
     return createdRunId;
   });

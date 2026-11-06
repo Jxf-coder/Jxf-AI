@@ -44,6 +44,9 @@ export async function POST(request: Request) {
   const goal = String(form.get("goal") ?? "");
   const relativePath = String(form.get("path") ?? "").trim() || file.name;
   const folder = String(form.get("folder") ?? "").trim();
+  const departmentId = String(form.get("dept") ?? "").trim() || undefined;
+  const roleKey = String(form.get("role") ?? "").trim();
+  const scope = String(form.get("scope") ?? "").trim() === "shared" ? "shared" : undefined;
 
   try {
     const result = await ingestUpload(
@@ -56,7 +59,13 @@ export async function POST(request: Request) {
         },
       ],
       goal,
-      { runId, folderKey: isFolderKey(folder) ? folder : undefined },
+      {
+        runId,
+        folderKey: isFolderKey(folder) ? folder : undefined,
+        departmentId,
+        roleKey,
+        scope,
+      },
     );
 
     return Response.json({

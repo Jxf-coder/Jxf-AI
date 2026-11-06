@@ -20,6 +20,8 @@ import {
 import { addCardEvidence, removeCardEvidence } from "../src/lib/knowledge/card-evidence.ts";
 import { mergeScannedPages, submitOcrText } from "../src/lib/knowledge/ocr.ts";
 import { parseDocument } from "../src/lib/knowledge/parse.ts";
+import { reviewShare, setShareState } from "../src/lib/knowledge/share.ts";
+import { resolveUploadTarget } from "../src/lib/knowledge/upload-target.ts";
 import { verifyQuoteInChunk } from "../src/lib/knowledge/evidence.ts";
 import { answerQuestion } from "../src/lib/knowledge/qa.ts";
 import { runRegression, seedRegressionQuestions } from "../src/lib/knowledge/regression.ts";
@@ -828,6 +830,194 @@ async function main() {
     client.query("select id from knowledge_cards where id = $1", [fx.cardHuman]),
   );
   check("卡片共享：收回后跨部门不可见", afterRevoke.rowCount === 0, `rowCount=${afterRevoke.rowCount}`);
+
+  // 23b. 目录预填隔离：L1 任意，L2/普通成员只能本部门；共享区需 L1 审批
+  const leadAContext = {
+    userId: fx.uid["a2@kb.test"],
+    tenantId: TENANT,
+    activeMembership: null,
+    activeMemberships: [],
+    activeMembershipId: fx.membershipOf("a2@kb.test"),
+    activeDepartmentId: fx.departments.groupA,
+    activeDepartmentName: "知识库一组",
+    membershipDepartmentIds: [fx.departments.groupA],
+    departmentIds: [fx.departments.groupA],
+    subtreeDepartmentIds: [fx.departments.groupA, fx.departments.teamA1],
+    accessLevel: "L2",
+    permissionVersion: 0,
+    requestId: "kb-test",
+  };
+
+  const crossPrefill = await resolveUploadTarget(leadAContext, {
+    dept: fx.departments.groupB,
+    folder: "03-standards",
+  });
+  check(
+    "目录预填：L2 跨部门被拦截",
+    crossPrefill.ok === false && crossPrefill.message.includes("无权限"),
+    JSON.stringify(crossPrefill),
+  );
+
+  const ownPrefill = await resolveUploadTarget(leadAContext, {
+    dept: fx.departments.groupA,
+    folder: "03-standards",
+  });
+  check(
+    "目录预填：本部门空目录也可选中",
+    ownPrefill.ok === true &&
+      ownPrefill.folderKey === "03-standards" &&
+      ownPrefill.needsApproval === false,
+    JSON.stringify(ownPrefill),
+  );
+
+  const sharedPrefill = await resolveUploadTarget(leadAContext, {
+    folder: "04-cases",
+    scope: "shared",
+  });
+  check(
+    "目录预填：共享区需要 L1 审批",
+    sharedPrefill.ok === true && sharedPrefill.isShared === true && sharedPrefill.needsApproval === true,
+    JSON.stringify(sharedPrefill),
+  );
+
+  const l1Prefill = await resolveUploadTarget(bossContext, {
+    dept: fx.departments.groupB,
+    folder: "03-standards",
+  });
+  check(
+    "目录预填：L1 可跨部门选择",
+    l1Prefill.ok === true && l1Prefill.departmentId === fx.departments.groupB,
+    JSON.stringify(l1Prefill),
+  );
+
+  const fakeRolePrefill = await resolveUploadTarget(leadAContext, {
+    dept: fx.departments.groupA,
+    role: "不存在的岗位",
+  });
+  check(
+    "目录预填：虚构岗位被拒绝",
+    fakeRolePrefill.ok === false,
+    JSON.stringify(fakeRolePrefill),
+  );
+
+  await withClient(OWNER_URL, async (owner) => {
+    await owner.query(`update memberships set position = '一组经理' where id = $1`, [
+      fx.membershipOf("a2@kb.test"),
+    ]);
+  });
+  const rolePrefill = await resolveUploadTarget(leadAContext, {
+    dept: fx.departments.groupA,
+    role: "一组经理",
+  });
+  check(
+    "目录预填：在职岗位可预填",
+    rolePrefill.ok === true && rolePrefill.roleKey === "一组经理",
+    JSON.stringify(rolePrefill),
+  );
+
+  // 23c. 公司共享审批：申请期间保持部门隔离，L1 通过后才开放
+  const shareRequested = await setShareState(leadAContext, "card", fx.cardHuman, true);
+  check(
+    "共享审批：L2 申请后进入待审批",
+    shareRequested.pending === true && shareRequested.shared === false,
+    JSON.stringify(shareRequested),
+  );
+
+  const pendingShareRow = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      "select visibility, share_status, share_requested_by from knowledge_cards where id = $1",
+      [fx.cardHuman],
+    );
+    return rows[0];
+  });
+  check(
+    "共享审批：通过前保持部门隔离",
+    pendingShareRow.visibility === "department" && pendingShareRow.share_status === "pending_approval",
+    JSON.stringify(pendingShareRow),
+  );
+  check(
+    "共享审批：记录申请人",
+    pendingShareRow.share_requested_by === fx.uid["a2@kb.test"],
+    String(pendingShareRow.share_requested_by),
+  );
+
+  const pendingCrossRead = await runAs(memberB, (client) =>
+    client.query("select id from knowledge_cards where id = $1", [fx.cardHuman]),
+  );
+  check("共享审批：通过前兄弟部门不可读", pendingCrossRead.rowCount === 0, `rowCount=${pendingCrossRead.rowCount}`);
+
+  let crossReviewBlocked = false;
+  try {
+    await reviewShare(leadAContext, "card", fx.cardHuman, true);
+  } catch {
+    crossReviewBlocked = true;
+  }
+  check("共享审批：非 L1 不得审批", crossReviewBlocked);
+
+  const approvedShare = await reviewShare(bossContext, "card", fx.cardHuman, true);
+  check("共享审批：L1 通过后进入共享", approvedShare.shared === true, JSON.stringify(approvedShare));
+
+  const approvedShareRow = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      "select visibility, share_status, share_reviewed_by from knowledge_cards where id = $1",
+      [fx.cardHuman],
+    );
+    return rows[0];
+  });
+  check(
+    "共享审批：通过后 visibility=shared 并记录审批人",
+    approvedShareRow.visibility === "shared" &&
+      approvedShareRow.share_status === "approved" &&
+      approvedShareRow.share_reviewed_by === fx.uid["boss@kb.test"],
+    JSON.stringify(approvedShareRow),
+  );
+
+  const approvedCrossRead = await runAs(memberB, (client) =>
+    client.query("select id from knowledge_cards where id = $1", [fx.cardHuman]),
+  );
+  check("共享审批：通过后兄弟部门可读", approvedCrossRead.rowCount === 1, `rowCount=${approvedCrossRead.rowCount}`);
+
+  // 收回 → 再次申请 → 驳回：仍然回到部门隔离
+  await setShareState(bossContext, "card", fx.cardHuman, false);
+  await setShareState(leadAContext, "card", fx.cardHuman, true);
+  const rejectedShare = await reviewShare(bossContext, "card", fx.cardHuman, false);
+  const rejectedRow = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      "select visibility, share_status from knowledge_cards where id = $1",
+      [fx.cardHuman],
+    );
+    return rows[0];
+  });
+  check(
+    "共享审批：驳回后保持部门隔离",
+    rejectedShare.shared === false &&
+      rejectedRow.visibility === "department" &&
+      rejectedRow.share_status === "rejected",
+    JSON.stringify({ rejectedShare, rejectedRow }),
+  );
+  const rejectedCrossRead = await runAs(memberB, (client) =>
+    client.query("select id from knowledge_cards where id = $1", [fx.cardHuman]),
+  );
+  check("共享审批：驳回后兄弟部门不可读", rejectedCrossRead.rowCount === 0, `rowCount=${rejectedCrossRead.rowCount}`);
+
+  const shareAudit = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      `select action, count(*)::int as count from audit_events
+        where tenant_id = $1 and action in
+          ('knowledge.share_requested', 'knowledge.share_approved', 'knowledge.share_rejected')
+        group by action`,
+      [TENANT],
+    );
+    return Object.fromEntries(rows.map((row) => [row.action, row.count]));
+  });
+  check(
+    "共享审批：申请/通过/驳回均留痕",
+    shareAudit["knowledge.share_requested"] >= 2 &&
+      shareAudit["knowledge.share_approved"] >= 1 &&
+      shareAudit["knowledge.share_rejected"] >= 1,
+    JSON.stringify(shareAudit),
+  );
+
 
   // 24. 软删进 99-回收站：退出检索、树中移位、可恢复
   const beforeTrash = await runAs(memberA, (client) =>

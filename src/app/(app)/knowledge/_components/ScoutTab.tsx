@@ -10,10 +10,17 @@ import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { Pill } from "@/components/knowledge/Pill";
 import { SectionCard } from "@/components/knowledge/SectionCard";
 import { badge, btnBlue, btnGhost, formGrid, input, linkBtn, meta } from "@/components/knowledge/tokens";
-import { DEFAULT_DOCUMENT_FOLDER, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
+import { DEFAULT_DOCUMENT_FOLDER, folderLabel, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
 import type { NeedsOcrDocument } from "@/lib/knowledge/ocr";
+import type { ShareRequestView } from "@/lib/knowledge/share";
+import type { UploadTarget, UploadTargetError } from "@/lib/knowledge/upload-target";
 
-import { loadRunDetailAction, revokeRunAction, type RunDetailView } from "../actions";
+import {
+  loadRunDetailAction,
+  reviewShareAction,
+  revokeRunAction,
+  type RunDetailView,
+} from "../actions";
 import { filesFromDataTransfer, filesFromInput, type DroppedFile } from "./file-drop";
 
 export interface ScoutRunItem {
@@ -78,27 +85,53 @@ function formatDate(value: string): string {
   }).format(new Date(value));
 }
 
+/** 「部门 / 岗位 / 目录」目标芯片：让用户一眼确认传到哪 */
+function TargetChip({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-apple-canvas px-2.5 py-1">
+      <span className="text-[10px] text-zinc-500">{label}</span>
+      <span className="max-w-[16rem] truncate text-[12px] font-medium text-zinc-900">{value}</span>
+    </span>
+  );
+}
+
 interface ScoutTabProps {
   runs: ScoutRunItem[];
   canWrite: boolean;
   /** 待 OCR / 解析失败的文档：提供补录入口 */
   needsOcr: NeedsOcrDocument[];
+  /** 左侧目录点击后的上传目标（部门 / 岗位 / 目录 / 是否共享） */
+  target: UploadTarget | UploadTargetError | null;
+  /** L1 才能审批公司共享 */
+  isL1: boolean;
+  shareRequests: ShareRequestView[];
 }
 
 /** 巡读上传：逐文件入库 + 批次详情 + 整批撤回 */
-export function ScoutTab({ runs, canWrite, needsOcr }: ScoutTabProps) {
+export function ScoutTab({ runs, canWrite, needsOcr, target, isL1, shareRequests }: ScoutTabProps) {
   const router = useRouter();
   const folderRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<HTMLInputElement>(null);
 
+  const activeTarget = target && target.ok ? target : null;
+  const targetError = target && !target.ok ? target.message : "";
+
   const [goal, setGoal] = useState("");
   const [maxFiles, setMaxFiles] = useState("40");
-  const [folder, setFolder] = useState<string>(DEFAULT_DOCUMENT_FOLDER);
+  const [folder, setFolder] = useState<string>(activeTarget?.folderKey ?? DEFAULT_DOCUMENT_FOLDER);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number; name: string } | null>(null);
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  const [reviewNotice, setReviewNotice] = useState("");
+
+  // 左侧换目录后同一页面内复用组件：把下拉同步到新的预填目录
+  const targetFolder = activeTarget?.folderKey ?? DEFAULT_DOCUMENT_FOLDER;
+  useEffect(() => {
+    setFolder(targetFolder);
+  }, [targetFolder]);
 
   const [selected, setSelected] = useState(runs[0]?.id ?? "");
   const [detail, setDetail] = useState<RunDetailView | null>(null);
@@ -158,6 +191,11 @@ export function ScoutTab({ runs, canWrite, needsOcr }: ScoutTabProps) {
         body.set("folder", folder);
         if (runId) body.set("runId", runId);
         if (goal.trim()) body.set("goal", goal.trim());
+        if (activeTarget) {
+          body.set("dept", activeTarget.departmentId);
+          if (activeTarget.roleKey) body.set("role", activeTarget.roleKey);
+          if (activeTarget.isShared) body.set("scope", "shared");
+        }
 
         const response = await fetch("/api/knowledge/upload/file", { method: "POST", body });
         const payload = (await response.json().catch(() => ({}))) as {
@@ -218,6 +256,16 @@ export function ScoutTab({ runs, canWrite, needsOcr }: ScoutTabProps) {
     }
   }
 
+  async function review(kind: "document" | "card", id: string, approve: boolean) {
+    setReviewing(id);
+    const result = await reviewShareAction(kind, id, approve);
+    setReviewing(null);
+    setReviewNotice(result.message);
+    if (result.ok) {
+      router.refresh();
+    }
+  }
+
   const counts: Array<[string, number]> = detail
     ? [
         ["文件", detail.counts.files ?? 0],
@@ -232,6 +280,79 @@ export function ScoutTab({ runs, canWrite, needsOcr }: ScoutTabProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      <SectionCard
+        title="当前上传到"
+        right={
+          <span className={badge(activeTarget?.isShared ? "warn" : "ok")}>
+            {activeTarget?.isShared ? "公司共享" : "部门目录"}
+          </span>
+        }
+        desc="点击左侧任意目录即可切换目标（空目录也可点）；部门与岗位由目录决定，越权预填会被服务端拦截。"
+      >
+        {targetError ? (
+          <InlineMessage tone="error">{targetError}</InlineMessage>
+        ) : activeTarget ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <TargetChip label="部门" value={activeTarget.departmentName} />
+            <TargetChip label="岗位" value={activeTarget.roleKey || "未指定岗位"} />
+            <TargetChip label="目录" value={folderLabel(folder)} />
+            {activeTarget.isShared ? (
+              <span className={badge(activeTarget.needsApproval ? "warn" : "ok")}>
+                {activeTarget.needsApproval ? "需 L1 审批后共享" : "直接进入共享区"}
+              </span>
+            ) : null}
+          </div>
+        ) : (
+          <InlineMessage>可从左侧目录选择上传目标；未指定时默认落到当前部门的「01-原始素材」。</InlineMessage>
+        )}
+      </SectionCard>
+
+      {isL1 && shareRequests.length > 0 ? (
+        <SectionCard
+          title={`共享审批 · ${shareRequests.length}`}
+          right={<span className={badge("warn")}>待处理</span>}
+          desc="通过后才进入「公司资料（共享）」；未通过前保持部门隔离，不参与公共检索。"
+        >
+          <ul className="grid list-none gap-1.5 p-0">
+            {shareRequests.map((item) => (
+              <li
+                key={`${item.kind}:${item.id}`}
+                className="flex flex-wrap items-center gap-2 rounded-xl bg-apple-canvas px-3 py-2"
+              >
+                <Pill tone="warn">{item.kind === "document" ? "文档" : "知识卡"}</Pill>
+                <span className="min-w-0 flex-1 truncate text-[13px] text-zinc-800">{item.title}</span>
+                <span className={meta}>
+                  {item.departmentName} · {item.requesterName ?? "—"} · {formatDate(item.requestedAt)}
+                </span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    className={linkBtn}
+                    disabled={reviewing === item.id}
+                    onClick={() => void review(item.kind, item.id, true)}
+                  >
+                    通过
+                  </button>
+                  <button
+                    type="button"
+                    className={linkBtn}
+                    disabled={reviewing === item.id}
+                    onClick={() => void review(item.kind, item.id, false)}
+                  >
+                    驳回
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {reviewNotice ? (
+            <p role="status" className="mt-2 text-[11px] text-zinc-500">
+              {reviewNotice}
+            </p>
+          ) : null}
+        </SectionCard>
+      ) : null}
+
       {needsOcr.length > 0 ? (
         <SectionCard
           title={`待 OCR · ${needsOcr.length}`}

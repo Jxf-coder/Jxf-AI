@@ -17,11 +17,8 @@ import {
   restoreDocument,
   trashDocument,
 } from "@/lib/knowledge/trash";
-import {
-  isUuid,
-  setCardVisibility,
-  setDocumentVisibility,
-} from "@/lib/knowledge/workspace";
+import { isUuid } from "@/lib/knowledge/workspace";
+import { reviewShare, setShareState } from "@/lib/knowledge/share";
 import {
   addRegressionQuestion,
   removeRegressionQuestion,
@@ -286,9 +283,14 @@ export async function setDocumentVisibilityAction(
   shared: boolean,
 ): Promise<ActionResult> {
   try {
-    await setDocumentVisibility(await resolveCurrentContext(), documentId, shared);
+    const result = await setShareState(
+      await resolveCurrentContext(),
+      "document",
+      documentId,
+      shared,
+    );
     revalidatePath("/knowledge");
-    return { ok: true, message: shared ? "已加入公司资料（共享）" : "已收回为部门内可见" };
+    return { ok: true, message: result.message };
   } catch (error) {
     return { ok: false, message: toPermissionMessage(error) };
   }
@@ -391,9 +393,29 @@ export async function setCardVisibilityAction(
   shared: boolean,
 ): Promise<ActionResult> {
   try {
-    await setCardVisibility(await resolveCurrentContext(), cardId, shared);
+    const result = await setShareState(
+      await resolveCurrentContext(),
+      "card",
+      cardId,
+      shared,
+    );
     revalidatePath("/knowledge");
-    return { ok: true, message: shared ? "已加入公司资料（共享）" : "已收回为部门内可见" };
+    return { ok: true, message: result.message };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 共享审批：仅 L1；通过后才真正进入公司共享区 */
+export async function reviewShareAction(
+  kind: "document" | "card",
+  id: string,
+  approve: boolean,
+): Promise<ActionResult> {
+  try {
+    const result = await reviewShare(await resolveCurrentContext(), kind, id, approve);
+    revalidatePath("/knowledge");
+    return { ok: true, message: result.message };
   } catch (error) {
     return { ok: false, message: toPermissionMessage(error) };
   }

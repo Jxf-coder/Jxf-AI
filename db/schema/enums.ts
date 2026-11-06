@@ -73,6 +73,20 @@ export const cardKind = pgEnum("card_kind", [
 /** 知识卡状态：待确认 / 已确认 / 已丢弃 */
 export const cardStatus = pgEnum("card_status", ["pending", "confirmed", "dropped"]);
 
+/**
+ * 公司共享审批状态：
+ * - none：未申请（默认，visibility 保持 department）
+ * - pending_approval：L2/普通成员已申请，等待 L1 审批；此期间不进入公共检索
+ * - approved：L1 通过，visibility 才置为 shared
+ * - rejected：L1 驳回，保持部门隔离
+ */
+export const shareStatus = pgEnum("share_status", [
+  "none",
+  "pending_approval",
+  "approved",
+  "rejected",
+]);
+
 /** 知识卡来源：开工问卷 / 提炼 / 手工 / 巡读 */
 export const cardOrigin = pgEnum("card_origin", ["intake", "distill", "manual", "scout"]);
 

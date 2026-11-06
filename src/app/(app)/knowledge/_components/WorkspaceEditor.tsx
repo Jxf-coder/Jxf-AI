@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { btnBlue, btnGhost, fieldLabel, input, linkBtn } from "@/components/knowledge/tokens";
@@ -59,11 +59,23 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
   const [title, setTitle] = useState(initialTitle);
   const [body, setBody] = useState(initialBody);
   const [source, setSource] = useState(initialSource);
-  const [shared, setShared] = useState(
+  const serverShared =
     props.mode === "document"
       ? props.document.visibility === "shared"
-      : props.card.visibility === "shared",
-  );
+      : props.card.visibility === "shared";
+  const serverSharePending =
+    props.mode === "document"
+      ? props.document.shareStatus === "pending_approval"
+      : props.card.shareStatus === "pending_approval";
+
+  const [shared, setShared] = useState(serverShared);
+  const [sharePending, setSharePending] = useState(serverSharePending);
+
+  // 共享审批由服务端裁定：刷新后以服务端状态为准，避免本地提前显示「已共享」
+  useEffect(() => {
+    setShared(serverShared);
+    setSharePending(serverSharePending);
+  }, [serverShared, serverSharePending]);
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
   const [confirmTrash, setConfirmTrash] = useState(false);
@@ -459,13 +471,12 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
                 setFailed(!result.ok);
                 setMessage(result.message);
                 if (result.ok) {
-                  setShared(!shared);
                   router.refresh();
                 }
               })
             }
           >
-            {shared ? "收回共享" : "加入公司共享"}
+            {sharePending ? "撤回共享申请" : shared ? "收回共享" : "加入公司共享"}
           </button>
         ) : null}
         <span className="text-[11px] text-zinc-400">
@@ -473,9 +484,11 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
             ? isDocument
               ? "在 99-回收站 · 切片与原件仍保留，恢复后回到原目录"
               : "在 99-回收站 · 恢复后回到待确认"
-            : shared
-              ? "公司资料（共享） · 全员可读"
-              : "仅本部门及下级可见"}
+            : sharePending
+              ? "共享审批中 · 通过后全公司可读，当前仍仅本部门可见"
+              : shared
+                ? "公司资料（共享） · 全员可读"
+                : "仅本部门及下级可见"}
         </span>
       </div>
 

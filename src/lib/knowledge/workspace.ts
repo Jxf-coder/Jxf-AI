@@ -7,7 +7,6 @@
  * - 目录树按「共享区 / 部门 → 岗位 → 10 个标准目录」组装，空目录也常驻。
  */
 
-import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
 import {
@@ -16,7 +15,7 @@ import {
   type CardVersionView,
 } from "@/lib/knowledge/cards";
 import { folderLabel, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
-import { requireContextPermission } from "@/lib/permissions/server";
+import { setShareState } from "@/lib/knowledge/share";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -322,6 +321,8 @@ export interface DocumentContent {
   folderKey: string;
   folderLabel: string;
   visibility: string;
+  /** 公司共享审批状态：none / pending_approval / approved / rejected */
+  shareStatus: string;
   chunkCount: number;
   /** 非空表示在 99-回收站：编辑器只允许恢复，不允许继续生成卡片 */
   deletedAt: string | null;
@@ -356,11 +357,12 @@ export async function loadDocumentContent(
       role_key: string | null;
       folder_key: string;
       visibility: string;
+      share_status: string;
       department_name: string;
       deleted_at: Date | null;
     }>(
       `select d.id, d.title, d.status, d.mime, d.page_count, d.char_count,
-              d.department_id, d.role_key, d.folder_key, d.visibility, d.deleted_at,
+              d.department_id, d.role_key, d.folder_key, d.visibility, d.share_status, d.deleted_at,
               dep.name as department_name
          from documents d
          join departments dep on dep.id = d.department_id
@@ -412,6 +414,7 @@ export async function loadDocumentContent(
       folderKey: document.folder_key,
       folderLabel: folderLabel(document.folder_key),
       visibility: document.visibility,
+      shareStatus: document.share_status,
       chunkCount: chunks.rowCount ?? chunks.rows.length,
       deletedAt: document.deleted_at ? document.deleted_at.toISOString() : null,
       text,
@@ -427,41 +430,13 @@ export async function loadDocumentContent(
   });
 }
 
-/** 共享开关：写仍限本部门（knowledge:write），只改 visibility 一列 */
+/** 共享开关：写仍限本部门（knowledge:write）；L1 直接通过，其余进入待审批 */
 export async function setDocumentVisibility(
   context: UserContext,
   documentId: string,
   shared: boolean,
 ): Promise<void> {
-  await withUserContext(context, async (client) => {
-    const { rows } = await client.query<{ department_id: string }>(
-      `select department_id from documents where id = $1`,
-      [documentId],
-    );
-    const departmentId = rows[0]?.department_id;
-    if (!departmentId) {
-      throw new Error("文档不存在或无权操作");
-    }
-
-    await requireContextPermission(client, context, "knowledge:write", {
-      kind: "department",
-      id: departmentId,
-      departmentId,
-    });
-
-    await client.query(
-      `update documents set visibility = $2 where id = $1 and department_id = $3`,
-      [documentId, shared ? "shared" : "department", departmentId],
-    );
-
-    await auditInTx(client, context, {
-      actorUserId: context.userId,
-      action: shared ? "knowledge.document_shared" : "knowledge.document_unshared",
-      targetType: "document",
-      targetId: documentId,
-      departmentId,
-    });
-  });
+  await setShareState(context, "document", documentId, shared);
 }
 
 export interface CardDetail {
@@ -479,6 +454,8 @@ export interface CardDetail {
   evidenceCount: number;
   /** department | shared */
   visibility: string;
+  /** 公司共享审批状态：none / pending_approval / approved / rejected */
+  shareStatus: string;
   /** 当前版本：编辑器保存时作为乐观锁基线 */
   rev: number;
   updatedAt: string;
@@ -508,12 +485,13 @@ export async function loadCardDetail(
       department_name: string;
       evidence_count: string;
       visibility: string;
+      share_status: string;
       rev: number;
       updated_at: Date;
       updated_by_name: string | null;
     }>(
       `select c.id, c.title, c.body, c.status, c.category, c.product,
-              c.role_key, c.folder_key, c.extra, c.visibility, c.rev, c.updated_at,
+              c.role_key, c.folder_key, c.extra, c.visibility, c.share_status, c.rev, c.updated_at,
               (select name from users where id = c.updated_by) as updated_by_name,
               dep.name as department_name,
               (select count(*) from card_evidence e where e.card_id = c.id)::text as evidence_count
@@ -562,6 +540,7 @@ export async function loadCardDetail(
       source,
       evidenceCount: Number(row.evidence_count) || 0,
       visibility: row.visibility,
+      shareStatus: row.share_status,
       rev: row.rev,
       updatedAt: row.updated_at.toISOString(),
       updatedByName: row.updated_by_name,
@@ -584,41 +563,13 @@ export async function loadCardDetail(
   return { ...card, versions: await listCardVersions(context, cardId, 6) };
 }
 
-/** 知识卡共享开关：写仍限本部门（knowledge:write），只改 visibility 一列 */
+/** 知识卡共享开关：写仍限本部门（knowledge:write）；L1 直接通过，其余进入待审批 */
 export async function setCardVisibility(
   context: UserContext,
   cardId: string,
   shared: boolean,
 ): Promise<void> {
-  await withUserContext(context, async (client) => {
-    const { rows } = await client.query<{ department_id: string }>(
-      `select department_id from knowledge_cards where id = $1`,
-      [cardId],
-    );
-    const departmentId = rows[0]?.department_id;
-    if (!departmentId) {
-      throw new Error("知识卡不存在或无权操作");
-    }
-
-    await requireContextPermission(client, context, "knowledge:write", {
-      kind: "department",
-      id: departmentId,
-      departmentId,
-    });
-
-    await client.query(
-      `update knowledge_cards set visibility = $2 where id = $1 and department_id = $3`,
-      [cardId, shared ? "shared" : "department", departmentId],
-    );
-
-    await auditInTx(client, context, {
-      actorUserId: context.userId,
-      action: shared ? "knowledge.card_shared" : "knowledge.card_unshared",
-      targetType: "knowledge_card",
-      targetId: cardId,
-      departmentId,
-    });
-  });
+  await setShareState(context, "card", cardId, shared);
 }
 
 export interface GraphNode {

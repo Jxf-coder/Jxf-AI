@@ -22,6 +22,8 @@ import {
   searchWorkspace,
 } from "@/lib/knowledge/workspace";
 import { listNeedsOcrDocuments } from "@/lib/knowledge/ocr";
+import { listShareRequests } from "@/lib/knowledge/share";
+import { resolveUploadTarget } from "@/lib/knowledge/upload-target";
 import { authorize } from "@/lib/permissions/authorize";
 import { resolveContextPermissions } from "@/lib/permissions/server";
 import type { ResolvedPermissions } from "@/types/permission";
@@ -67,6 +69,10 @@ export default async function KnowledgePage({
     doc?: string;
     card?: string;
     treeQ?: string;
+    folder?: string;
+    dept?: string;
+    role?: string;
+    scope?: string;
   }>;
 }) {
   const session = await requireSession();
@@ -91,13 +97,25 @@ export default async function KnowledgePage({
     };
   });
 
-  const [stats, tree, matches, needsOcr] = await Promise.all([
+  const [stats, tree, matches, needsOcr, shareRequests, uploadTarget] = await Promise.all([
     access.canRead ? loadKnowledgeStats(context) : Promise.resolve(null),
     access.canRead ? loadWorkspaceTree(context) : Promise.resolve(null),
     access.canRead && treeQuery.length > 0
       ? searchWorkspace(context, treeQuery)
       : Promise.resolve([]),
     access.canRead && tab === "scout" ? listNeedsOcrDocuments(context) : Promise.resolve([]),
+    // 共享审批只对 L1 展示；RLS 同时把范围限制在可读子树内
+    access.canRead && tab === "scout" && context.accessLevel === "L1"
+      ? listShareRequests(context)
+      : Promise.resolve([]),
+    access.canRead
+      ? resolveUploadTarget(context, {
+          folder: params.folder,
+          dept: params.dept,
+          role: params.role,
+          scope: params.scope,
+        })
+      : Promise.resolve(null),
   ]);
 
   const runs =
@@ -163,6 +181,16 @@ export default async function KnowledgePage({
             query={treeQuery}
             matches={matches}
             tab={tab}
+            target={
+              uploadTarget && uploadTarget.ok
+                ? {
+                    departmentId: uploadTarget.departmentId,
+                    roleKey: uploadTarget.roleKey,
+                    folderKey: uploadTarget.folderKey,
+                    isShared: uploadTarget.isShared,
+                  }
+                : null
+            }
             selected={
               document
                 ? { kind: "doc", id: document.id }
@@ -187,15 +215,22 @@ export default async function KnowledgePage({
 
             {tab === "scout" ? (
               <>
-                <details className="mb-4 rounded-2xl border border-hairline bg-white px-4 py-3 shadow-card">
+                <details
+                  open={Boolean(params.folder || params.dept || params.scope)}
+                  className="mb-4 rounded-2xl border border-hairline bg-white px-4 py-3 shadow-card"
+                >
                   <summary className="cursor-pointer text-[13px] font-medium text-zinc-800">
                     上传文档与入库批次
                     {needsOcr.length > 0 ? ` · 待 OCR ${needsOcr.length}` : ""}
+                    {shareRequests.length > 0 ? ` · 共享待审 ${shareRequests.length}` : ""}
                   </summary>
                   <div className="mt-3">
                     <ScoutTab
                       canWrite={access.canWrite}
                       needsOcr={needsOcr}
+                      target={uploadTarget}
+                      isL1={context.accessLevel === "L1"}
+                      shareRequests={shareRequests}
                       runs={runs.map((run) => ({
                         id: run.id,
                         status: run.status,

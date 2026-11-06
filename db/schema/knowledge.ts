@@ -14,7 +14,7 @@ import {
 
 import { departments } from "./departments";
 import { docChunks, documents } from "./documents";
-import { cardKind, cardOrigin, cardStatus, gapStatus } from "./enums";
+import { cardKind, cardOrigin, cardStatus, gapStatus, shareStatus as shareStatusEnum } from "./enums";
 import { ingestRuns } from "./ingest";
 import { users } from "./auth";
 
@@ -45,6 +45,12 @@ export const knowledgeCards = pgTable(
     folderKey: text("folder_key").notNull().default("02-cards"),
     /** department | shared；此前该列未被 RLS 使用，0010 起真正生效 */
     visibility: text("visibility").notNull().default("department"),
+    /** 公司共享审批状态：只有 approved 才允许 visibility = shared */
+    shareStatus: shareStatusEnum("share_status").notNull().default("none"),
+    shareRequestedBy: uuid("share_requested_by").references(() => users.id, { onDelete: "set null" }),
+    shareRequestedAt: timestamp("share_requested_at", { withTimezone: true }),
+    shareReviewedBy: uuid("share_reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    shareReviewedAt: timestamp("share_reviewed_at", { withTimezone: true }),
     /** 是否允许对外（送外部模型 / 导出） */
     externalOk: boolean("external_ok").notNull().default(false),
     validUntil: date("valid_until"),

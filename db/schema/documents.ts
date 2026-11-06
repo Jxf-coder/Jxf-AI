@@ -13,7 +13,7 @@ import {
 import { assets } from "./assets";
 import { users } from "./auth";
 import { departments } from "./departments";
-import { docStatus } from "./enums";
+import { docStatus, shareStatus as shareStatusEnum } from "./enums";
 import { ingestRuns } from "./ingest";
 
 /**
@@ -37,6 +37,12 @@ export const documents = pgTable(
     folderKey: text("folder_key").notNull().default("01-original"),
     /** department：仅本部门及下级可见；shared：全员共享区可读 */
     visibility: text("visibility").notNull().default("department"),
+    /** 公司共享审批状态：只有 approved 才允许 visibility = shared */
+    shareStatus: shareStatusEnum("share_status").notNull().default("none"),
+    shareRequestedBy: uuid("share_requested_by").references(() => users.id, { onDelete: "set null" }),
+    shareRequestedAt: timestamp("share_requested_at", { withTimezone: true }),
+    shareReviewedBy: uuid("share_reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    shareReviewedAt: timestamp("share_reviewed_at", { withTimezone: true }),
     pageCount: integer("page_count"),
     charCount: integer("char_count").notNull().default(0),
     lang: text("lang").default("zh"),

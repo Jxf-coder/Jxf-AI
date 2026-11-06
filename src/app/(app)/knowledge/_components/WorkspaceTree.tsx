@@ -22,6 +22,13 @@ interface WorkspaceTreeProps {
   matches: TreeItem[];
   /** 当前 Tab，保证搜索提交后不跳出当前视图 */
   tab: string;
+  /** 当前预填的上传目标：用于高亮命中的目录 */
+  target: {
+    departmentId: string;
+    roleKey: string;
+    folderKey: string;
+    isShared: boolean;
+  } | null;
 }
 
 const DOC_STATUS_LABEL: Record<string, string> = {
@@ -50,7 +57,7 @@ function itemStatusLabel(item: TreeItem): string {
 }
 
 /** 左侧常驻目录：公司资料（共享） + 部门 → 岗位 → 10 个标准目录 */
-export function WorkspaceTree({ tree, selected, query, matches, tab }: WorkspaceTreeProps) {
+export function WorkspaceTree({ tree, selected, query, matches, tab, target }: WorkspaceTreeProps) {
   const router = useRouter();
   const firstDepartment = tree.departments[0];
   const firstRole = firstDepartment?.roles[0];
@@ -118,38 +125,86 @@ export function WorkspaceTree({ tree, selected, query, matches, tab }: Workspace
     );
   }
 
+  /** 目录点击 = 预填上传目标；共享区走 scope=shared */
+  function folderHref(folderKey: string, departmentId?: string, roleKey?: string): string {
+    const params = new URLSearchParams({ tab: "scout", folder: folderKey });
+    if (!departmentId) {
+      params.set("scope", "shared");
+    } else {
+      params.set("dept", departmentId);
+      if (roleKey) {
+        params.set("role", roleKey);
+      }
+    }
+    return `/knowledge?${params.toString()}`;
+  }
+
+  function isTargetFolder(folderKey: string, departmentId?: string, roleKey?: string): boolean {
+    if (!target || target.folderKey !== folderKey) {
+      return false;
+    }
+    if (!departmentId) {
+      return target.isShared;
+    }
+    return (
+      !target.isShared &&
+      target.departmentId === departmentId &&
+      (target.roleKey ?? "") === (roleKey ?? "")
+    );
+  }
+
   function folderBlock(
     folder: TreeFolder,
     depth: number,
     keyPrefix: string,
     departmentId?: string,
+    roleKey?: string,
   ) {
     const key = `${keyPrefix}:${folder.key}`;
     const open = isOpen(key);
     const hasItems = folder.items.length > 0;
+    const active = isTargetFolder(folder.key, departmentId, roleKey);
     return (
       <div key={key}>
-        <button
-          type="button"
-          onClick={() => hasItems && toggle(key)}
-          aria-expanded={hasItems ? open : undefined}
-          className={`flex w-full items-center gap-1.5 rounded-lg py-1 pr-2 text-left text-[12px] transition-colors ${
-            hasItems ? "text-zinc-600 hover:bg-white/70 hover:text-zinc-900" : "text-zinc-400"
+        <div
+          className={`flex items-center gap-1 rounded-lg pr-2 transition-colors ${
+            active ? "bg-white ring-1 ring-black/5" : ""
           }`}
           style={{ paddingLeft: `${depth * 10 + 6}px` }}
         >
-          <ChevronRightIcon
-            size={12}
-            className={`shrink-0 text-zinc-400 transition-transform ${open ? "rotate-90" : ""} ${
-              hasItems ? "" : "invisible"
+          <button
+            type="button"
+            onClick={() => hasItems && toggle(key)}
+            aria-expanded={hasItems ? open : undefined}
+            aria-label={`展开 ${folder.label}`}
+            tabIndex={hasItems ? 0 : -1}
+            className={`flex h-6 w-4 shrink-0 items-center justify-center rounded ${
+              hasItems ? "text-zinc-400 hover:text-zinc-700" : "invisible"
             }`}
-          />
-          <FolderIcon size={13} className="shrink-0 text-zinc-400" />
-          <span className="truncate">{folder.label}</span>
-          <span className="ml-auto shrink-0 text-[10px] tabular-nums text-zinc-400">
-            {folder.items.length}
-          </span>
-        </button>
+          >
+            <ChevronRightIcon
+              size={12}
+              className={`transition-transform ${open ? "rotate-90" : ""}`}
+            />
+          </button>
+          <Link
+            href={folderHref(folder.key, departmentId, roleKey)}
+            scroll={false}
+            aria-current={active ? "true" : undefined}
+            title={`上传到 ${folder.label}`}
+            className={`flex min-w-0 flex-1 items-center gap-1.5 py-1 text-[12px] transition-colors ${
+              active
+                ? "font-medium text-zinc-900"
+                : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          >
+            <FolderIcon size={13} className="shrink-0 text-zinc-400" />
+            <span className="truncate">{folder.label}</span>
+            <span className="ml-auto shrink-0 text-[10px] tabular-nums text-zinc-400">
+              {folder.items.length}
+            </span>
+          </Link>
+        </div>
         {open && hasItems ? (
           <>
             {folder.items.map((item) => itemRow(item, depth + 1))}
@@ -292,7 +347,7 @@ export function WorkspaceTree({ tree, selected, query, matches, tab }: Workspace
                           {groupHead(roleKey, `角色·${role.name}`, roleCount, 2)}
                           {isOpen(roleKey)
                             ? role.folders.map((folder) =>
-                                folderBlock(folder, 3, roleKey, department.id),
+                                folderBlock(folder, 3, roleKey, department.id, role.name),
                               )
                             : null}
                         </div>
