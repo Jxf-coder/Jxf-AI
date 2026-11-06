@@ -839,18 +839,10 @@ a.nav-item:hover {
 .app-main {
   flex: 1;
   width: 100%;
-  max-width: 72rem;
+  /* 全局主内容区：96rem 视觉边界，两侧留出舒适 padding，不再写死 72rem */
+  max-width: 96rem;
   margin: 0 auto;
-  padding: 1.875rem 2rem 4rem;
-}
-
-/*
- * 知识库双栏工作区：解除 app-main 的 72rem 居中上限，
- * 让左树贴左、右栏吃满剩余宽度（≥80%），不再缩在页面中间。
- */
-.app-main:has(.kb-workspace) {
-  max-width: none;
-  padding: 1rem 1rem 3rem;
+  padding: 1.5rem 2rem 3.5rem;
 }
 
 /* ------------------------------------------------------------------------- */
