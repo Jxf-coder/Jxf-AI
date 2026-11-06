@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { btnBlue, btnGhost, fieldLabel, input, linkBtn } from "@/components/knowledge/tokens";
+import type { EvidenceChunkOption, EvidenceDocumentOption } from "@/lib/knowledge/card-evidence";
 import type { CardConflictInfo } from "@/lib/knowledge/cards";
 import type { CardDetail, DocumentContent } from "@/lib/knowledge/workspace";
 
@@ -18,7 +19,14 @@ import {
   setDocumentVisibilityAction,
   trashDocumentAction,
 } from "../actions";
-import { createCardAction, updateCardAction } from "../cards/actions";
+import {
+  addEvidenceAction,
+  createCardAction,
+  loadEvidenceChunksAction,
+  loadEvidenceDocumentsAction,
+  removeEvidenceAction,
+  updateCardAction,
+} from "../cards/actions";
 
 type WorkspaceEditorProps =
   | { mode: "document"; document: DocumentContent; canWrite: boolean; aiEnabled: boolean }
@@ -65,6 +73,16 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
   );
   const [conflict, setConflict] = useState<CardConflictInfo | null>(null);
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+  /** 证据面板：文档 → 切片 → 引文，服务端逐字核对后落库 */
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [evidenceDocs, setEvidenceDocs] = useState<EvidenceDocumentOption[]>([]);
+  const [evidenceChunks, setEvidenceChunks] = useState<EvidenceChunkOption[]>([]);
+  const [evidenceDocId, setEvidenceDocId] = useState("");
+  const [evidenceChunkId, setEvidenceChunkId] = useState("");
+  const [evidenceQuote, setEvidenceQuote] = useState("");
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
+  const [evidenceFailed, setEvidenceFailed] = useState(false);
+  const [evidenceMessage, setEvidenceMessage] = useState("");
 
   const trashed = isDocument && props.document.deletedAt !== null;
   const cardTrashed = !isDocument && props.card.status === "dropped";
@@ -121,6 +139,11 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
       ]
         .filter(Boolean)
         .join(" · ");
+
+  const evidenceTotal = isDocument ? 0 : props.card.evidence.length;
+  const evidenceVerified = isDocument
+    ? 0
+    : props.card.evidence.filter((item) => item.verified).length;
 
   const blocked = readOnlyReason !== null;
   /** 冲突未处理前禁止再次保存：必须显式选择「载入最新」或「确认覆盖」 */
@@ -193,6 +216,94 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
       hour: "2-digit",
       minute: "2-digit",
     }).format(new Date(value));
+  }
+
+  /** 切换文档时加载其切片，并默认把首条切片正文填进引文 */
+  async function chooseEvidenceDocument(documentId: string) {
+    setEvidenceDocId(documentId);
+    setEvidenceChunkId("");
+    setEvidenceQuote("");
+    setEvidenceChunks([]);
+    setEvidenceBusy(true);
+    const result = await loadEvidenceChunksAction(documentId);
+    setEvidenceBusy(false);
+    if (!result.ok) {
+      setEvidenceFailed(true);
+      setEvidenceMessage(result.message ?? "切片加载失败");
+      return;
+    }
+    const chunks = result.chunks ?? [];
+    setEvidenceFailed(false);
+    setEvidenceMessage("");
+    setEvidenceChunks(chunks);
+    if (chunks[0]) {
+      setEvidenceChunkId(chunks[0].id);
+      // 服务端限 600 字；切片可能更长，默认取前缀，用户可再裁剪
+      setEvidenceQuote(chunks[0].text.slice(0, 600));
+    }
+  }
+
+  async function toggleEvidencePanel() {
+    if (evidenceOpen) {
+      setEvidenceOpen(false);
+      return;
+    }
+    setEvidenceOpen(true);
+    setEvidenceMessage("");
+    if (evidenceDocs.length > 0) {
+      return;
+    }
+    setEvidenceBusy(true);
+    const result = await loadEvidenceDocumentsAction();
+    setEvidenceBusy(false);
+    if (!result.ok) {
+      setEvidenceFailed(true);
+      setEvidenceMessage(result.message ?? "文档加载失败");
+      return;
+    }
+    const documents = result.documents ?? [];
+    setEvidenceDocs(documents);
+    if (documents[0]) {
+      await chooseEvidenceDocument(documents[0].id);
+    }
+  }
+
+  async function submitEvidence() {
+    if (props.mode !== "card") {
+      return;
+    }
+    if (!evidenceChunkId || evidenceQuote.trim().length === 0) {
+      setEvidenceFailed(true);
+      setEvidenceMessage("请先选择切片并填写引文");
+      return;
+    }
+    setEvidenceBusy(true);
+    const result = await addEvidenceAction(props.card.id, evidenceChunkId, evidenceQuote);
+    setEvidenceBusy(false);
+    if (!result.ok) {
+      setEvidenceFailed(true);
+      setEvidenceMessage(result.message);
+      return;
+    }
+    setEvidenceOpen(false);
+    setEvidenceFailed(false);
+    setEvidenceMessage("");
+    setEvidenceChunkId("");
+    setEvidenceQuote("");
+    setFailed(false);
+    setMessage(result.message);
+    router.refresh();
+  }
+
+  function removeEvidence(evidenceId: string) {
+    startTransition(async () => {
+      const result = await removeEvidenceAction(evidenceId);
+      setFailed(!result.ok);
+      setMessage(result.message);
+      if (result.ok) {
+        router.refresh();
+      }
+    });
   }
 
   return (
@@ -423,6 +534,145 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
           />
         </label>
       </div>
+
+      {!isDocument ? (
+        <div className="mt-4 rounded-xl border border-black/[0.06] bg-[#fafafa] px-3 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] font-medium text-zinc-600">
+              证据 · {evidenceTotal} 条
+              {evidenceTotal > 0 ? `（${evidenceVerified} 条已对上原文）` : ""}
+            </p>
+            {props.canWrite && !recycled ? (
+              <button
+                type="button"
+                className={`${linkBtn} text-[11px]`}
+                disabled={evidenceBusy}
+                onClick={() => void toggleEvidencePanel()}
+              >
+                {evidenceOpen ? "收起" : "添加证据"}
+              </button>
+            ) : null}
+          </div>
+
+          {props.card.evidence.length === 0 ? (
+            <p className="mt-1.5 text-[11px] text-zinc-400">
+              还没有证据。挂一条能逐字命中的原文后，这张卡才满足确认门槛。
+            </p>
+          ) : (
+            <ul className="mt-2 grid gap-2">
+              {props.card.evidence.map((item) => (
+                <li key={item.id} className="flex items-start gap-2 text-[11px]">
+                  <span
+                    className={`mt-0.5 shrink-0 ${
+                      item.verified ? "text-emerald-600" : "text-rose-600"
+                    }`}
+                    title={item.verified ? "引文已在原文中逐字命中" : "引文未能对上原文"}
+                  >
+                    {item.verified ? "✓" : "✗"}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="leading-relaxed text-zinc-600">“{item.quote}”</p>
+                    <p className="mt-0.5 text-[10px] text-zinc-400">
+                      {item.documentTitle ?? "文档"} · {item.locator ?? "未标注位置"}
+                    </p>
+                  </div>
+                  {props.canWrite && !recycled ? (
+                    <button
+                      type="button"
+                      className="ml-auto shrink-0 text-[10px] text-zinc-400 transition-colors hover:text-rose-600"
+                      disabled={pending}
+                      onClick={() => removeEvidence(item.id)}
+                    >
+                      移除
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {evidenceOpen ? (
+            <div className="mt-3 grid gap-2 border-t border-black/[0.05] pt-3">
+              <label className="block">
+                <span className={fieldLabel}>来源文档</span>
+                <select
+                  className={input}
+                  value={evidenceDocId}
+                  disabled={evidenceBusy}
+                  onChange={(event) => void chooseEvidenceDocument(event.target.value)}
+                >
+                  {evidenceDocs.length === 0 ? <option value="">没有可用文档</option> : null}
+                  {evidenceDocs.map((doc) => (
+                    <option key={doc.id} value={doc.id}>
+                      {doc.title}（{doc.departmentName} · {doc.chunkCount} 个切片）
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className={fieldLabel}>切片</span>
+                <select
+                  className={input}
+                  value={evidenceChunkId}
+                  disabled={evidenceBusy || evidenceChunks.length === 0}
+                  onChange={(event) => {
+                    const chunk = evidenceChunks.find((item) => item.id === event.target.value);
+                    setEvidenceChunkId(event.target.value);
+                    if (chunk) {
+                      setEvidenceQuote(chunk.text.slice(0, 600));
+                    }
+                  }}
+                >
+                  {evidenceChunks.length === 0 ? <option value="">该文档没有切片</option> : null}
+                  {evidenceChunks.map((chunk) => (
+                    <option key={chunk.id} value={chunk.id}>
+                      {chunk.pageNo ? `第 ${chunk.pageNo} 页` : `切片 ${chunk.ord + 1}`} ·{" "}
+                      {chunk.text.replace(/\s+/g, " ").slice(0, 36)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className={fieldLabel}>引文 · 必须与原文逐字一致</span>
+                <textarea
+                  className={`${input} min-h-[90px] resize-y font-mono text-[12px] leading-relaxed`}
+                  value={evidenceQuote}
+                  maxLength={600}
+                  disabled={evidenceBusy}
+                  onChange={(event) => setEvidenceQuote(event.target.value)}
+                />
+              </label>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  className={`${linkBtn} text-[11px]`}
+                  disabled={evidenceBusy || !evidenceChunkId}
+                  onClick={() => void submitEvidence()}
+                >
+                  {evidenceBusy ? "核对中…" : "核对并挂上"}
+                </button>
+                <button
+                  type="button"
+                  className={`${linkBtn} text-[11px]`}
+                  disabled={evidenceBusy}
+                  onClick={() => setEvidenceOpen(false)}
+                >
+                  取消
+                </button>
+              </div>
+
+              {evidenceMessage ? (
+                <InlineMessage tone={evidenceFailed ? "error" : "info"} className="mt-1 mb-0">
+                  {evidenceMessage}
+                </InlineMessage>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {isDocument && !trashed ? (
         <p className="mt-3 text-[11px] leading-relaxed text-zinc-400">

@@ -546,6 +546,8 @@ as $fn$
      where p_embedding is not null
        and c.embedding is not null
        and c.department_id = any (s.ids)
+       -- 相似度闸门：余弦距离 > 0.5 视为无关，避免「任何问题都能召回一批切片」
+       and c.embedding <=> p_embedding <= 0.5
      order by c.embedding <=> p_embedding
      limit greatest(p_limit * 4, 20)
   ),
@@ -637,6 +639,8 @@ as $fn$
      where p_embedding is not null
        and c.embedding is not null
        and c.department_id = any (s.ids)
+       -- 相似度闸门：余弦距离 > 0.5 视为无关，避免问答对任何问题都强行召回
+       and c.embedding <=> p_embedding <= 0.5
      order by c.embedding <=> p_embedding
      limit greatest(p_limit * 8, 40)
   ),

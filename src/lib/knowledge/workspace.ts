@@ -10,7 +10,11 @@
 import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
-import { listCardVersions, type CardVersionView } from "@/lib/knowledge/cards";
+import {
+  listCardVersions,
+  type CardEvidenceView,
+  type CardVersionView,
+} from "@/lib/knowledge/cards";
 import { folderLabel, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
 import { requireContextPermission } from "@/lib/permissions/server";
 
@@ -479,6 +483,8 @@ export interface CardDetail {
   rev: number;
   updatedAt: string;
   updatedByName: string | null;
+  /** 已挂证据（含未核对的历史数据，供编辑器删除或补核） */
+  evidence: CardEvidenceView[];
   /** 最近若干条版本快照（含当前版本） */
   versions: CardVersionView[];
 }
@@ -524,6 +530,24 @@ export async function loadCardDetail(
 
     const source = typeof row.extra?.source === "string" ? row.extra.source : "";
 
+    const evidenceRows = await client.query<{
+      id: string;
+      quote: string;
+      locator: string | null;
+      page_no: number | null;
+      verified: boolean;
+      document_id: string | null;
+      document_title: string | null;
+    }>(
+      `select e.id, e.quote, e.locator, e.page_no, e.verified, e.document_id,
+              d.title as document_title
+         from card_evidence e
+         left join documents d on d.id = e.document_id
+        where e.card_id = $1
+        order by e.verified desc, e.page_no nulls last, e.char_start, e.id`,
+      [cardId],
+    );
+
     return {
       id: row.id,
       title: row.title,
@@ -541,6 +565,15 @@ export async function loadCardDetail(
       rev: row.rev,
       updatedAt: row.updated_at.toISOString(),
       updatedByName: row.updated_by_name,
+      evidence: evidenceRows.rows.map((evidence) => ({
+        id: evidence.id,
+        quote: evidence.quote,
+        locator: evidence.locator,
+        pageNo: evidence.page_no,
+        verified: evidence.verified,
+        documentId: evidence.document_id,
+        documentTitle: evidence.document_title,
+      })),
     } satisfies Omit<CardDetail, "versions">;
   });
 

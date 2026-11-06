@@ -21,6 +21,7 @@
     "test:handover": "node --env-file=.env scripts/test-pending-handover.mjs",
     "test:knowledge": "node --env-file=.env --import tsx scripts/test-knowledge.mjs",
     "probe:embedding": "node --env-file=.env scripts/probe-embedding.mjs",
+    "backfill:embeddings": "node --env-file=.env scripts/backfill-embeddings.mjs",
     "verify:guards": "node scripts/verify-permission-guards.mjs"
   },
   "dependencies": {

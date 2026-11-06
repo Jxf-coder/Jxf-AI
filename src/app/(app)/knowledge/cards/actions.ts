@@ -17,6 +17,15 @@ import {
   type CardConflictInfo,
   type CardMetaPatch,
 } from "@/lib/knowledge/cards";
+import {
+  addCardEvidence,
+  listEvidenceChunks,
+  listEvidenceDocuments,
+  removeCardEvidence,
+  type CardEvidenceItem,
+  type EvidenceChunkOption,
+  type EvidenceDocumentOption,
+} from "@/lib/knowledge/card-evidence";
 import { distillDocument } from "@/lib/knowledge/distill";
 import { isUuid } from "@/lib/knowledge/workspace";
 import { toPermissionMessage } from "@/lib/permissions/guard";
@@ -217,6 +226,71 @@ export async function bulkDecideAction(
       failed: [],
       patched: 0,
     };
+  }
+}
+
+export interface EvidenceOptionsResult {
+  ok: boolean;
+  message?: string;
+  documents?: EvidenceDocumentOption[];
+  chunks?: EvidenceChunkOption[];
+}
+
+/** 「添加证据」第一步：当前账号可读、带切片的文档 */
+export async function loadEvidenceDocumentsAction(): Promise<EvidenceOptionsResult> {
+  try {
+    const documents = await listEvidenceDocuments(await contextOf());
+    return { ok: true, documents };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 「添加证据」第二步：所选文档的切片候选 */
+export async function loadEvidenceChunksAction(documentId: string): Promise<EvidenceOptionsResult> {
+  if (!isUuid(documentId)) {
+    return { ok: false, message: "文档标识不合法" };
+  }
+  try {
+    const chunks = await listEvidenceChunks(await contextOf(), documentId);
+    return { ok: true, chunks };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+export interface EvidenceSaveResult extends ActionResult {
+  evidence?: CardEvidenceItem;
+}
+
+/** 挂证据：服务端逐字校验引文，对不上直接拒绝 */
+export async function addEvidenceAction(
+  cardId: string,
+  chunkId: string,
+  quote: string,
+): Promise<EvidenceSaveResult> {
+  if (!isUuid(cardId) || !isUuid(chunkId)) {
+    return { ok: false, message: "参数不合法" };
+  }
+  try {
+    const evidence = await addCardEvidence(await contextOf(), cardId, { chunkId, quote });
+    revalidateKnowledge();
+    return { ok: true, message: "证据已核对并挂上", evidence };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+export async function removeEvidenceAction(evidenceId: string): Promise<ActionResult> {
+  if (!isUuid(evidenceId)) {
+    return { ok: false, message: "证据标识不合法" };
+  }
+  try {
+    await removeCardEvidence(await contextOf(), evidenceId);
+    revalidateKnowledge();
+    return { ok: true, message: "证据已移除" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
   }
 }
 

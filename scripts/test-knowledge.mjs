@@ -17,6 +17,7 @@ import {
   listCardVersions,
   updateCard,
 } from "../src/lib/knowledge/cards.ts";
+import { addCardEvidence, removeCardEvidence } from "../src/lib/knowledge/card-evidence.ts";
 import { verifyQuoteInChunk } from "../src/lib/knowledge/evidence.ts";
 import { answerQuestion } from "../src/lib/knowledge/qa.ts";
 import { runRegression, seedRegressionQuestions } from "../src/lib/knowledge/regression.ts";
@@ -39,6 +40,7 @@ const APP_URL = `postgresql://${process.env.JXF_APP_USER}:${process.env.JXF_APP_
 
 let passed = 0;
 let failed = 0;
+let skipped = 0;
 
 function check(name, condition, detail = "") {
   if (condition) {
@@ -48,6 +50,27 @@ function check(name, condition, detail = "") {
     failed += 1;
     console.error(`[FAIL] ${name}${detail ? ` :: ${detail}` : ""}`);
   }
+}
+
+/** 语义门禁只在配置了 embedding Key 时执行；缺失时跳过而不是判失败 */
+async function embedWithGemini(text) {
+  const base = (process.env.JXF_EMBEDDING_BASE_URL ?? "").trim().replace(/\/+$/, "");
+  const model = process.env.JXF_EMBEDDING_MODEL ?? "";
+  const dim = Number.parseInt(process.env.JXF_EMBEDDING_DIM ?? "1024", 10);
+  const response = await fetch(`${base}/embeddings`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${process.env.JXF_EMBEDDING_API_KEY}`,
+    },
+    body: JSON.stringify({ model, input: [text], dimensions: dim }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) {
+    throw new Error(`embedding HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`);
+  }
+  const payload = await response.json();
+  return payload.data[0].embedding;
 }
 
 async function withClient(url, fn) {
@@ -993,6 +1016,128 @@ async function main() {
     `count=${crossVersions.rows[0]?.count}`,
   );
 
+  // 25c. 证据链编辑：逐字命中才落库，跨部门不可写
+  const addedEvidence = await addCardEvidence(bossContext, fx.cardBare, {
+    chunkId: fx.chunkA,
+    quote: "迁移量应当符合国家标准限值要求",
+  });
+  check("证据链：逐字命中后落库并标记已核对", addedEvidence.verified === true, JSON.stringify(addedEvidence));
+  check(
+    "证据链：记录来源文档与页码",
+    addedEvidence.documentId === fx.docA && addedEvidence.pageNo === 1,
+    JSON.stringify(addedEvidence),
+  );
+
+  const evidenceRows = await runAs(memberA, (client) =>
+    client.query("select id, verified, quote from card_evidence where card_id = $1", [fx.cardBare]),
+  );
+  check(
+    "证据链：同部门可读已挂证据",
+    evidenceRows.rowCount === 1 && evidenceRows.rows[0].verified === true,
+    `rows=${evidenceRows.rowCount}`,
+  );
+
+  let badQuoteRejected = false;
+  try {
+    await addCardEvidence(bossContext, fx.cardBare, {
+      chunkId: fx.chunkA,
+      quote: "这句话在原文里根本不存在",
+    });
+  } catch {
+    badQuoteRejected = true;
+  }
+  check("证据链：对不上原文的引文被拒绝", badQuoteRejected);
+
+  const afterBadQuote = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      "select count(*)::int as count from card_evidence where card_id = $1",
+      [fx.cardBare],
+    );
+    return rows[0].count;
+  });
+  check("证据链：拒绝时不产生脏数据", afterBadQuote === 1, `count=${afterBadQuote}`);
+
+  let crossEvidenceBlocked = false;
+  try {
+    await addCardEvidence(memberB, fx.cardBare, {
+      chunkId: fx.chunkA,
+      quote: "迁移量应当符合国家标准限值要求",
+    });
+  } catch {
+    crossEvidenceBlocked = true;
+  }
+  check("证据链：兄弟部门不可写", crossEvidenceBlocked);
+
+  await removeCardEvidence(bossContext, addedEvidence.id);
+  const afterEvidenceRemove = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      "select count(*)::int as count from card_evidence where card_id = $1",
+      [fx.cardBare],
+    );
+    return rows[0].count;
+  });
+  check("证据链：移除后行已消失", afterEvidenceRemove === 0, `count=${afterEvidenceRemove}`);
+
+  // 25d. 中文同义改写召回：关键词完全不重叠，命中必须来自向量通道
+  const semanticText = "差旅费用应在返回后十个工作日内报销。";
+  if (!process.env.JXF_EMBEDDING_API_KEY) {
+    skipped += 1;
+    console.log("[SKIP] 同义改写召回：未配置 JXF_EMBEDDING_API_KEY");
+  } else {
+    const semanticDoc = await withClient(OWNER_URL, async (owner) => {
+      const { rows } = await owner.query(
+        `insert into documents (tenant_id, department_id, title, mime, sha256)
+         values ($1, $2, '语义召回验收文档', 'text/plain', $3) returning id`,
+        [TENANT, fx.departments.groupA, "5".repeat(64)],
+      );
+      const docId = rows[0].id;
+      await owner.query(
+        `insert into doc_chunks
+           (tenant_id, department_id, document_id, ord, page_no, char_start, char_end, text)
+         values ($1, $2, $3, 0, 1, 0, $4, $5)`,
+        [TENANT, fx.departments.groupA, docId, semanticText.length, semanticText],
+      );
+      const vector = await embedWithGemini(semanticText);
+      await owner.query("update doc_chunks set embedding = $1::vector where document_id = $2", [
+        `[${vector.join(",")}]`,
+        docId,
+      ]);
+      return docId;
+    });
+
+    const paraphrase = "出差回来多久能把花销报掉";
+    const queryVector = await embedWithGemini(paraphrase);
+
+    const keywordOnly = await runAs(memberA, (client) =>
+      client.query("select document_id, vector_rank from app.hybrid_search($1, null, 10, 60)", [
+        paraphrase,
+      ]),
+    );
+    check(
+      "同义改写：纯关键词对改写句不命中",
+      !keywordOnly.rows.some((row) => row.document_id === semanticDoc),
+      `hits=${keywordOnly.rows.map((row) => row.document_id).join(",")}`,
+    );
+
+    const hybrid = await runAs(memberA, (client) =>
+      client.query("select document_id, vector_rank from app.hybrid_search($1, $2::vector, 10, 60)", [
+        paraphrase,
+        `[${queryVector.join(",")}]`,
+      ]),
+    );
+    const semanticHit = hybrid.rows.find((row) => row.document_id === semanticDoc);
+    check(
+      "同义改写：向量召回命中语义等价切片",
+      Boolean(semanticHit),
+      `hits=${hybrid.rows.map((row) => row.document_id).join(",")}`,
+    );
+    check(
+      "同义改写：命中来自向量通道",
+      semanticHit?.vector_rank !== null && semanticHit?.vector_rank !== undefined,
+      JSON.stringify(semanticHit),
+    );
+  }
+
   // 26. 卡片回收站：作废进 99-回收站、可恢复、可彻底删除
   const collectTrashIds = (workspace) =>
     [
@@ -1060,7 +1205,7 @@ async function main() {
     await withClient(OWNER_URL, cleanup);
   }
 
-  console.log(`\n[KNOWLEDGE] passed=${passed} failed=${failed}`);
+  console.log(`\n[KNOWLEDGE] passed=${passed} failed=${failed} skipped=${skipped}`);
   if (failed > 0) {
     process.exitCode = 1;
   }
