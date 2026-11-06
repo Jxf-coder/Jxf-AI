@@ -137,10 +137,18 @@ export async function chatCompletion(
         max_tokens: options.maxTokens ?? ai.maxTokens,
       },
       ai.timeoutMs,
-    )) as { choices?: Array<{ message?: { content?: string } }> };
+    )) as {
+      choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+    };
 
-    const content = payload.choices?.[0]?.message?.content?.trim();
-    return content ? content : null;
+    const choice = payload.choices?.[0];
+    const content = choice?.message?.content?.trim();
+    if (!content) {
+      // 推理型模型的思考 token 会先消耗预算：max_tokens 过小时 content 为空、finish=length
+      log("warn", "ai_chat_empty", { model, tier, finish: choice?.finish_reason ?? "unknown" });
+      return null;
+    }
+    return content;
   } catch (error) {
     log("warn", "ai_chat_failed", { error: errorMessage(error), model, tier });
     return null;

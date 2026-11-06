@@ -119,16 +119,18 @@ function readOptionalInt(name: string, fallback: number): number {
 
 function readAiConfig(): AiEnvConfig {
   const apiKey = readOptional("JXF_AI_API_KEY", "");
-  const embeddingApiKey = readOptional("JXF_EMBEDDING_API_KEY", "") || apiKey;
+  // 对话服务不一定提供 embedding 接口（如 DeepSeek），因此不复用 chat key：
+  // 未显式配置 JXF_EMBEDDING_API_KEY 时，向量通道保持关闭，页面如实显示「仅关键词」。
+  const embeddingApiKey = readOptional("JXF_EMBEDDING_API_KEY", "");
 
   return {
     enabled: readOptional("JXF_AI_ENABLED", "false") === "true" && apiKey !== "",
     baseUrl: readOptional("JXF_AI_BASE_URL", "https://api.openai.com/v1").replace(/\/+$/, ""),
     apiKey,
     // 深度推理（pro）：问答、复杂检索生成；JXF_AI_CHAT_MODEL 为向后兼容旧名
-    chatModel: readOptional("JXF_AI_MODEL_PRO", readOptional("JXF_AI_CHAT_MODEL", "deepseek-v4.1-pro")),
+    chatModel: readOptional("JXF_AI_MODEL_PRO", readOptional("JXF_AI_CHAT_MODEL", "deepseek-v4-pro")),
     // 高频轻量（flash）：巡读抽取、蒸馏建卡、摘要
-    fastModel: readOptional("JXF_AI_MODEL_FLASH", "deepseek-v4.1-flash"),
+    fastModel: readOptional("JXF_AI_MODEL_FLASH", "deepseek-flash"),
     timeoutMs: readOptionalInt("JXF_AI_TIMEOUT_MS", 30_000),
     topK: readOptionalInt("JXF_AI_TOP_K", 6),
     maxTokens: readOptionalInt("JXF_AI_MAX_TOKENS", 1024),
