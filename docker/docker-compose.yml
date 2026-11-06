@@ -182,12 +182,26 @@ services:
       # 高频轻量模型（文档巡读、抽取、蒸馏建卡、摘要）
       JXF_AI_MODEL_FLASH: ${JXF_AI_MODEL_FLASH:-deepseek-flash}
       JXF_AI_TIMEOUT_MS: ${JXF_AI_TIMEOUT_MS:-60000}
+      # 容灾：瞬时故障重试 + 备用节点接续
+      JXF_AI_RETRY_ATTEMPTS: ${JXF_AI_RETRY_ATTEMPTS:-2}
+      JXF_AI_RETRY_BASE_MS: ${JXF_AI_RETRY_BASE_MS:-500}
+      JXF_AI_FALLBACK_BASE_URL: ${JXF_AI_FALLBACK_BASE_URL:-}
+      JXF_AI_FALLBACK_API_KEY: ${JXF_AI_FALLBACK_API_KEY:-}
+      JXF_AI_FALLBACK_MODEL_PRO: ${JXF_AI_FALLBACK_MODEL_PRO:-}
+      JXF_AI_FALLBACK_MODEL_FLASH: ${JXF_AI_FALLBACK_MODEL_FLASH:-}
       JXF_AI_TOP_K: ${JXF_AI_TOP_K:-6}
       JXF_AI_MAX_TOKENS: ${JXF_AI_MAX_TOKENS:-2048}
       JXF_EMBEDDING_BASE_URL: ${JXF_EMBEDDING_BASE_URL:-https://api.openai.com/v1}
       JXF_EMBEDDING_API_KEY: ${JXF_EMBEDDING_API_KEY:-}
       JXF_EMBEDDING_MODEL: ${JXF_EMBEDDING_MODEL:-text-embedding-3-small}
       JXF_EMBEDDING_DIM: ${JXF_EMBEDDING_DIM:-1024}
+      # 扫描件 OCR（Gemini 视觉）：默认关闭，避免私有化部署悄悄外发文档
+      JXF_OCR_ENABLED: ${JXF_OCR_ENABLED:-false}
+      JXF_OCR_BASE_URL: ${JXF_OCR_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
+      JXF_OCR_API_KEY: ${JXF_OCR_API_KEY:-}
+      JXF_OCR_MODEL: ${JXF_OCR_MODEL:-gemini-3.1-flash-lite}
+      JXF_OCR_TIMEOUT_MS: ${JXF_OCR_TIMEOUT_MS:-90000}
+      JXF_OCR_MAX_BYTES: ${JXF_OCR_MAX_BYTES:-15000000}
     depends_on:
       postgres:
         condition: service_healthy

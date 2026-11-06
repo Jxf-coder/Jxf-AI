@@ -11,6 +11,14 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
  * AI 配置（OpenAI 标准兼容）。
  * 与数据库 / S3 不同，AI 缺失不拒绝启动：无 Key 时检索降级为 pg_bigm 纯关键词。
  */
+/** 备用 LLM 节点：主节点重试耗尽后自动接续（同协议，可直接是另一家 OpenAI 兼容服务） */
+export interface AiFallbackConfig {
+  baseUrl: string;
+  apiKey: string;
+  chatModel: string;
+  fastModel: string;
+}
+
 export interface AiEnvConfig {
   /** 对话生成总开关；false 或缺少 Key 时只做检索，不生成答案 */
   enabled: boolean;
@@ -23,12 +31,28 @@ export interface AiEnvConfig {
   timeoutMs: number;
   topK: number;
   maxTokens: number;
+  /** 瞬时故障（503 / 超时 / 连接重置）的指数避让重试次数，0 表示不重试 */
+  retryAttempts: number;
+  retryBaseMs: number;
+  /** 未配置备用节点时为 null：重试耗尽即安静降级，不阻断前端 */
+  fallback: AiFallbackConfig | null;
   embedding: {
     baseUrl: string;
     apiKey: string;
     model: string;
     dimensions: number;
   };
+}
+
+/** 扫描件 OCR（Gemini 视觉）：未配置 Key 或显式关闭时不外发任何文档内容 */
+export interface OcrEnvConfig {
+  enabled: boolean;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  timeoutMs: number;
+  /** 单次提交给视觉模型的最大字节数（base64 后仍受请求体限制） */
+  maxBytes: number;
 }
 
 export interface AppEnv {
@@ -48,6 +72,7 @@ export interface AppEnv {
     secretKey: string;
   };
   ai: AiEnvConfig;
+  ocr: OcrEnvConfig;
 }
 
 const VALID_LOG_LEVELS: readonly LogLevel[] = ["debug", "info", "warn", "error"];
@@ -117,23 +142,58 @@ function readOptionalInt(name: string, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/** 允许 0 的计数型配置（如重试次数 0 = 关闭重试） */
+function readOptionalCount(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+/**
+ * 备用 LLM 节点：baseUrl 与 apiKey 同时具备才启用。
+ * 留空即视为「无备用节点」，重试耗尽后按原逻辑安静降级。
+ */
+function readAiFallback(chatModel: string, fastModel: string): AiFallbackConfig | null {
+  const fallbackBaseUrl = readOptional("JXF_AI_FALLBACK_BASE_URL", "").replace(/\/+$/, "");
+  const fallbackApiKey = readOptional("JXF_AI_FALLBACK_API_KEY", "");
+  if (!fallbackBaseUrl || !fallbackApiKey) {
+    return null;
+  }
+  return {
+    baseUrl: fallbackBaseUrl,
+    apiKey: fallbackApiKey,
+    // 未单独指定时沿用主节点模型名（同厂商备用节点场景）
+    chatModel: readOptional("JXF_AI_FALLBACK_MODEL_PRO", chatModel),
+    fastModel: readOptional("JXF_AI_FALLBACK_MODEL_FLASH", fastModel),
+  };
+}
+
 function readAiConfig(): AiEnvConfig {
   const apiKey = readOptional("JXF_AI_API_KEY", "");
   // 对话服务不一定提供 embedding 接口（如 DeepSeek），因此不复用 chat key：
   // 未显式配置 JXF_EMBEDDING_API_KEY 时，向量通道保持关闭，页面如实显示「仅关键词」。
   const embeddingApiKey = readOptional("JXF_EMBEDDING_API_KEY", "");
 
+  // 深度推理（pro）：问答、复杂检索生成；JXF_AI_CHAT_MODEL 为向后兼容旧名
+  const chatModel = readOptional("JXF_AI_MODEL_PRO", readOptional("JXF_AI_CHAT_MODEL", "deepseek-v4-pro"));
+  // 高频轻量（flash）：巡读抽取、蒸馏建卡、摘要
+  const fastModel = readOptional("JXF_AI_MODEL_FLASH", "deepseek-flash");
+
   return {
     enabled: readOptional("JXF_AI_ENABLED", "false") === "true" && apiKey !== "",
     baseUrl: readOptional("JXF_AI_BASE_URL", "https://api.openai.com/v1").replace(/\/+$/, ""),
     apiKey,
-    // 深度推理（pro）：问答、复杂检索生成；JXF_AI_CHAT_MODEL 为向后兼容旧名
-    chatModel: readOptional("JXF_AI_MODEL_PRO", readOptional("JXF_AI_CHAT_MODEL", "deepseek-v4-pro")),
-    // 高频轻量（flash）：巡读抽取、蒸馏建卡、摘要
-    fastModel: readOptional("JXF_AI_MODEL_FLASH", "deepseek-flash"),
+    chatModel,
+    fastModel,
     timeoutMs: readOptionalInt("JXF_AI_TIMEOUT_MS", 30_000),
     topK: readOptionalInt("JXF_AI_TOP_K", 6),
     maxTokens: readOptionalInt("JXF_AI_MAX_TOKENS", 1024),
+    retryAttempts: readOptionalCount("JXF_AI_RETRY_ATTEMPTS", 2),
+    retryBaseMs: readOptionalInt("JXF_AI_RETRY_BASE_MS", 500),
+    fallback: readAiFallback(chatModel, fastModel),
     embedding: {
       baseUrl: readOptional("JXF_EMBEDDING_BASE_URL", readOptional("JXF_AI_BASE_URL", "https://api.openai.com/v1")).replace(/\/+$/, ""),
       apiKey: embeddingApiKey,
@@ -141,6 +201,28 @@ function readAiConfig(): AiEnvConfig {
       model: readOptional("JXF_EMBEDDING_MODEL", "text-embedding-3-small"),
       dimensions: readOptionalInt("JXF_EMBEDDING_DIM", 1024),
     },
+  };
+}
+
+/**
+ * OCR 默认复用 Gemini embedding 的 Key（同一个 AI Studio 项目），
+ * 但允许 JXF_OCR_API_KEY 单独覆盖；默认关闭，避免私有化部署悄悄外发文档。
+ */
+function readOcrConfig(): OcrEnvConfig {
+  const apiKey = readOptional(
+    "JXF_OCR_API_KEY",
+    readOptional("JXF_EMBEDDING_API_KEY", ""),
+  );
+  return {
+    enabled: readOptional("JXF_OCR_ENABLED", "false") === "true" && apiKey !== "",
+    baseUrl: readOptional(
+      "JXF_OCR_BASE_URL",
+      "https://generativelanguage.googleapis.com/v1beta",
+    ).replace(/\/+$/, ""),
+    apiKey,
+    model: readOptional("JXF_OCR_MODEL", "gemini-3.1-flash-lite"),
+    timeoutMs: readOptionalInt("JXF_OCR_TIMEOUT_MS", 90_000),
+    maxBytes: readOptionalInt("JXF_OCR_MAX_BYTES", 15_000_000),
   };
 }
 
@@ -176,6 +258,7 @@ export function loadEnv(): AppEnv {
       secretKey: readRequired("S3_SECRET_KEY"),
     },
     ai: readAiConfig(),
+    ocr: readOcrConfig(),
   };
 
   return cached;

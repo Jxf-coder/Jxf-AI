@@ -12,11 +12,13 @@ import path from "node:path";
 
 import type { PoolClient } from "pg";
 
+import { ocrDocument } from "@/lib/ai/ocr";
 import { embedTexts } from "@/lib/ai/openai";
 import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
 import { chunkPages, type TextChunk } from "@/lib/knowledge/chunk";
+import { splitOcrPages } from "@/lib/knowledge/ocr";
 import {
   DEFAULT_DOCUMENT_FOLDER,
   isFolderKey,
@@ -30,7 +32,24 @@ import { putObject, uploadKey } from "@/lib/storage/local";
 export const MAX_FILE_BYTES = 20 * 1024 * 1024;
 export const MAX_FILES_PER_RUN = 20;
 
-const ALLOWED_EXTENSIONS = new Set(["pdf", "docx", "txt", "md", "markdown", "csv", "json", "html", "htm", "log", "xml"]);
+const ALLOWED_EXTENSIONS = new Set([
+  "pdf",
+  "docx",
+  "txt",
+  "md",
+  "markdown",
+  "csv",
+  "json",
+  "html",
+  "htm",
+  "log",
+  "xml",
+  // 扫描图片：走 OCR 通道，识别失败回落人工补录
+  "png",
+  "jpg",
+  "jpeg",
+  "webp",
+]);
 
 export interface IngestFileInput {
   name: string;
@@ -77,6 +96,8 @@ interface PreparedDocument {
   chunks: TextChunk[];
   charCount: number;
   embeddings: number[][] | null;
+  /** 非空表示正文来自自动 OCR（模型名），用于批次明细如实标注 */
+  ocrModel: string | null;
 }
 
 interface ExistingAsset {
@@ -163,21 +184,36 @@ export async function ingestUpload(
     try {
       const parsed = await parseDocument(input.bytes, input.mime, input.name);
 
+      // 扫描件 / 图片：先尝试 Gemini 视觉 OCR，失败再如实标 needs_ocr
+      let pages = parsed.pages;
+      let ocrModel: string | null = null;
       if (!parsed.hasText) {
+        const scanned = await ocrDocument(input.bytes, input.mime, input.name);
+        if (scanned) {
+          const ocrPages = splitOcrPages(scanned.text);
+          if (ocrPages.length > 0) {
+            pages = ocrPages;
+            ocrModel = scanned.model;
+          }
+        }
+      }
+
+      if (pages.length === 0) {
         prepared.push({
           input,
           sha256,
           storageKey,
           status: "needs_ocr",
-          pageCount: parsed.pages.length,
+          pageCount: 0,
           chunks: [],
           charCount: 0,
           embeddings: null,
+          ocrModel: null,
         });
         continue;
       }
 
-      const chunked = chunkPages(parsed.pages);
+      const chunked = chunkPages(pages);
       if (chunked.chunks.length === 0) {
         results.push({ name: input.name, decision: "error", error: "分块结果为空" });
         continue;
@@ -188,10 +224,11 @@ export async function ingestUpload(
         sha256,
         storageKey,
         status: "parsed",
-        pageCount: parsed.pages.length,
+        pageCount: pages.length,
         chunks: chunked.chunks,
         charCount: chunked.charCount,
         embeddings: await embedTexts(chunked.chunks.map((chunk) => chunk.text)),
+        ocrModel,
       });
     } catch (error) {
       if (error instanceof UnsupportedDocumentError) {
@@ -383,17 +420,16 @@ export async function ingestUpload(
       }
 
       const decision: IngestDecision = item.status === "needs_ocr" ? "ask" : "rule_keep";
+      const reason =
+        item.status === "needs_ocr"
+          ? "扫描件，未能自动识别，待人工补录"
+          : item.ocrModel
+            ? `扫描件已自动 OCR（${item.ocrModel}）`
+            : null;
       await client.query(
         `insert into ingest_files (run_id, asset_id, source_path, decision, reason, document_id)
          values ($1, $2, $3, $4, $5, $6)`,
-        [
-          createdRunId,
-          asset.rows[0].id,
-          item.input.name,
-          decision,
-          item.status === "needs_ocr" ? "扫描件，未解析出文字，待人工处理" : null,
-          documentId,
-        ],
+        [createdRunId, asset.rows[0].id, item.input.name, decision, reason, documentId],
       );
 
       const embedded = Boolean(item.embeddings);
@@ -410,7 +446,12 @@ export async function ingestUpload(
       results.push({
         name: item.input.name,
         decision,
-        reason: item.status === "needs_ocr" ? "扫描件待 OCR" : undefined,
+        reason:
+          item.status === "needs_ocr"
+            ? "扫描件待 OCR"
+            : item.ocrModel
+              ? "扫描件已自动 OCR"
+              : undefined,
         documentId,
         chunkCount: item.chunks.length,
         embedded,

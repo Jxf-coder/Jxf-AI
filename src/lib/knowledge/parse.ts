@@ -23,6 +23,8 @@ export interface ParsedDocument {
 }
 
 const TEXT_EXTENSIONS = new Set(["txt", "md", "markdown", "csv", "json", "html", "htm", "log", "xml"]);
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
+const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 export function fileExtension(name: string): string {
   const index = name.lastIndexOf(".");
@@ -53,6 +55,11 @@ export async function parseDocument(
   if (TEXT_EXTENSIONS.has(extension) || mime.startsWith("text/")) {
     const text = normalizeText(new TextDecoder("utf-8").decode(buffer));
     return { pages: text ? [text] : [], hasText: text.length > 0 };
+  }
+
+  // 图片没有文本层，交给 OCR 通道；识别失败则如实标 needs_ocr
+  if (IMAGE_EXTENSIONS.has(extension) || IMAGE_MIMES.has(mime)) {
+    return { pages: [], hasText: false };
   }
 
   throw new UnsupportedDocumentError(extension);
