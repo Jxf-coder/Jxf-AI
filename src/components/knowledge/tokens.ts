@@ -3,7 +3,7 @@
  * 仅为 Tailwind 工具类字符串常量，不含任何业务逻辑。
  */
 
-export const pageWrap = "mx-auto w-full max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8";
+export const pageWrap = "w-full py-2";
 export const headerRow = "flex flex-wrap items-start justify-between gap-5";
 export const pageTitle = "text-2xl font-semibold tracking-tight text-zinc-900";
 export const pageSubtitle = "mt-2 max-w-2xl text-[13px] leading-relaxed text-zinc-500";

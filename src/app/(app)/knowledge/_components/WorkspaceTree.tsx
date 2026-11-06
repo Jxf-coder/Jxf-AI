@@ -56,19 +56,18 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
       <Link
         key={card.id}
         href={`/knowledge?tab=scout&card=${card.id}`}
+        scroll={false}
+        title={`${card.title} · ${CARD_STATUS_LABEL[card.status] ?? card.status}`}
         aria-current={active ? "true" : undefined}
         className={`flex items-center gap-2 rounded-lg py-1.5 pr-2 text-[12px] transition-colors ${
           active
             ? "bg-white text-zinc-900 ring-1 ring-black/5"
             : "text-zinc-600 hover:bg-white/70 hover:text-zinc-900"
         }`}
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        style={{ paddingLeft: `${depth * 10 + 6}px` }}
       >
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDot(card.status)}`} />
         <span className="truncate">{card.title}</span>
-        <span className="ml-auto shrink-0 text-[10px] text-zinc-400">
-          {CARD_STATUS_LABEL[card.status] ?? card.status}
-        </span>
       </Link>
     );
   }
@@ -79,19 +78,18 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
       <Link
         key={document.id}
         href={`/knowledge?tab=scout&doc=${document.id}`}
+        scroll={false}
+        title={`${document.title} · ${DOC_STATUS_LABEL[document.status] ?? document.status}`}
         aria-current={active ? "true" : undefined}
         className={`flex items-center gap-2 rounded-lg py-1.5 pr-2 text-[12px] transition-colors ${
           active
             ? "bg-white text-zinc-900 ring-1 ring-black/5"
             : "text-zinc-600 hover:bg-white/70 hover:text-zinc-900"
         }`}
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        style={{ paddingLeft: `${depth * 10 + 6}px` }}
       >
         <FileTextIcon size={13} className="shrink-0 text-zinc-400" />
         <span className="truncate">{document.title}</span>
-        <span className="ml-auto shrink-0 text-[10px] text-zinc-400">
-          {DOC_STATUS_LABEL[document.status] ?? document.status}
-        </span>
       </Link>
     );
   }
@@ -114,7 +112,7 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
         onClick={() => toggleGroup(groupKey)}
         aria-expanded={open}
         className="flex w-full items-center gap-1.5 rounded-lg py-1.5 pr-2 text-left text-[12px] text-zinc-600 transition-colors hover:bg-white/70 hover:text-zinc-900"
-        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        style={{ paddingLeft: `${depth * 10 + 6}px` }}
       >
         <ChevronRightIcon
           size={13}
@@ -162,7 +160,7 @@ export function WorkspaceTree({ tree, selected }: WorkspaceTreeProps) {
   return (
     <aside
       aria-label="知识库目录"
-      className="max-h-[360px] overflow-y-auto rounded-2xl border border-hairline bg-[#f7f8fa] p-2 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)]"
+      className="min-w-0 max-h-[360px] overflow-y-auto rounded-2xl border border-hairline bg-[#f7f8fa] p-2 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)]"
     >
       <p className="px-2 pb-1 pt-1 text-[11px] font-medium text-zinc-500">知识库目录</p>
 

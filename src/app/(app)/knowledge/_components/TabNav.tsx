@@ -36,6 +36,7 @@ export function TabNav({ active, counts }: TabNavProps) {
           <Link
             key={tab.key}
             href={`/knowledge?tab=${tab.key}`}
+            scroll={false}
             aria-current={isActive ? "page" : undefined}
             className={isActive ? tabActive : tabIdle}
           >

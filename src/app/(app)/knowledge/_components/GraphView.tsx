@@ -84,6 +84,7 @@ export function GraphView({ data }: { data: GraphData }) {
             <Link
               key={node.id}
               href={href}
+              scroll={false}
               title={node.label}
               className={`absolute flex max-w-[42%] -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] transition-colors ${
                 node.kind === "card"

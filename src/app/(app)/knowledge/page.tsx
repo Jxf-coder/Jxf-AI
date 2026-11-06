@@ -124,7 +124,7 @@ export default async function KnowledgePage({
       : 0;
 
   return (
-    <section className={pageWrap}>
+    <section className={`${pageWrap} kb-workspace`}>
       <header className={headerRow}>
         <div>
           <h1 className={pageTitle}>知识库</h1>
@@ -146,7 +146,7 @@ export default async function KnowledgePage({
       {!access.canRead || !stats || !tree ? (
         <InlineMessage tone="error">当前账号没有「知识库查看」权限，请联系 L1 管理员授权。</InlineMessage>
       ) : (
-        <div className="mt-5 grid gap-4 lg:grid-cols-[264px_minmax(0,1fr)] lg:items-start">
+        <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(200px,17%)_minmax(0,1fr)] lg:items-start">
           <WorkspaceTree
             tree={tree}
             selected={

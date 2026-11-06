@@ -48,6 +48,8 @@
 @layer base {
   html {
     font-size: clamp(13px, 0.35vw + 10px, 16.5px);
+    /* 切 Tab 时页面高度变化会开关滚动条，预留槽位避免整页左右抖动 */
+    scrollbar-gutter: stable;
   }
 }
 
@@ -840,6 +842,15 @@ a.nav-item:hover {
   max-width: 72rem;
   margin: 0 auto;
   padding: 1.875rem 2rem 4rem;
+}
+
+/*
+ * 知识库双栏工作区：解除 app-main 的 72rem 居中上限，
+ * 让左树贴左、右栏吃满剩余宽度（≥80%），不再缩在页面中间。
+ */
+.app-main:has(.kb-workspace) {
+  max-width: none;
+  padding: 1rem 1rem 3rem;
 }
 
 /* ------------------------------------------------------------------------- */
