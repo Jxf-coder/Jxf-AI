@@ -28,6 +28,12 @@ const ITEMS: CommandItem[] = [
     permission: "knowledge:read",
   },
   {
+    label: "AI 员工",
+    hint: "目录 · 使用授权",
+    href: "/ai-employees",
+    keywords: ["ai", "agent", "employee", "员工", "助手", "授权"],
+  },
+  {
     label: "组织架构",
     hint: "部门树 · 成员",
     href: "/admin/organization",

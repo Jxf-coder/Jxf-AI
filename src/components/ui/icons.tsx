@@ -2,6 +2,7 @@ import {
   Archive,
   Bell,
   BookOpen,
+  Bot,
   Building2,
   ChevronDown,
   ChevronRight,
@@ -108,4 +109,9 @@ export function InboxIcon(props: IconProps) {
 
 export function KnowledgeIcon(props: IconProps) {
   return <Icon icon={BookOpen} {...props} />;
+}
+
+/** AI 员工目录 */
+export function AiIcon(props: IconProps) {
+  return <Icon icon={Bot} {...props} />;
 }

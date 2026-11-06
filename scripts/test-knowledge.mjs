@@ -566,10 +566,23 @@ async function main() {
   );
   check("L1 创建 AI 员工成功", employeeByL1.rowCount === 1, `rowCount=${employeeByL1.rowCount}`);
 
+  const employeeDraftForBoss = await runAs(boss, (client) =>
+    client.query("select id from ai_employees where id = $1", [employeeByL1.rows[0].id]),
+  );
+  check(
+    "AI 员工：L1 可见自己的草稿",
+    employeeDraftForBoss.rowCount === 1,
+    `rowCount=${employeeDraftForBoss.rowCount}`,
+  );
+
   const employeeVisible = await runAs(memberB, (client) =>
     client.query("select id from ai_employees where tenant_id = $1", [TENANT]),
   );
-  check("AI 员工定义租户内可读", employeeVisible.rowCount === 1, `rowCount=${employeeVisible.rowCount}`);
+  check(
+    "AI 员工：未授权部门 0 行（Fail-Closed）",
+    employeeVisible.rowCount === 0,
+    `rowCount=${employeeVisible.rowCount}`,
+  );
 
   // 15. 问答审计：本部门可写，跨部门不可见
   const qaInsert = await runAs(memberA, (client) =>

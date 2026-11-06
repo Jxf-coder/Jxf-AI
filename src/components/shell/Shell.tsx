@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { usePermission } from "@/components/permissions/usePermission";
-import { BellIcon, CloseIcon, KnowledgeIcon, MenuIcon, SearchIcon } from "@/components/ui/icons";
+import { AiIcon, BellIcon, CloseIcon, KnowledgeIcon, MenuIcon, SearchIcon } from "@/components/ui/icons";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { DepartmentSwitcher, type DepartmentOption } from "@/components/shell/DepartmentSwitcher";
 import { ProfileMenu } from "@/components/shell/ProfileMenu";
@@ -49,6 +49,19 @@ export function Shell({
     </Link>
   ) : null;
 
+  const aiEmployeesLink = (
+    <Link
+      href="/ai-employees"
+      className={`nav-item${pathname.startsWith("/ai-employees") ? " is-active" : ""}`}
+      aria-current={pathname.startsWith("/ai-employees") ? "page" : undefined}
+    >
+      <span className="nav-icon">
+        <AiIcon size={18} />
+      </span>
+      <span className="nav-label">AI 员工</span>
+    </Link>
+  );
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -85,6 +98,7 @@ export function Shell({
         {/* 主侧边栏只承载主业务（AI 工作台 / Agent / 知识库）；管理入口收敛到顶栏与个人菜单 */}
         <nav className="sidebar-nav" aria-label="主导航">
           {knowledgeLink}
+          {aiEmployeesLink}
         </nav>
 
         <div className="sidebar-profile">
@@ -180,6 +194,7 @@ export function Shell({
 
             <nav className="sidebar-nav" aria-label="移动导航">
               {knowledgeLink}
+              {aiEmployeesLink}
             </nav>
 
             <div className="drawer-bottom">
