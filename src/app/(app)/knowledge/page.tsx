@@ -21,6 +21,7 @@ import {
   loadWorkspaceTree,
   searchWorkspace,
 } from "@/lib/knowledge/workspace";
+import { listNeedsOcrDocuments } from "@/lib/knowledge/ocr";
 import { authorize } from "@/lib/permissions/authorize";
 import { resolveContextPermissions } from "@/lib/permissions/server";
 import type { ResolvedPermissions } from "@/types/permission";
@@ -90,12 +91,13 @@ export default async function KnowledgePage({
     };
   });
 
-  const [stats, tree, matches] = await Promise.all([
+  const [stats, tree, matches, needsOcr] = await Promise.all([
     access.canRead ? loadKnowledgeStats(context) : Promise.resolve(null),
     access.canRead ? loadWorkspaceTree(context) : Promise.resolve(null),
     access.canRead && treeQuery.length > 0
       ? searchWorkspace(context, treeQuery)
       : Promise.resolve([]),
+    access.canRead && tab === "scout" ? listNeedsOcrDocuments(context) : Promise.resolve([]),
   ]);
 
   const runs =
@@ -188,10 +190,12 @@ export default async function KnowledgePage({
                 <details className="mb-4 rounded-2xl border border-hairline bg-white px-4 py-3 shadow-card">
                   <summary className="cursor-pointer text-[13px] font-medium text-zinc-800">
                     上传文档与入库批次
+                    {needsOcr.length > 0 ? ` · 待 OCR ${needsOcr.length}` : ""}
                   </summary>
                   <div className="mt-3">
                     <ScoutTab
                       canWrite={access.canWrite}
+                      needsOcr={needsOcr}
                       runs={runs.map((run) => ({
                         id: run.id,
                         status: run.status,

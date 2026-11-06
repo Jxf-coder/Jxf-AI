@@ -17,6 +17,7 @@ import {
   restoreDocumentAction,
   setCardVisibilityAction,
   setDocumentVisibilityAction,
+  submitOcrTextAction,
   trashDocumentAction,
 } from "../actions";
 import {
@@ -83,6 +84,10 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [evidenceFailed, setEvidenceFailed] = useState(false);
   const [evidenceMessage, setEvidenceMessage] = useState("");
+  /** 扫描件补录 */
+  const [ocrText, setOcrText] = useState("");
+  const [ocrFailed, setOcrFailed] = useState(false);
+  const [ocrMessage, setOcrMessage] = useState("");
 
   const trashed = isDocument && props.document.deletedAt !== null;
   const cardTrashed = !isDocument && props.card.status === "dropped";
@@ -306,6 +311,24 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
     });
   }
 
+  /** 提交 OCR 正文：服务端重建切片与向量，成功后文档转「已解析」 */
+  function submitOcr() {
+    if (props.mode !== "document") {
+      return;
+    }
+    startTransition(async () => {
+      const result = await submitOcrTextAction(props.document.id, ocrText);
+      setOcrFailed(!result.ok);
+      setOcrMessage(result.message);
+      if (result.ok) {
+        setOcrText("");
+        setFailed(false);
+        setMessage(result.message);
+        router.refresh();
+      }
+    });
+  }
+
   return (
     <section className="rounded-2xl border border-hairline bg-white p-4 shadow-card sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -497,6 +520,47 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
 
       {readOnlyReason ? (
         <InlineMessage className="mt-3 mb-0">{readOnlyReason}</InlineMessage>
+      ) : null}
+
+      {isDocument &&
+      props.canWrite &&
+      !trashed &&
+      (props.document.status === "needs_ocr" || props.document.status === "failed") ? (
+        <div className="mt-3 rounded-xl border border-amber-200/70 bg-amber-50/40 p-3">
+          <p className="text-[12px] font-medium text-amber-800">
+            {props.document.status === "needs_ocr" ? "补录 OCR 正文" : "解析失败，可补录正文重试"}
+          </p>
+          <p className="mt-1 text-[11px] leading-relaxed text-amber-700/80">
+            粘贴识别结果；可用「【第 1 页】」标记分页，不标记则全文视为一页。保存后重建切片并向量化，文档转为「已解析」。
+          </p>
+          <textarea
+            className={`${input} mt-2 min-h-[160px] resize-y font-mono text-[12px] leading-relaxed`}
+            value={ocrText}
+            maxLength={2_000_000}
+            spellCheck={false}
+            disabled={pending}
+            placeholder={"【第 1 页】\n……识别正文……\n【第 2 页】\n……"}
+            onChange={(event) => setOcrText(event.target.value)}
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className={btnBlue}
+              disabled={pending || ocrText.trim().length === 0}
+              onClick={submitOcr}
+            >
+              {pending ? "重建中…" : "保存并重建切片"}
+            </button>
+            <span className="text-[10px] text-amber-700/70">
+              原文件不会改动；补录内容会生成新的切片与证据来源。
+            </span>
+          </div>
+          {ocrMessage ? (
+            <InlineMessage tone={ocrFailed ? "error" : "info"} className="mt-2 mb-0">
+              {ocrMessage}
+            </InlineMessage>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="mt-4 grid gap-3">

@@ -18,6 +18,7 @@ import {
   updateCard,
 } from "../src/lib/knowledge/cards.ts";
 import { addCardEvidence, removeCardEvidence } from "../src/lib/knowledge/card-evidence.ts";
+import { submitOcrText } from "../src/lib/knowledge/ocr.ts";
 import { verifyQuoteInChunk } from "../src/lib/knowledge/evidence.ts";
 import { answerQuestion } from "../src/lib/knowledge/qa.ts";
 import { runRegression, seedRegressionQuestions } from "../src/lib/knowledge/regression.ts";
@@ -1150,6 +1151,90 @@ async function main() {
       JSON.stringify(semanticHit),
     );
   }
+
+  // 25e. OCR 补录：扫描件补录后重建切片、立即可检索、已解析不可覆盖
+  const ocrDoc = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      `insert into documents (tenant_id, department_id, title, mime, page_count, char_count, status, sha256)
+       values ($1, $2, '扫描件验收样本', 'application/pdf', 2, 0, 'needs_ocr', $3) returning id`,
+      [TENANT, fx.departments.groupA, "6".repeat(64)],
+    );
+    return rows[0].id;
+  });
+
+  const ocrText =
+    "【第 1 页】\n设备点检必须在开机前完成，并记录压力值。\n【第 2 页】\n点检记录保存三年，异常需当天上报。";
+  const ocrResult = await submitOcrText(bossContext, ocrDoc, { text: ocrText });
+  check(
+    "OCR 补录：按标记切出两页",
+    ocrResult.pages === 2 && ocrResult.chunks >= 2,
+    JSON.stringify(ocrResult),
+  );
+
+  const ocrState = await withClient(OWNER_URL, async (owner) => {
+    const doc = await owner.query(
+      "select status, char_count, page_count from documents where id = $1",
+      [ocrDoc],
+    );
+    const chunks = await owner.query(
+      "select page_no from doc_chunks where document_id = $1 order by ord",
+      [ocrDoc],
+    );
+    return { doc: doc.rows[0], pages: chunks.rows.map((row) => row.page_no) };
+  });
+  check(
+    "OCR 补录：文档转为已解析",
+    ocrState.doc?.status === "parsed" && ocrState.doc.char_count > 0,
+    JSON.stringify(ocrState.doc),
+  );
+  check(
+    "OCR 补录：切片页码与标记一致",
+    ocrState.pages.includes(1) && ocrState.pages.includes(2),
+    JSON.stringify(ocrState.pages),
+  );
+
+  const ocrRecall = await runAs(memberA, (client) =>
+    client.query("select document_id from app.hybrid_search($1, null, 10, 60)", ["点检记录保存三年"]),
+  );
+  check(
+    "OCR 补录：补录正文立即可检索",
+    ocrRecall.rows.some((row) => row.document_id === ocrDoc),
+    `hits=${ocrRecall.rows.map((row) => row.document_id).join(",")}`,
+  );
+
+  let ocrCrossBlocked = false;
+  try {
+    await submitOcrText(memberB, ocrDoc, { text: "越权补录" });
+  } catch {
+    ocrCrossBlocked = true;
+  }
+  check("OCR 补录：兄弟部门不可写", ocrCrossBlocked);
+
+  let ocrEmptyRejected = false;
+  try {
+    await submitOcrText(bossContext, ocrDoc, { text: "   " });
+  } catch {
+    ocrEmptyRejected = true;
+  }
+  check("OCR 补录：空正文被拒绝", ocrEmptyRejected);
+
+  let ocrParsedGuard = false;
+  try {
+    await submitOcrText(bossContext, ocrDoc, { text: "重复补录会覆盖切片" });
+  } catch {
+    ocrParsedGuard = true;
+  }
+  check("OCR 补录：已解析文档不可覆盖", ocrParsedGuard);
+
+  const ocrAudit = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      `select count(*)::int as count from audit_events
+        where tenant_id = $1 and action = 'knowledge.document_ocr_completed' and target_id = $2`,
+      [TENANT, ocrDoc],
+    );
+    return rows[0].count;
+  });
+  check("OCR 补录：审计已落库", ocrAudit === 1, `count=${ocrAudit}`);
 
   // 26. 卡片回收站：作废进 99-回收站、可恢复、可彻底删除
   const collectTrashIds = (workspace) =>

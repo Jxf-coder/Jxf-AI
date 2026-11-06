@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
@@ -10,6 +11,7 @@ import { Pill } from "@/components/knowledge/Pill";
 import { SectionCard } from "@/components/knowledge/SectionCard";
 import { badge, btnBlue, btnGhost, formGrid, input, linkBtn, meta } from "@/components/knowledge/tokens";
 import { DEFAULT_DOCUMENT_FOLDER, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
+import type { NeedsOcrDocument } from "@/lib/knowledge/ocr";
 
 import { loadRunDetailAction, revokeRunAction, type RunDetailView } from "../actions";
 import { filesFromDataTransfer, filesFromInput, type DroppedFile } from "./file-drop";
@@ -68,10 +70,12 @@ function formatDate(value: string): string {
 interface ScoutTabProps {
   runs: ScoutRunItem[];
   canWrite: boolean;
+  /** 待 OCR / 解析失败的文档：提供补录入口 */
+  needsOcr: NeedsOcrDocument[];
 }
 
 /** 巡读上传：逐文件入库 + 批次详情 + 整批撤回 */
-export function ScoutTab({ runs, canWrite }: ScoutTabProps) {
+export function ScoutTab({ runs, canWrite, needsOcr }: ScoutTabProps) {
   const router = useRouter();
   const folderRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<HTMLInputElement>(null);
@@ -217,6 +221,36 @@ export function ScoutTab({ runs, canWrite }: ScoutTabProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      {needsOcr.length > 0 ? (
+        <SectionCard
+          title={`待 OCR · ${needsOcr.length}`}
+          right={<span className={badge("warn")}>扫描件</span>}
+          desc="没有文本层的扫描件不会生成切片。点「补录正文」粘贴 OCR 结果，保存后自动重建切片与向量。"
+        >
+          <ul className="grid list-none gap-1.5 p-0">
+            {needsOcr.map((doc) => (
+              <li
+                key={doc.id}
+                className="flex flex-wrap items-center gap-2 rounded-xl bg-apple-canvas px-3 py-2"
+              >
+                <span className="truncate text-[13px] text-zinc-800">{doc.title}</span>
+                <span className={meta}>
+                  {doc.departmentName} · {doc.folderLabel}
+                  {doc.pageCount ? ` · ${doc.pageCount} 页` : ""}
+                </span>
+                <Link
+                  href={`/knowledge?tab=scout&doc=${doc.id}`}
+                  scroll={false}
+                  className={`${linkBtn} ml-auto text-[11px]`}
+                >
+                  补录正文
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
+      ) : null}
+
       <SectionCard
         title="上传文档"
         right={<span className={badge()}>单文件 ≤ 20MB</span>}

@@ -7,6 +7,7 @@ import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 import { patchCards, type CardMetaPatch } from "@/lib/knowledge/cards";
 import { addGap, closeGap, reopenGap } from "@/lib/knowledge/gaps";
 import { revokeIngestRun } from "@/lib/knowledge/ingest";
+import { submitOcrText } from "@/lib/knowledge/ocr";
 import { answerQuestion, type QaAnswer } from "@/lib/knowledge/qa";
 import {
   emptyTrash,
@@ -16,7 +17,11 @@ import {
   restoreDocument,
   trashDocument,
 } from "@/lib/knowledge/trash";
-import { setCardVisibility, setDocumentVisibility } from "@/lib/knowledge/workspace";
+import {
+  isUuid,
+  setCardVisibility,
+  setDocumentVisibility,
+} from "@/lib/knowledge/workspace";
 import {
   addRegressionQuestion,
   removeRegressionQuestion,
@@ -348,6 +353,28 @@ export async function emptyTrashAction(departmentId: string): Promise<ActionResu
     return {
       ok: true,
       message: `已清空：文档 ${result.documents} 份、知识卡 ${result.cards} 张`,
+    };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 扫描件补录：重建切片与向量，文档转「已解析」 */
+export async function submitOcrTextAction(
+  documentId: string,
+  text: string,
+): Promise<ActionResult> {
+  if (!isUuid(documentId)) {
+    return { ok: false, message: "文档标识不合法" };
+  }
+  try {
+    const result = await submitOcrText(await resolveCurrentContext(), documentId, { text });
+    revalidatePath("/knowledge");
+    return {
+      ok: true,
+      message: `已补录：${result.pages} 页 / ${result.chunks} 个切片${
+        result.embedded ? "（已生成向量）" : "（向量未生成，检索走关键词）"
+      }`,
     };
   } catch (error) {
     return { ok: false, message: toPermissionMessage(error) };
