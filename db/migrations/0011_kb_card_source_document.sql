@@ -1,0 +1,3 @@
+ALTER TABLE "knowledge_cards" ADD COLUMN "source_document_id" uuid;--> statement-breakpoint
+ALTER TABLE "knowledge_cards" ADD CONSTRAINT "knowledge_cards_source_document_id_documents_id_fk" FOREIGN KEY ("source_document_id") REFERENCES "public"."documents"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "knowledge_cards_source_document_unique" ON "knowledge_cards" USING btree ("tenant_id","source_document_id") WHERE "source_document_id" is not null;

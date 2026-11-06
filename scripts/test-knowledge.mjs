@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 
 import { chunkPages } from "../src/lib/knowledge/chunk.ts";
+import { createManualCard } from "../src/lib/knowledge/cards.ts";
 import { verifyQuoteInChunk } from "../src/lib/knowledge/evidence.ts";
 import { answerQuestion } from "../src/lib/knowledge/qa.ts";
 import { runRegression, seedRegressionQuestions } from "../src/lib/knowledge/regression.ts";
@@ -701,6 +702,57 @@ async function main() {
     regressionAudit.length === 2 && regressionAudit.every((row) => row.items === row.total),
     JSON.stringify(regressionAudit),
   );
+
+  // 21. 建卡幂等：同一文档反复「保存为待确认卡片」只更新同一张草稿
+  const firstSave = await createManualCard(bossContext, {
+    kind: "fact",
+    title: "幂等验收卡",
+    body: "第一版正文",
+    source: "文档：验收标准",
+    sourceDocumentId: fx.docA,
+  });
+  const secondSave = await createManualCard(bossContext, {
+    kind: "fact",
+    title: "幂等验收卡",
+    body: "第二版正文",
+    source: "文档：验收标准",
+    sourceDocumentId: fx.docA,
+  });
+  check(
+    "建卡幂等：首次新建、再次更新",
+    firstSave.created === true && secondSave.created === false,
+    JSON.stringify({ first: firstSave.created, second: secondSave.created }),
+  );
+  check("建卡幂等：复用同一张卡", firstSave.id === secondSave.id, `${firstSave.id} / ${secondSave.id}`);
+
+  const idempotentRows = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      "select id, body, status from knowledge_cards where tenant_id = $1 and source_document_id = $2",
+      [TENANT, fx.docA],
+    );
+    return rows;
+  });
+  check("建卡幂等：库里只有一条", idempotentRows.length === 1, `count=${idempotentRows.length}`);
+  check("建卡幂等：内容为最后一次保存", idempotentRows[0]?.body === "第二版正文", idempotentRows[0]?.body);
+
+  // 22. 已确认的卡不被后续草稿覆盖（避免已采纳知识被悄悄替换）
+  await withClient(OWNER_URL, (owner) =>
+    owner.query("update knowledge_cards set status = 'confirmed' where id = $1", [firstSave.id]),
+  );
+  const thirdSave = await createManualCard(bossContext, {
+    kind: "fact",
+    title: "幂等验收卡",
+    body: "第三版正文",
+    source: "文档：验收标准",
+    sourceDocumentId: fx.docA,
+  });
+  check("建卡幂等：已确认卡跳过覆盖", thirdSave.skipped === "confirmed", JSON.stringify(thirdSave));
+
+  const keptBody = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query("select body from knowledge_cards where id = $1", [firstSave.id]);
+    return rows[0]?.body;
+  });
+  check("建卡幂等：已确认内容保持不变", keptBody === "第二版正文", keptBody);
 
   if (process.env.KEEP_KB_FIXTURES !== "1") {
     await withClient(OWNER_URL, cleanup);

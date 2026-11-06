@@ -55,6 +55,11 @@ export const knowledgeCards = pgTable(
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     conflictWith: uuid("conflict_with").array().notNull().default(sql`'{}'::uuid[]`),
     ingestRunId: uuid("ingest_run_id").references(() => ingestRuns.id, { onDelete: "set null" }),
+    /**
+     * 「文档 → 保存为待确认卡片」的来源文档。
+     * 配合下方部分唯一索引做幂等：同一文档反复保存只更新这一张草稿，不重复新增。
+     */
+    sourceDocumentId: uuid("source_document_id").references(() => documents.id, { onDelete: "set null" }),
     extra: jsonb("extra").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -64,6 +69,9 @@ export const knowledgeCards = pgTable(
     index("knowledge_cards_ingest_run_idx").on(table.ingestRunId),
     index("knowledge_cards_folder_idx").on(table.departmentId, table.roleKey, table.folderKey),
     index("knowledge_cards_extra_gin_idx").using("gin", table.extra),
+    uniqueIndex("knowledge_cards_source_document_unique")
+      .on(table.tenantId, table.sourceDocumentId)
+      .where(sql`"source_document_id" is not null`),
   ],
 );
 

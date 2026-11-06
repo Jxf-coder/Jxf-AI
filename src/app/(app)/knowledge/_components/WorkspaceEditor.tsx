@@ -97,9 +97,13 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
     startTransition(async () => {
       const result =
         props.mode === "document"
-          ? await createCardAction("fact", title.trim(), body.trim(), {
-              source: source.trim() || `文档：${props.document.title}`,
-            })
+          ? await createCardAction(
+              "fact",
+              title.trim(),
+              body.trim(),
+              { source: source.trim() || `文档：${props.document.title}` },
+              props.document.id,
+            )
           : await updateCardAction(props.card.id, title.trim(), body.trim(), source.trim());
 
       setFailed(!result.ok);

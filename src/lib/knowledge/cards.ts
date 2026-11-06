@@ -260,15 +260,29 @@ export interface CreateCardInput {
   version?: string | null;
   owner?: string | null;
   externalOk?: boolean;
+  /** 来源文档：传入时按「同一文档只保留一张草稿」做幂等 upsert */
+  sourceDocumentId?: string | null;
 }
 
-/** 人工建卡：作者本人写过，human_edited = true，可直接确认 */
-export async function createManualCard(context: UserContext, input: CreateCardInput): Promise<string> {
-  const departmentId = context.activeDepartmentId;
-  if (!departmentId) {
-    throw new Error("当前账号没有有效部门上下文");
-  }
+export interface CreateCardResult {
+  id: string;
+  /** true = 新建；false = 更新了该文档已有的待确认卡片 */
+  created: boolean;
+  /** 已存在且已确认时为 confirmed：此时不覆盖，返回原卡 id */
+  skipped?: "confirmed";
+}
 
+/**
+ * 人工建卡：作者本人写过，human_edited = true，可直接确认。
+ *
+ * 幂等：带 sourceDocumentId 时，同一文档反复「保存为待确认卡片」只会更新同一行
+ * （部分唯一索引 knowledge_cards_source_document_unique 兜底并发）。
+ * 已确认的卡不覆盖内容，避免已采纳知识被草稿悄然替换。
+ */
+export async function createManualCard(
+  context: UserContext,
+  input: CreateCardInput,
+): Promise<CreateCardResult> {
   const title = input.title.trim();
   const body = input.body.trim();
   if (title.length === 0 || body.length === 0) {
@@ -280,6 +294,7 @@ export async function createManualCard(context: UserContext, input: CreateCardIn
   if (body.length > 4000) {
     throw new Error("正文过长（≤ 4000 字）");
   }
+  const sourceDocumentId = input.sourceDocumentId?.trim() || null;
 
   const extra: Record<string, string> = {};
   for (const key of META_KEYS) {
@@ -290,21 +305,50 @@ export async function createManualCard(context: UserContext, input: CreateCardIn
   }
 
   return withUserContext(context, async (client) => {
+    let departmentId = context.activeDepartmentId;
+
+    if (sourceDocumentId) {
+      const document = await client.query<{ department_id: string }>(
+        "select department_id from documents where id = $1",
+        [sourceDocumentId],
+      );
+      const documentDepartmentId = document.rows[0]?.department_id;
+      if (!documentDepartmentId) {
+        throw new Error("来源文档不存在或无权访问");
+      }
+      departmentId = documentDepartmentId;
+    }
+
+    if (!departmentId) {
+      throw new Error("当前账号没有有效部门上下文");
+    }
+
     await requireContextPermission(client, context, "knowledge:write", {
       kind: "department",
       id: departmentId,
       departmentId,
     });
 
-    const card = await client.query<{ id: string }>(
+    const saved = await client.query<{ id: string; created: boolean }>(
       `insert into knowledge_cards
          (tenant_id, department_id, kind, title, body, status, origin, human_edited, rev,
-          category, product, external_ok, valid_until, extra, role_key)
+          category, product, external_ok, valid_until, extra, role_key, source_document_id)
        values ($1, $2, $3, $4, $5, 'pending', 'manual', true, 1, $6, $7, $8, $9, $10::jsonb,
                coalesce((select nullif(trim(m.position), '') from memberships m
                           where m.user_id = $11 and m.department_id = $2 and m.status = 'active'
-                          limit 1), null))
-       returning id`,
+                          limit 1), null),
+               $12::uuid)
+       on conflict (tenant_id, source_document_id) where source_document_id is not null
+       do update set
+         title = excluded.title,
+         body = excluded.body,
+         human_edited = true,
+         rev = knowledge_cards.rev + 1,
+         updated_at = now(),
+         status = case when knowledge_cards.status = 'dropped' then 'pending' else knowledge_cards.status end,
+         extra = knowledge_cards.extra || excluded.extra
+       where knowledge_cards.status <> 'confirmed'
+       returning id, (xmax = 0) as created`,
       [
         context.tenantId,
         departmentId,
@@ -317,19 +361,32 @@ export async function createManualCard(context: UserContext, input: CreateCardIn
         normText(input.validUntil),
         JSON.stringify(extra),
         context.userId,
+        sourceDocumentId,
       ],
     );
 
+    const row = saved.rows[0];
+    if (!row) {
+      // 唯一索引命中但被 where 挡住：该文档的卡片已确认，不覆盖
+      const existing = await client.query<{ id: string }>(
+        "select id from knowledge_cards where tenant_id = $1 and source_document_id = $2",
+        [context.tenantId, sourceDocumentId],
+      );
+      return { id: existing.rows[0].id, created: false, skipped: "confirmed" } satisfies CreateCardResult;
+    }
+
     await auditInTx(client, context, {
       actorUserId: context.userId,
-      action: "knowledge.card_created",
+      action: row.created ? "knowledge.card_created" : "knowledge.card_updated",
       targetType: "knowledge_card",
-      targetId: card.rows[0].id,
+      targetId: row.id,
       departmentId,
-      payload: { kind: input.kind },
+      payload: row.created
+        ? { kind: input.kind }
+        : { kind: input.kind, sourceDocumentId },
     });
 
-    return card.rows[0].id;
+    return { id: row.id, created: row.created } satisfies CreateCardResult;
   });
 }
 

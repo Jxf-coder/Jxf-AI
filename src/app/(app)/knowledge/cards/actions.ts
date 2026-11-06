@@ -16,6 +16,7 @@ import {
   type CardMetaPatch,
 } from "@/lib/knowledge/cards";
 import { distillDocument } from "@/lib/knowledge/distill";
+import { isUuid } from "@/lib/knowledge/workspace";
 import { toPermissionMessage } from "@/lib/permissions/guard";
 
 export interface ActionResult {
@@ -98,15 +99,19 @@ export async function createCardAction(
   title: string,
   body: string,
   meta?: CardMetaPatch,
+  sourceDocumentId?: string,
 ): Promise<ActionResult> {
   if (!isCardKind(kind)) {
     return { ok: false, message: "知识卡类型不合法" };
+  }
+  if (sourceDocumentId !== undefined && !isUuid(sourceDocumentId)) {
+    return { ok: false, message: "来源文档标识不合法" };
   }
 
   const patch = sanitizePatch(meta);
 
   try {
-    await createManualCard(await contextOf(), {
+    const result = await createManualCard(await contextOf(), {
       kind,
       title,
       body,
@@ -117,9 +122,16 @@ export async function createCardAction(
       source: patch.source,
       version: patch.version,
       owner: patch.owner,
+      sourceDocumentId,
     });
     revalidateKnowledge();
-    return { ok: true, message: "已创建，待确认" };
+    if (result.skipped === "confirmed") {
+      return {
+        ok: true,
+        message: "该文档的卡片已确认，未重复创建；如需修改请在知识卡页直接编辑",
+      };
+    }
+    return { ok: true, message: result.created ? "已创建，待确认" : "已更新该文档的待确认卡片" };
   } catch (error) {
     return { ok: false, message: toPermissionMessage(error) };
   }
