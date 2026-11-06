@@ -36,6 +36,8 @@ services:
       JXF_OWNER_PASSWORD: ${JXF_OWNER_PASSWORD:?JXF_OWNER_PASSWORD 不能为空}
       JXF_APP_USER: ${JXF_APP_USER:?JXF_APP_USER 不能为空}
       JXF_APP_PASSWORD: ${JXF_APP_PASSWORD:?JXF_APP_PASSWORD 不能为空}
+      JXF_WORKER_USER: ${JXF_WORKER_USER:-app_worker}
+      JXF_WORKER_PASSWORD: ${JXF_WORKER_PASSWORD:-}
     command:
       - postgres
       - -c
@@ -155,7 +157,7 @@ services:
     image: jxf-ai/web:0.1.0
     restart: unless-stopped
     init: true
-    environment:
+    environment: &app-env
       NODE_ENV: production
       HOSTNAME: 0.0.0.0
       PORT: "3000"
@@ -224,6 +226,32 @@ services:
       start_period: 30s
     networks:
       - edge
+      - internal
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # M3 Worker：运行时队列消费者（与 web 同源码，专用 app_worker 受限角色）
+  # 长任务只在这里执行；web 只受理并返回 run_id。
+  # ---------------------------------------------------------------------------
+  worker-app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+    image: jxf-ai/worker:0.1.0
+    restart: unless-stopped
+    init: true
+    environment:
+      <<: *app-env
+      # 队列操作只允许使用 worker 角色；业务表权限一概没有
+      WORKER_DATABASE_URL: postgresql://${JXF_WORKER_USER:-app_worker}:${JXF_WORKER_PASSWORD:-}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
       - internal
     logging: *default-logging
 

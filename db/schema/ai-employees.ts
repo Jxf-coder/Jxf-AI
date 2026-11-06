@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   index,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -17,7 +18,7 @@ import { departments } from "./departments";
  *
  * 边界：不属于组织架构、不占部门树、不计入岗位数；自身不携带数据权限，
  * 运行时一律继承调用者的部门上下文。
- * P3 再补 persona / system_prompt / skill_ids / allowed_tools / model_config。
+ * M3 起补齐运行态字段：人格 / 系统提示 / 技能包 / 工具范围 / 模型参数。
  */
 export const aiEmployees = pgTable(
   "ai_employees",
@@ -29,6 +30,16 @@ export const aiEmployees = pgTable(
     description: text("description"),
     /** draft | active | disabled */
     status: text("status").notNull().default("draft"),
+    /** 人格描述：运行时拼进系统提示 */
+    persona: text("persona"),
+    /** 显式系统提示；为空时由 persona + 默认约束生成 */
+    systemPrompt: text("system_prompt"),
+    /** 技能包 key（如 knowledge-search / distill / regression） */
+    skillKeys: text("skill_keys").array().notNull().default(sql`'{}'::text[]`),
+    /** 允许调用的工具名（M4 由 MCP 治理层继续收窄） */
+    allowedTools: text("allowed_tools").array().notNull().default(sql`'{}'::text[]`),
+    /** 模型参数：tier / temperature / maxTokens 等 */
+    modelConfig: jsonb("model_config").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

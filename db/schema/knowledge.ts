@@ -16,6 +16,7 @@ import { departments } from "./departments";
 import { docChunks, documents } from "./documents";
 import { cardKind, cardOrigin, cardStatus, gapStatus, shareStatus as shareStatusEnum } from "./enums";
 import { ingestRuns } from "./ingest";
+import { runs } from "./runtime";
 import { users } from "./auth";
 
 /**
@@ -178,8 +179,8 @@ export const qaLogs = pgTable(
     invalidCites: text("invalid_cites").array().notNull().default(sql`'{}'::text[]`),
     unverifiedNumbers: text("unverified_numbers").array().notNull().default(sql`'{}'::text[]`),
     gapId: uuid("gap_id").references(() => knowledgeGaps.id, { onDelete: "set null" }),
-    /** 预留：M3 建 runs 表后补外键 */
-    runId: uuid("run_id"),
+    /** 指向 M3 runs：回答审计可回指到具体执行 */
+    runId: uuid("run_id").references(() => runs.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("qa_logs_department_created_idx").on(table.departmentId, table.createdAt)],

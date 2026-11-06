@@ -90,5 +90,29 @@ export const shareStatus = pgEnum("share_status", [
 /** 知识卡来源：开工问卷 / 提炼 / 手工 / 巡读 */
 export const cardOrigin = pgEnum("card_origin", ["intake", "distill", "manual", "scout"]);
 
+/* -------------------------------------------------------------------------- */
+/* M3 · AI 运行时                                                              */
+/* -------------------------------------------------------------------------- */
+
+/** 执行类型：对话回合 / 后台任务 / 产线步骤 / 资料入库 / 回归 */
+export const runKind = pgEnum("run_kind", ["chat", "task", "workflow_step", "ingest", "regression"]);
+
+/**
+ * 执行状态机：
+ * - queued：已受理，等待 worker
+ * - running：worker 持有租约执行中
+ * - interrupted：进程重启 / 心跳超时（可继续执行，不是失败）
+ * - done / failed：正常结束 / 需要人介入
+ * - cancelled：用户显式中止
+ */
+export const runStatus = pgEnum("run_status", [
+  "queued",
+  "running",
+  "interrupted",
+  "done",
+  "failed",
+  "cancelled",
+]);
+
 /** 知识缺口状态 */
 export const gapStatus = pgEnum("gap_status", ["open", "answered", "closed"]);

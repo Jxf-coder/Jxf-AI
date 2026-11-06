@@ -12,6 +12,7 @@ import { users } from "./auth";
 import { departments } from "./departments";
 import { assets } from "./assets";
 import { fileDecision, ingestKind, ingestStatus } from "./enums";
+import { runs } from "./runtime";
 
 /**
  * 入库批次：一次上传 / 一次巡读 = 一个 run。
@@ -27,6 +28,8 @@ export const ingestRuns = pgTable(
       .references(() => departments.id, { onDelete: "cascade" }),
     kind: ingestKind("kind").notNull(),
     goal: text("goal"),
+    /** M3：入库本身也是一次执行，可回溯耗时 / 重试 / 事件 */
+    runId: uuid("run_id").references(() => runs.id, { onDelete: "set null" }),
     status: ingestStatus("status").notNull().default("draft"),
     /** 目录数 / 文件数 / 保留 / 丢弃 / 待定 / 生成卡 / 冲突 */
     counts: jsonb("counts").$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
@@ -41,6 +44,7 @@ export const ingestRuns = pgTable(
   (table) => [
     index("ingest_runs_department_status_idx").on(table.departmentId, table.status),
     index("ingest_runs_created_by_idx").on(table.createdBy),
+    index("ingest_runs_run_idx").on(table.runId),
   ],
 );
 

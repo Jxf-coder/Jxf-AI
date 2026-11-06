@@ -16,6 +16,15 @@ set -eu
 : "${POSTGRES_DB:?POSTGRES_DB is required}"
 : "${POSTGRES_USER:?POSTGRES_USER is required}"
 
+# M3：worker 专用受限角色；未配置密码时跳过（运行时队列不可用，业务功能不受影响）
+# 角色名固定为 app_worker：RLS 策略按角色名判定，改名会静默失去队列权限
+if [ "${JXF_WORKER_USER:-app_worker}" != "app_worker" ]; then
+  echo "JXF_WORKER_USER 必须固定为 app_worker（RLS 策略按角色名判定）" >&2
+  exit 1
+fi
+WORKER_USER="app_worker"
+WORKER_PASSWORD="${JXF_WORKER_PASSWORD:-}"
+
 psql -v ON_ERROR_STOP=1 \
   --username "${POSTGRES_USER}" \
   --dbname "${POSTGRES_DB}" \
@@ -23,6 +32,8 @@ psql -v ON_ERROR_STOP=1 \
   -v owner_password="${JXF_OWNER_PASSWORD}" \
   -v app_user="${JXF_APP_USER}" \
   -v app_password="${JXF_APP_PASSWORD}" \
+  -v worker_user="${WORKER_USER}" \
+  -v worker_password="${WORKER_PASSWORD}" \
   -v db_name="${POSTGRES_DB}" <<'EOSQL'
 -- 1. 扩展
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -44,6 +55,15 @@ SELECT format('ALTER ROLE %I NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION N
 SELECT format('ALTER ROLE %I NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', :'app_user')
 \gexec
 
+-- worker 角色：仅运行时队列（runs / run_events / run_steps / tool_calls / token_usages）
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'worker_user', :'worker_password')
+WHERE :'worker_password' <> '' AND NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'worker_user')
+\gexec
+
+SELECT format('ALTER ROLE %I NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', :'worker_user')
+WHERE :'worker_password' <> ''
+\gexec
+
 -- 3. 库归属与权限
 SELECT format('ALTER DATABASE %I OWNER TO %I', :'db_name', :'owner_user')
 \gexec
@@ -58,6 +78,14 @@ SELECT format('GRANT CONNECT ON DATABASE %I TO %I', :'db_name', :'app_user')
 \gexec
 
 SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'app_user')
+\gexec
+
+SELECT format('GRANT CONNECT ON DATABASE %I TO %I', :'db_name', :'worker_user')
+WHERE :'worker_password' <> ''
+\gexec
+
+SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'worker_user')
+WHERE :'worker_password' <> ''
 \gexec
 
 -- 迁移角色后续建表 / 建序列时，自动授予业务角色 DML 权限（RLS 仍逐行生效）

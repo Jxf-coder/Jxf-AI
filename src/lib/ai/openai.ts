@@ -178,15 +178,29 @@ export async function embedTexts(texts: string[]): Promise<number[][] | null> {
  */
 export type ChatTier = "deep" | "fast";
 
+export interface ChatUsage {
+  promptTokens: number;
+  completionTokens: number;
+  cachedTokens: number;
+}
+
+export interface ChatCompletionResult {
+  text: string;
+  model: string;
+  /** primary | fallback */
+  provider: string;
+  usage: ChatUsage | null;
+}
+
 /**
- * 单轮问答生成。返回 null 表示未启用、重试与备用节点都失败。
+ * 单轮问答生成（含用量）。返回 null 表示未启用、重试与备用节点都失败。
  *
  * 节点顺序：主节点（重试 N 次）→ 备用节点（重试 N 次）→ 返回 null 交给调用方降级。
  */
-export async function chatCompletion(
+export async function chatCompletionDetailed(
   messages: ChatMessage[],
   options: { temperature?: number; maxTokens?: number; tier?: ChatTier } = {},
-): Promise<string | null> {
+): Promise<ChatCompletionResult | null> {
   const ai = loadEnv().ai;
   if (!ai.enabled) {
     return null;
@@ -224,6 +238,11 @@ export async function chatCompletion(
         provider.name,
       )) as {
         choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          prompt_tokens_details?: { cached_tokens?: number };
+        };
       };
 
       const choice = payload.choices?.[0];
@@ -247,7 +266,16 @@ export async function chatCompletion(
           tier,
         });
       }
-      return content;
+
+      const usage = payload.usage
+        ? {
+            promptTokens: Math.max(0, Math.trunc(payload.usage.prompt_tokens ?? 0)),
+            completionTokens: Math.max(0, Math.trunc(payload.usage.completion_tokens ?? 0)),
+            cachedTokens: Math.max(0, Math.trunc(payload.usage.prompt_tokens_details?.cached_tokens ?? 0)),
+          }
+        : null;
+
+      return { text: content, model: provider.model, provider: provider.name, usage };
     } catch (error) {
       log("warn", index === 0 ? "ai_chat_provider_failed" : "ai_chat_fallback_failed", {
         provider: provider.name,
@@ -261,4 +289,13 @@ export async function chatCompletion(
 
   log("warn", "ai_chat_failed", { model, tier, providers: providers.map((item) => item.name) });
   return null;
+}
+
+/** 兼容旧调用：只要文本 */
+export async function chatCompletion(
+  messages: ChatMessage[],
+  options: { temperature?: number; maxTokens?: number; tier?: ChatTier } = {},
+): Promise<string | null> {
+  const result = await chatCompletionDetailed(messages, options);
+  return result?.text ?? null;
 }

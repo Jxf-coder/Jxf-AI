@@ -1,0 +1,34 @@
+# ---------------------------------------------------------------------------
+# M3 worker（运行时队列消费者）
+# 与 web 共用同一份源码与依赖；不对外暴露端口。
+# ---------------------------------------------------------------------------
+FROM node:22-alpine AS deps
+
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+
+ARG NPM_REGISTRY=https://registry.npmjs.org
+
+COPY package.json package-lock.json ./
+RUN npm ci --registry="${NPM_REGISTRY}" \
+      --fetch-retries=5 \
+      --fetch-retry-mintimeout=20000 \
+      --fetch-retry-maxtimeout=120000 \
+      --fetch-timeout=600000
+
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup -g 1001 -S nodejs \
+ && adduser -S -u 1001 -G nodejs worker
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --chown=worker:nodejs package.json tsconfig.json ./
+COPY --chown=worker:nodejs src ./src
+
+USER worker
+
+CMD ["node", "--import", "tsx", "src/worker/main.ts"]
