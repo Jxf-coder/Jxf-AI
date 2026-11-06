@@ -137,8 +137,39 @@ a {
 /* ------------------------------------------------------------------------- */
 
 .app-shell {
+  position: relative;
+  isolation: isolate;
   display: flex;
   min-height: 100vh;
+  /* 工作站背景底色：极浅冷灰，卡片仍是纯白，层次靠底色差拉开 */
+  background-color: #f8fafc;
+}
+
+/*
+ * 工作站背景层：纯 CSS 微蓝紫柔和光晕（Glassmorphism）。
+ * 只有弥散渐变，不含任何弧线 / 线条 / 图片；固定在视口上，滚动时层次稳定。
+ * z-index 0 + isolation：始终位于所有内容与卡片之下，且不拦截鼠标事件。
+ */
+.app-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(58rem 40rem at 82% -8%, rgba(129, 140, 248, 0.14), transparent 68%),
+    radial-gradient(48rem 34rem at 4% 104%, rgba(167, 139, 250, 0.13), transparent 70%),
+    radial-gradient(34rem 26rem at 46% 44%, rgba(96, 165, 250, 0.07), transparent 72%);
+}
+
+/* 内容层压在光晕之上；sidebar 保持自身的 sticky 定位，只补 z-index */
+.sidebar {
+  z-index: 1;
+}
+
+.app-body {
+  position: relative;
+  z-index: 1;
 }
 
 .sidebar {
