@@ -1,0 +1,27 @@
+[Unit]
+Description=Jxf-AI 运维任务与连接器心跳 runner
+Documentation=file:///opt/jxf-ai/docs/operations/ops-runner.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 修改为实际部署用户与目录
+User=jxf
+Group=jxf
+WorkingDirectory=/opt/jxf-ai
+
+# runner 需要 docker CLI 与宿主机 .env；npm script 已包含 --env-file=.env --import tsx
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=NODE_ENV=production
+
+ExecStart=/usr/bin/env npm run ops:runner
+Restart=always
+RestartSec=10
+KillSignal=SIGTERM
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
