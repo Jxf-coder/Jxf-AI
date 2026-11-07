@@ -129,6 +129,34 @@ async function applyPolicies(client, policiesDir) {
   return files.length;
 }
 
+/**
+ * 版本表：记录本次迁移对应的应用版本与 Git 提交。
+ * 失败只告警不阻断（旧库可能尚未创建表），但正常升级必须命中。
+ */
+async function recordAppVersion(client, summary) {
+  const version = process.env.JXF_VERSION?.trim() || "0.1.0";
+  const gitSha = process.env.JXF_GIT_SHA?.trim() || null;
+
+  const exists = await client.query("select to_regclass('public.app_versions') as table_name");
+  if (!exists.rows[0]?.table_name) {
+    log("warn", "app_version_skipped", { reason: "app_versions 表不存在" });
+    return null;
+  }
+
+  await client.query(
+    `insert into app_versions (version, git_sha, notes)
+     values ($1, $2, $3::jsonb)
+     on conflict (version) do update
+       set last_applied_at = now(),
+           git_sha = coalesce(excluded.git_sha, app_versions.git_sha),
+           notes = excluded.notes`,
+    [version, gitSha, JSON.stringify(summary)],
+  );
+
+  log("info", "app_version_recorded", { version, git_sha: gitSha });
+  return version;
+}
+
 async function assertExtensions(client) {
   const { rows } = await client.query(
     "select extname, extversion from pg_extension where extname = any($1::text[])",
@@ -160,6 +188,11 @@ async function main() {
     const appliedMigrations = await applyDrizzleMigrations(client, migrationsDir);
     const appliedPolicies = await applyPolicies(client, policiesDir);
     const extensions = await assertExtensions(client);
+    await recordAppVersion(client, {
+      applied_migrations: appliedMigrations,
+      applied_policies: appliedPolicies,
+      extensions,
+    });
 
     log("info", "migrate_completed", {
       applied_migrations: appliedMigrations,

@@ -11,10 +11,18 @@ export interface CheckResult {
   detail: string;
 }
 
+export interface AppVersionInfo {
+  version: string;
+  gitSha: string | null;
+  appliedAt: string;
+}
+
 export interface ReadinessReport {
   status: "ok" | "degraded";
   service: "web";
   version: string;
+  /** 数据库版本表记录的应用版本（迁移容器写入） */
+  db_version: AppVersionInfo | null;
   app_env: string;
   uptime_s: number;
   timestamp: string;
@@ -60,6 +68,56 @@ async function checkDatabase(): Promise<CheckResult> {
   }
 }
 
+async function checkSchemaVersion(): Promise<{
+  check: CheckResult;
+  info: AppVersionInfo | null;
+}> {
+  const startedAt = Date.now();
+  try {
+    const { rows } = await getPool().query<{
+      value: { version?: string; git_sha?: string | null; applied_at?: string } | null;
+    }>("select app.current_app_version() as value");
+    const value = rows[0]?.value;
+
+    if (!value?.version) {
+      return {
+        check: {
+          name: "schema",
+          status: "error",
+          latency_ms: Date.now() - startedAt,
+          detail: "版本表为空：请执行 migrate 容器",
+        },
+        info: null,
+      };
+    }
+
+    const info: AppVersionInfo = {
+      version: value.version,
+      gitSha: value.git_sha ?? null,
+      appliedAt: value.applied_at ?? "",
+    };
+    return {
+      check: {
+        name: "schema",
+        status: "ok",
+        latency_ms: Date.now() - startedAt,
+        detail: `v${info.version}${info.gitSha ? ` · ${info.gitSha.slice(0, 8)}` : ""} · ${info.appliedAt}`,
+      },
+      info,
+    };
+  } catch (error) {
+    return {
+      check: {
+        name: "schema",
+        status: "error",
+        latency_ms: Date.now() - startedAt,
+        detail: errorMessage(error),
+      },
+      info: null,
+    };
+  }
+}
+
 async function checkObjectStorage(): Promise<CheckResult> {
   const startedAt = Date.now();
   try {
@@ -88,12 +146,18 @@ async function checkObjectStorage(): Promise<CheckResult> {
 
 export async function runReadinessChecks(): Promise<ReadinessReport> {
   const env = loadEnv();
-  const checks = await Promise.all([checkDatabase(), checkObjectStorage()]);
+  const [database, storage, schema] = await Promise.all([
+    checkDatabase(),
+    checkObjectStorage(),
+    checkSchemaVersion(),
+  ]);
+  const checks = [database, storage, schema.check];
 
   return {
     status: checks.every((check) => check.status === "ok") ? "ok" : "degraded",
     service: "web",
     version: env.version,
+    db_version: schema.info,
     app_env: env.appEnv,
     uptime_s: Math.floor((Date.now() - STARTED_AT) / 1000),
     timestamp: new Date().toISOString(),

@@ -83,6 +83,8 @@ services:
       MIGRATIONS_DIR: /app/db/migrations
       POLICIES_DIR: /app/db/policies
       JXF_LOG_LEVEL: ${JXF_LOG_LEVEL:-info}
+      JXF_VERSION: ${JXF_VERSION:-0.1.0}
+      JXF_GIT_SHA: ${JXF_GIT_SHA:-}
     depends_on:
       postgres:
         condition: service_healthy
