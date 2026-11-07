@@ -26,9 +26,6 @@ pgdata/
 backup/
 backups/
 
-# 本地设计 / 推进文档：仅保留在工作区，整目录不进入版本库
-docs/
-
 # 系统文件
 .DS_Store
 Thumbs.db
