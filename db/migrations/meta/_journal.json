@@ -176,6 +176,13 @@
       "when": 1794078000000,
       "tag": "0024_mcp_health",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794081600000,
+      "tag": "0025_pipelines",
+      "breakpoints": true
     }
   ]
 }

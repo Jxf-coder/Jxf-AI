@@ -52,6 +52,7 @@ const base = "http://127.0.0.1:3000";
   await hit("audit", "/api/audit/export");
   await hit("handover", "/api/handover/export?membershipId=00000000-0000-4000-8000-000000000000");
   await hit("settings", "/settings", { redirect: "manual" });
+  await hit("pipelines", "/pipelines", { redirect: "manual" });
   console.log(JSON.stringify(out));
 })();
 `;
@@ -146,6 +147,11 @@ function main() {
     "设置页未登录跳转登录",
     [302, 307].includes(http.settings?.status) ? "PASS" : "FAIL",
     `HTTP ${http.settings?.status ?? "-"}`,
+  );
+  record(
+    "产线页未登录跳转登录",
+    [302, 307].includes(http.pipelines?.status) ? "PASS" : "FAIL",
+    `HTTP ${http.pipelines?.status ?? "-"}`,
   );
 
   const version = dbVersion();

@@ -78,6 +78,19 @@ export function Shell({
     </Link>
   ) : null;
 
+  const pipelinesLink = can("pipeline:use") ? (
+    <Link
+      href="/pipelines"
+      className={`nav-item${pathname.startsWith("/pipelines") ? " is-active" : ""}`}
+      aria-current={pathname.startsWith("/pipelines") ? "page" : undefined}
+    >
+      <span className="nav-icon">
+        <LayersIcon size={18} />
+      </span>
+      <span className="nav-label">自动化</span>
+    </Link>
+  ) : null;
+
   const aiEmployeesLink = (
     <Link
       href="/ai-employees"
@@ -101,13 +114,7 @@ export function Shell({
       <div className="nav-section">
         <p className="nav-section-label">Workspace</p>
         {knowledgeLink}
-        <span className="nav-item nav-item-muted" aria-disabled="true" title="自动化能力即将上线">
-          <span className="nav-icon">
-            <LayersIcon size={18} />
-          </span>
-          <span className="nav-label">自动化</span>
-          <span className="nav-soon">即将上线</span>
-        </span>
+        {pipelinesLink}
       </div>
       <div className="nav-section">
         <p className="nav-section-label">AI Employees</p>
