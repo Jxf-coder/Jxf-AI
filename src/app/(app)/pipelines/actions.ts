@@ -41,7 +41,7 @@ export async function createPipelineAction(
   try {
     await createPipeline(await contextOf(), input);
     revalidatePath("/pipelines");
-    return { ok: true, message: "产线已创建，可点击「运行」批量派活" };
+    return { ok: true, message: "产线已创建，可点击「运行」派发第一步" };
   } catch (error) {
     return failure("create_pipeline", error);
   }
@@ -55,12 +55,12 @@ export async function runPipelineAction(pipelineId: string): Promise<PipelineAct
     if (result.failedStep) {
       return {
         ok: false,
-        message: `已派出 ${result.workItemIds.length} 步；「${result.failedStep}」失败，后续步骤未执行`,
+        message: `第一步「${result.failedStep}」派发失败，请检查 AI 员工是否在岗`,
       };
     }
     return {
       ok: true,
-      message: `已派出 ${result.workItemIds.length} 个任务，可在 AI 员工页跟踪与验收`,
+      message: "已派出第一步；后续步骤会在上一步完成后由 runner 自动推进",
     };
   } catch (error) {
     return failure("run_pipeline", error);

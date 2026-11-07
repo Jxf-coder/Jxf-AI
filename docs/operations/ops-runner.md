@@ -9,6 +9,10 @@
   - 连续失败 1–2 次 → `degraded`；≥3 次 → `down`（worker 运行时自动跳过）
   - 状态迁移写审计：`mcp.connector_unhealthy` / `mcp.connector_recovered`
   - 配置 `MCP_ALERT_WEBHOOK` 时推送 JSON 告警
+- 每 `PIPELINE_TICK_MS`（默认 60 秒）推进自动化产线：
+  - 到点的定时产线发起一次运行（`trigger_kind = 'schedule'`）
+  - 上一步完成后派下一步，`{{previous}}` 替换为上一步交付文本
+  - 可选步骤失败则跳过并继续；非可选步骤失败则整条产线停止
 - runner 启动时把上次异常退出遗留的 `running` 任务收口为 `failed`
 
 ## 前置条件
@@ -59,19 +63,24 @@ Get-ScheduledTaskInfo -TaskName "JxfAI-OpsRunner"
 * * * * * cd /opt/jxf-ai && npm run ops:runner -- --once >> backups/ops-runner-tasks.log 2>&1
 # 每 5 分钟一次连接器心跳
 */5 * * * * cd /opt/jxf-ai && npm run ops:runner -- --health-once >> backups/ops-runner-health.log 2>&1
+# 每分钟推进一次产线（定时触发 + 上一步完成后的下一步）
+* * * * * cd /opt/jxf-ai && npm run ops:runner -- --pipelines-once >> backups/ops-runner-pipelines.log 2>&1
 ```
 
-注意：`--once` 只处理任务，不执行心跳；心跳需单独的 `--health-once`。
+注意：`--once` 只处理任务，不执行心跳与产线；心跳用 `--health-once`，产线用 `--pipelines-once`。
 
 ## 可用参数与环境变量
 
 | 项 | 说明 |
 |---|---|
-| `npm run ops:runner` | 常驻：任务轮询 + 周期心跳 |
+| `npm run ops:runner` | 常驻：任务轮询 + 周期心跳 + 产线推进 |
 | `--once` | 执行一轮任务后退出 |
 | `--health-once` | 只做一次连接器体检后退出 |
+| `--pipelines-once` | 只推进一轮产线后退出 |
 | `--no-health` | 常驻但不做周期心跳 |
+| `--no-pipelines` | 常驻但不推进产线 |
 | `MCP_HEALTH_INTERVAL_MS` | 心跳间隔，默认 `300000`（5 分钟） |
+| `PIPELINE_TICK_MS` | 产线推进间隔，默认 `60000`（60 秒） |
 | `MCP_ALERT_WEBHOOK` | 告警 webhook（HTTP/HTTPS，POST JSON），留空只写审计 |
 
 ## 验证
