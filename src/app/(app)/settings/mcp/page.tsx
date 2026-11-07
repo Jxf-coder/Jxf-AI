@@ -7,8 +7,10 @@ import {
   pageTitle,
   pageWrap,
 } from "@/components/knowledge/tokens";
+import { listAiEmployees } from "@/lib/ai-employees";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext } from "@/lib/db/user-context";
+import { listToolApprovals } from "@/lib/mcp/approvals";
 import {
   getMcpServerTools,
   listMcpServerCalls,
@@ -52,11 +54,13 @@ export default async function McpSettingsPage() {
     );
   }
 
-  const [tokens, candidates, servers, calls] = await Promise.all([
+  const [tokens, candidates, servers, calls, approvals, employees] = await Promise.all([
     listMcpTokens(context),
     listMcpTokenCandidates(context),
     listMcpServers(context),
     listMcpServerCalls(context, 10),
+    listToolApprovals(context, 20),
+    listAiEmployees(context),
   ]);
 
   const toolsByServer: Record<string, McpToolSummary[]> = {};
@@ -75,13 +79,18 @@ export default async function McpSettingsPage() {
         candidates={candidates}
         servers={servers}
         calls={calls}
+        approvals={approvals}
         toolsByServer={toolsByServer}
         stdioCommands={stdioAllowedCommands()}
         tools={MCP_TOOLS.map((tool) => ({
           name: tool.name,
           title: tool.title,
           action: tool.action,
+          skill: tool.skill,
         }))}
+        employees={employees
+          .filter((employee) => employee.status === "active")
+          .map((employee) => ({ id: employee.id, name: employee.name }))}
         endpoint={endpoint}
       />
     </section>

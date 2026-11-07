@@ -75,6 +75,7 @@ export function ConnectorSection({
   const [allowedToolsText, setAllowedToolsText] = useState("");
   const [timeoutMs, setTimeoutMs] = useState("20000");
   const [rateLimit, setRateLimit] = useState("60");
+  const [dailyQuota, setDailyQuota] = useState("0");
 
   const [openId, setOpenId] = useState<string | null>(null);
   const [callTool, setCallTool] = useState("");
@@ -126,6 +127,7 @@ export function ConnectorSection({
             .filter(Boolean),
           timeoutMs: Number(timeoutMs) || 20000,
           rateLimitPerMin: Number(rateLimit) || 60,
+          dailyQuota: Number(dailyQuota) || 0,
         }),
       () => {
         setCreating(false);
@@ -243,7 +245,7 @@ export function ConnectorSection({
               </>
             )}
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <label className="block">
                 <span className={fieldLabel}>允许工具（留空=全部）</span>
                 <input
@@ -273,6 +275,17 @@ export function ConnectorSection({
                   className={input}
                   value={rateLimit}
                   onChange={(event) => setRateLimit(event.target.value)}
+                />
+              </label>
+              <label className="block">
+                <span className={fieldLabel}>每日调用配额（0=不限）</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={1000000}
+                  className={input}
+                  value={dailyQuota}
+                  onChange={(event) => setDailyQuota(event.target.value)}
                 />
               </label>
             </div>
@@ -320,7 +333,8 @@ export function ConnectorSection({
                       </span>
                       <span className={`${meta} mt-0.5 block`}>
                         {server.toolCount} 个工具 · 最近探测 {formatTime(server.lastCheckedAt)} ·
-                        限流 {server.rateLimitPerMin}/分
+                        限流 {server.rateLimitPerMin}/分 · 配额{" "}
+                        {server.dailyQuota > 0 ? `${server.dailyQuota}/日` : "不限"}
                       </span>
                       {server.lastError ? (
                         <span className={`${meta} mt-0.5 block text-rose-600`}>{server.lastError}</span>

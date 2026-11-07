@@ -11,7 +11,8 @@ import { memberships } from "./memberships";
  * 边界：
  * - 令牌绑定「任用」而非账号：离岗（membership 非 active）立即失效；
  * - 只存 sha256，明文仅在签发时返回一次；前缀留给界面识别；
- * - scope 初版两维：tools（工具白名单，空 = 全部可见）+ allowWrite（是否允许写类工具）；
+ * - scope 六维：skills（技能）/ pipelines（产线）/ tools（动作）/
+ *   allowWrite（直写）/ approvalTools（审批）/ channels（客户端通道）；空数组 = 不额外限制；
  * - 数据权限仍走 RLS：外部调用按令牌绑定的任用构造 UserContext。
  */
 export const mcpTokens = pgTable(
@@ -33,7 +34,7 @@ export const mcpTokens = pgTable(
     departmentId: uuid("department_id")
       .notNull()
       .references(() => departments.id, { onDelete: "cascade" }),
-    /** { tools: string[], allowWrite: boolean } */
+    /** { skills, pipelines, tools, allowWrite, approvalTools, channels } */
     scope: jsonb("scope").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),

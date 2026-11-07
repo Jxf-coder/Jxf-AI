@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext } from "@/lib/db/user-context";
+import { decideToolApproval } from "@/lib/mcp/approvals";
 import {
   callMcpServerTool,
   createMcpServer,
@@ -30,8 +31,12 @@ async function contextOf() {
 export async function issueMcpTokenAction(input: {
   name: string;
   membershipId: string;
+  skills: string[];
+  pipelines: string[];
   tools: string[];
   allowWrite: boolean;
+  approvalTools: string[];
+  channels: string[];
   expiresAt?: string | null;
 }): Promise<McpActionResult> {
   try {
@@ -93,6 +98,20 @@ export async function refreshMcpServerToolsAction(
     const tools = await refreshMcpServerTools(await contextOf(), serverId);
     revalidatePath("/settings/mcp");
     return { ok: true, message: `已探测到 ${tools.length} 个工具`, tools };
+  } catch (error) {
+    revalidatePath("/settings/mcp");
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+export async function decideMcpToolApprovalAction(
+  approvalId: string,
+  decision: "approve" | "reject",
+): Promise<McpActionResult> {
+  try {
+    const result = await decideToolApproval(await contextOf(), approvalId, decision);
+    revalidatePath("/settings/mcp");
+    return { ok: result.status !== "failed", message: result.message };
   } catch (error) {
     revalidatePath("/settings/mcp");
     return { ok: false, message: toPermissionMessage(error) };

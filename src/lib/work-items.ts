@@ -201,7 +201,7 @@ export async function assignWork(
         JSON.stringify({ tier, review }),
         input.aiEmployeeId,
         context.userId,
-        isPriority(input.priority ?? "normal") ? input.priority : "normal",
+        input.priority && isPriority(input.priority) ? input.priority : "normal",
         input.dueAt ? new Date(input.dueAt) : null,
       ],
     );

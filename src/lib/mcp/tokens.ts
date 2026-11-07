@@ -44,8 +44,12 @@ export interface McpMembershipCandidate {
 export interface IssueMcpTokenInput {
   name: string;
   membershipId: string;
+  skills: string[];
+  pipelines: string[];
   tools: string[];
   allowWrite: boolean;
+  approvalTools: string[];
+  channels: string[];
   expiresAt?: string | null;
 }
 
@@ -82,7 +86,14 @@ export async function issueMcpToken(
   if (expiresAt && expiresAt.getTime() <= Date.now()) {
     throw new Error("过期时间必须晚于当前时间");
   }
-  const scope = normalizeScope({ tools: input.tools, allowWrite: input.allowWrite });
+  const scope = normalizeScope({
+    skills: input.skills,
+    pipelines: input.pipelines,
+    tools: input.tools,
+    allowWrite: input.allowWrite,
+    approvalTools: input.approvalTools,
+    channels: input.channels,
+  });
 
   const token = `jxf_mcp_${randomBytes(32).toString("base64url")}`;
   const tokenHash = hashMcpToken(token);
@@ -138,8 +149,12 @@ export async function issueMcpToken(
       payload: {
         name,
         membership_id: row.id,
+        skills: scope.skills,
+        pipelines: scope.pipelines,
         tools: scope.tools,
         allow_write: scope.allowWrite,
+        approval_tools: scope.approvalTools,
+        channels: scope.channels,
         expires_at: expiresAt?.toISOString() ?? null,
       },
     });

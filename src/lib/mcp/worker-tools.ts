@@ -20,6 +20,8 @@ export interface PlannedTool {
   toolName: string;
   config: ConnectorCallConfig;
   rateLimitPerMin: number;
+  /** 0 = 不设每日上限 */
+  dailyQuota: number;
 }
 
 export interface WorkerToolPlan {
@@ -37,6 +39,7 @@ interface ServerRuntimeRow {
   env: Record<string, string> | null;
   timeout_ms: number;
   rate_limit_per_min: number;
+  daily_quota: number;
   tools_cache: unknown;
 }
 
@@ -101,7 +104,8 @@ export async function loadWorkerToolPlan(
 
   const serverIds = Array.from(new Set(refs.map((ref) => ref.serverId)));
   const { rows } = await pool.query<ServerRuntimeRow>(
-    `select id, name, transport, url, command, args, env, timeout_ms, rate_limit_per_min, tools_cache
+    `select id, name, transport, url, command, args, env, timeout_ms, rate_limit_per_min,
+            daily_quota, tools_cache
        from mcp_servers
       where tenant_id = $1 and enabled and id = any($2::uuid[])`,
     [tenantId, serverIds],
@@ -133,6 +137,7 @@ export async function loadWorkerToolPlan(
       serverName: server.name,
       toolName: tool.name,
       rateLimitPerMin: server.rate_limit_per_min,
+      dailyQuota: server.daily_quota,
       config: {
         transport: server.transport === "stdio" ? "stdio" : "http",
         url: server.url,
@@ -207,14 +212,23 @@ export async function executePlannedTool(
   let text = "";
 
   try {
-    const { rows } = await pool.query<{ count: number }>(
-      `select count(*)::int as count from mcp_server_calls
-        where server_id = $1 and created_at > now() - interval '1 minute'`,
+    const { rows } = await pool.query<{ minute_count: number; day_count: number }>(
+      `select
+         (select count(*) from mcp_server_calls
+           where server_id = $1 and created_at > now() - interval '1 minute')::int as minute_count,
+         (select count(*) from mcp_server_calls
+           where server_id = $1 and created_at >= date_trunc('day', now()))::int as day_count`,
       [tool.serverId],
     );
-    if (Number(rows[0]?.count ?? 0) >= tool.rateLimitPerMin) {
+    const usage = rows[0] ?? { minute_count: 0, day_count: 0 };
+    if (Number(usage.minute_count) >= tool.rateLimitPerMin) {
       status = "denied";
       error = "超出每分钟调用上限";
+      return error;
+    }
+    if (tool.dailyQuota > 0 && Number(usage.day_count) >= tool.dailyQuota) {
+      status = "denied";
+      error = `超出每日调用配额（${tool.dailyQuota} 次）`;
       return error;
     }
 

@@ -30,6 +30,8 @@ export const mcpServers = pgTable(
     allowedTools: text("allowed_tools").array().notNull().default(sql`'{}'::text[]`),
     timeoutMs: integer("timeout_ms").notNull().default(20000),
     rateLimitPerMin: integer("rate_limit_per_min").notNull().default(60),
+    /** 每日调用配额；0 = 不设上限 */
+    dailyQuota: integer("daily_quota").notNull().default(0),
     /** tools/list 的缓存结果 */
     toolsCache: jsonb("tools_cache").$type<unknown[]>().notNull().default(sql`'[]'::jsonb`),
     lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),

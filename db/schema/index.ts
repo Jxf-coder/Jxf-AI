@@ -16,3 +16,4 @@ export * from "./runtime";
 export * from "./work-items";
 export * from "./mcp";
 export * from "./mcp-servers";
+export * from "./mcp-approvals";

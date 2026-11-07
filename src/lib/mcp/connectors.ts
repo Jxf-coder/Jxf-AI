@@ -8,7 +8,9 @@
  * - 每次调用写 mcp_server_calls（既是审计，也是每分钟限流账本）。
  */
 
-import { spawn } from "node:child_process";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
@@ -27,6 +29,7 @@ export interface McpServerView {
   allowedTools: string[];
   timeoutMs: number;
   rateLimitPerMin: number;
+  dailyQuota: number;
   toolCount: number;
   lastCheckedAt: string | null;
   lastError: string | null;
@@ -58,11 +61,12 @@ export interface CreateMcpServerInput {
   env?: Record<string, string>;
   timeoutMs?: number;
   rateLimitPerMin?: number;
+  dailyQuota?: number;
   allowedTools?: string[];
 }
 
-const PROTOCOL_VERSION = "2025-06-18";
 const MAX_TIMEOUT_MS = 120_000;
+const MAX_DAILY_QUOTA = 1_000_000;
 const MAX_TOOLS = 100;
 const MAX_TOOL_NAME = 100;
 
@@ -78,25 +82,17 @@ interface ServerRow {
   allowed_tools: string[];
   timeout_ms: number;
   rate_limit_per_min: number;
+  daily_quota: number;
   tools_cache: unknown;
   last_checked_at: Date | null;
   last_error: string | null;
   created_at: Date;
 }
 
-interface Session {
-  call: (method: string, params?: unknown) => Promise<unknown>;
-  close: () => Promise<void>;
-}
-
-/** 建连所需的最小配置：ServerRow 与 worker 运行时快照都满足 */
-export interface ConnectorSessionConfig {
-  transport: string;
-  url: string | null;
-  command: string | null;
-  args: string[] | null;
-  env: Record<string, string> | null;
-  timeout_ms: number;
+/** SDK 会话的最小封装：listTools 与 callTool */
+interface SdkSession {
+  listTools: () => Promise<McpToolSummary[]>;
+  callTool: (name: string, args: Record<string, unknown>) => Promise<{ text: string; isError: boolean }>;
 }
 
 /** 调用外部工具所需的运行时配置（不依赖数据库会话） */
@@ -124,6 +120,7 @@ function toView(row: ServerRow): McpServerView {
     allowedTools: row.allowed_tools ?? [],
     timeoutMs: row.timeout_ms,
     rateLimitPerMin: row.rate_limit_per_min,
+    dailyQuota: row.daily_quota,
     toolCount: Array.isArray(row.tools_cache) ? row.tools_cache.length : 0,
     lastCheckedAt: toIso(row.last_checked_at),
     lastError: row.last_error,
@@ -142,7 +139,8 @@ export async function listMcpServers(context: UserContext): Promise<McpServerVie
     await requireContextPermission(client, context, "platform:settings");
     const { rows } = await client.query<ServerRow>(
       `select id, name, transport, url, command, args, env, enabled, allowed_tools,
-              timeout_ms, rate_limit_per_min, tools_cache, last_checked_at, last_error, created_at
+              timeout_ms, rate_limit_per_min, daily_quota, tools_cache,
+              last_checked_at, last_error, created_at
          from mcp_servers
         where tenant_id = $1
         order by created_at desc
@@ -212,6 +210,8 @@ export async function createMcpServer(
   }
   const timeoutMs = Math.min(Math.max(Math.trunc(input.timeoutMs ?? 20_000), 1_000), MAX_TIMEOUT_MS);
   const rateLimitPerMin = Math.min(Math.max(Math.trunc(input.rateLimitPerMin ?? 60), 1), 600);
+  // 0 = 不设每日上限
+  const dailyQuota = Math.min(Math.max(Math.trunc(input.dailyQuota ?? 0), 0), MAX_DAILY_QUOTA);
   const allowedTools = (input.allowedTools ?? [])
     .map((item) => item.trim())
     .filter((item) => item.length > 0 && item.length <= MAX_TOOL_NAME)
@@ -254,8 +254,8 @@ export async function createMcpServer(
     const inserted = await client.query<{ id: string }>(
       `insert into mcp_servers
          (tenant_id, name, transport, url, command, args, env, timeout_ms,
-          rate_limit_per_min, allowed_tools, created_by)
-       values ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10::text[], $11)
+          rate_limit_per_min, daily_quota, allowed_tools, created_by)
+       values ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11::text[], $12)
        returning id`,
       [
         context.tenantId,
@@ -267,6 +267,7 @@ export async function createMcpServer(
         JSON.stringify(env),
         timeoutMs,
         rateLimitPerMin,
+        dailyQuota,
         allowedTools,
         context.userId,
       ],
@@ -277,7 +278,15 @@ export async function createMcpServer(
       action: "mcp.server_created",
       targetType: "mcp_server",
       targetId: id,
-      payload: { name, transport: input.transport, url, command, allowed_tools: allowedTools },
+      payload: {
+        name,
+        transport: input.transport,
+        url,
+        command,
+        allowed_tools: allowedTools,
+        rate_limit_per_min: rateLimitPerMin,
+        daily_quota: dailyQuota,
+      },
     });
     return { id };
   });
@@ -312,7 +321,8 @@ async function loadServer(context: UserContext, serverId: string): Promise<Serve
     await requireContextPermission(client, context, "platform:settings");
     const { rows } = await client.query<ServerRow>(
       `select id, name, transport, url, command, args, env, enabled, allowed_tools,
-              timeout_ms, rate_limit_per_min, tools_cache, last_checked_at, last_error, created_at
+              timeout_ms, rate_limit_per_min, daily_quota, tools_cache,
+              last_checked_at, last_error, created_at
          from mcp_servers
         where id = $1 and tenant_id = $2`,
       [serverId, context.tenantId],
@@ -324,226 +334,88 @@ async function loadServer(context: UserContext, serverId: string): Promise<Serve
   });
 }
 
-function parseJsonRpcBody(contentType: string, text: string): unknown {
-  if (contentType.includes("text/event-stream")) {
-    const lines = text.split(/\r?\n/);
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-      const line = lines[index].trim();
-      if (line.startsWith("data:")) {
-        const payload = line.slice(5).trim();
-        if (payload && payload !== "[DONE]") {
-          try {
-            const parsed = JSON.parse(payload);
-            if (parsed && typeof parsed === "object" && "jsonrpc" in parsed && "id" in parsed) {
-              return parsed;
-            }
-          } catch {
-            // 忽略非 JSON 事件
-          }
-        }
-      }
-    }
-    throw new Error("连接器返回的 SSE 中没有可解析的 JSON-RPC 响应");
-  }
-  return JSON.parse(text);
-}
-
-async function openHttpSession(
-  server: ConnectorSessionConfig,
-  timeoutMs: number,
-): Promise<Session> {
-  const endpoint = await assertSafeHttpUrl(server.url ?? "");
-  let sessionId: string | null = null;
-  let nextId = 0;
-
-  async function post(message: Record<string, unknown>): Promise<Response> {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        ...(sessionId ? { "mcp-session-id": sessionId } : {}),
-      },
-      body: JSON.stringify(message),
-      signal: AbortSignal.timeout(timeoutMs),
-      redirect: "manual",
-    });
-    if (response.status >= 300 && response.status < 400) {
-      throw new Error("连接器返回重定向，已拒绝跟随");
-    }
-    const returnedSession = response.headers.get("mcp-session-id");
-    if (returnedSession) {
-      sessionId = returnedSession;
-    }
-    if (!response.ok && response.status !== 202) {
-      throw new Error(`连接器返回 HTTP ${response.status}`);
-    }
-    return response;
-  }
-
-  async function request(method: string, params?: unknown): Promise<unknown> {
-    nextId += 1;
-    const response = await post({
-      jsonrpc: "2.0",
-      id: nextId,
-      method,
-      ...(params === undefined ? {} : { params }),
-    });
-    if (response.status === 202) {
-      return null;
-    }
-    const text = await response.text();
-    const body = parseJsonRpcBody(response.headers.get("content-type") ?? "", text) as {
-      result?: unknown;
-      error?: { message?: string };
-    };
-    if (body?.error) {
-      throw new Error(body.error.message ?? "连接器返回错误");
-    }
-    return body?.result ?? null;
-  }
-
-  await request("initialize", {
-    protocolVersion: PROTOCOL_VERSION,
-    capabilities: {},
-    clientInfo: { name: "jxf-ai", version: "0.1.0" },
+/** 建连超时：SDK 的 request timeout 不覆盖 TCP/TLS 建连，单独兜底 */
+function withConnectTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`连接器连接超时（${timeoutMs}ms）`)), timeoutMs);
   });
-  await post({ jsonrpc: "2.0", method: "notifications/initialized" }).catch(() => undefined);
-
-  return { call: request, close: async () => undefined };
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  });
 }
 
-async function openStdioSession(
-  server: ConnectorSessionConfig,
-  timeoutMs: number,
-): Promise<Session> {
-  const command = server.command ?? "";
+function textOfContent(content: unknown): string {
+  if (!Array.isArray(content)) {
+    return JSON.stringify(content ?? null);
+  }
+  const parts = content.flatMap((item) => {
+    if (!item || typeof item !== "object") {
+      return [];
+    }
+    const record = item as { type?: string; text?: string };
+    if (record.type === "text" && typeof record.text === "string") {
+      return [record.text];
+    }
+    return [`[${record.type ?? "content"}]`];
+  });
+  return parts.join("\n") || JSON.stringify(content);
+}
+
+/** 用官方 SDK 建连，执行回调后关闭；HTTP / stdio 走同一入口 */
+async function withSdkClient<T>(
+  config: ConnectorCallConfig,
+  fn: (session: SdkSession) => Promise<T>,
+): Promise<T> {
+  const client = new Client({ name: "jxf-ai", version: "0.1.0" }, { capabilities: {} });
+  const transport =
+    config.transport === "stdio"
+      ? createStdioTransport(config)
+      : new StreamableHTTPClientTransport(new URL(await assertSafeHttpUrl(config.url ?? "")), {
+          requestInit: { redirect: "manual" },
+        });
+
+  try {
+    await withConnectTimeout(
+      client.connect(transport, { timeout: config.timeoutMs }),
+      config.timeoutMs,
+    );
+    return await fn({
+      listTools: async () => {
+        const result = await client.listTools({}, { timeout: config.timeoutMs });
+        return normalizeTools(result.tools);
+      },
+      callTool: async (name, args) => {
+        const result = await client.callTool({ name, arguments: args }, undefined, {
+          timeout: config.timeoutMs,
+        });
+        return {
+          text: textOfContent((result as { content?: unknown }).content),
+          isError: (result as { isError?: boolean }).isError === true,
+        };
+      },
+    });
+  } finally {
+    await client.close().catch(() => undefined);
+  }
+}
+
+function createStdioTransport(config: ConnectorCallConfig): StdioClientTransport {
+  const command = config.command ?? "";
   if (!stdioAllowedCommands().includes(command)) {
     throw new Error("stdio 命令不在白名单内");
   }
-
-  const child = spawn(command, server.args ?? [], {
-    shell: false,
-    env: { ...process.env, ...(server.env ?? {}) },
-    stdio: ["pipe", "pipe", "pipe"],
+  const baseEnv = Object.fromEntries(
+    Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+  );
+  return new StdioClientTransport({
+    command,
+    args: config.args,
+    env: { ...baseEnv, ...config.env },
+    stderr: "pipe",
   });
-
-  let buffer = "";
-  let nextId = 0;
-  const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
-  let stderr = "";
-
-  child.stderr?.on("data", (chunk: Buffer) => {
-    stderr = `${stderr}${chunk.toString()}`.slice(-1000);
-  });
-
-  child.stdout?.on("data", (chunk: Buffer) => {
-    buffer += chunk.toString();
-    let index = buffer.indexOf("\n");
-    while (index >= 0) {
-      const line = buffer.slice(0, index).trim();
-      buffer = buffer.slice(index + 1);
-      index = buffer.indexOf("\n");
-      if (!line) {
-        continue;
-      }
-      try {
-        const message = JSON.parse(line) as {
-          id?: number;
-          result?: unknown;
-          error?: { message?: string };
-        };
-        if (typeof message.id === "number" && pending.has(message.id)) {
-          const waiter = pending.get(message.id)!;
-          pending.delete(message.id);
-          if (message.error) {
-            waiter.reject(new Error(message.error.message ?? "连接器返回错误"));
-          } else {
-            waiter.resolve(message.result ?? null);
-          }
-        }
-      } catch {
-        // 非 JSON 行忽略
-      }
-    }
-  });
-
-  const closed = new Promise<never>((_resolve, reject) => {
-    child.on("exit", (code) => {
-      reject(new Error(`stdio 连接器已退出（code=${code}）${stderr ? `：${stderr}` : ""}`));
-    });
-    child.on("error", (error) => reject(error));
-  });
-  closed.catch(() => undefined);
-
-  function writeLine(message: Record<string, unknown>): void {
-    child.stdin?.write(`${JSON.stringify(message)}\n`);
-  }
-
-  async function request(method: string, params?: unknown): Promise<unknown> {
-    nextId += 1;
-    const id = nextId;
-    const answer = new Promise<unknown>((resolve, reject) => {
-      pending.set(id, { resolve, reject });
-    });
-    writeLine({ jsonrpc: "2.0", id, method, ...(params === undefined ? {} : { params }) });
-
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const timeout = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => {
-        child.kill("SIGKILL");
-        reject(new Error(`stdio 连接器超时（${timeoutMs}ms）`));
-      }, timeoutMs);
-    });
-
-    try {
-      return await Promise.race([answer, closed, timeout]);
-    } finally {
-      if (timer) {
-        clearTimeout(timer);
-      }
-      pending.delete(id);
-    }
-  }
-
-  try {
-    await request("initialize", {
-      protocolVersion: PROTOCOL_VERSION,
-      capabilities: {},
-      clientInfo: { name: "jxf-ai", version: "0.1.0" },
-    });
-    writeLine({ jsonrpc: "2.0", method: "notifications/initialized" });
-  } catch (error) {
-    child.kill("SIGKILL");
-    throw error;
-  }
-
-  return {
-    call: request,
-    close: async () => {
-      child.kill("SIGTERM");
-    },
-  };
-}
-
-async function openSession(
-  server: ConnectorSessionConfig,
-  timeoutMs: number,
-): Promise<Session> {
-  return server.transport === "stdio"
-    ? openStdioSession(server, timeoutMs)
-    : openHttpSession(server, timeoutMs);
-}
-
-function extractToolText(result: unknown): string {
-  const record = (result ?? {}) as { content?: Array<{ text?: string }> };
-  if (Array.isArray(record.content)) {
-    return record.content
-      .filter((item) => item && typeof item.text === "string")
-      .map((item) => item.text as string)
-      .join("\n");
-  }
-  return JSON.stringify(result ?? null);
 }
 
 /**
@@ -555,29 +427,7 @@ export async function executeConnectorTool(
   toolName: string,
   args: Record<string, unknown>,
 ): Promise<{ text: string; isError: boolean }> {
-  const session = await openSession(
-    {
-      transport: config.transport,
-      url: config.url,
-      command: config.command,
-      args: config.args,
-      env: config.env,
-      timeout_ms: config.timeoutMs,
-    },
-    config.timeoutMs,
-  );
-  try {
-    const result = (await session.call("tools/call", {
-      name: toolName,
-      arguments: args,
-    })) as { content?: Array<{ type?: string; text?: string }>; isError?: boolean };
-    return {
-      text: extractToolText(result),
-      isError: result?.isError === true,
-    };
-  } finally {
-    await session.close().catch(() => undefined);
-  }
+  return withSdkClient(config, (session) => session.callTool(toolName, args));
 }
 
 function normalizeTools(raw: unknown): McpToolSummary[] {
@@ -615,11 +465,18 @@ export async function refreshMcpServerTools(
     throw new Error("连接器已停用，请先启用");
   }
 
-  let session: Session | null = null;
   try {
-    session = await openSession(server, server.timeout_ms);
-    const result = (await session.call("tools/list", {})) as { tools?: unknown };
-    const tools = normalizeTools(result?.tools);
+    const tools = await withSdkClient(
+      {
+        transport: server.transport === "stdio" ? "stdio" : "http",
+        url: server.url,
+        command: server.command,
+        args: server.args ?? [],
+        env: server.env ?? {},
+        timeoutMs: server.timeout_ms,
+      },
+      (session) => session.listTools(),
+    );
 
     await withUserContext(context, async (client) => {
       await client.query(
@@ -647,8 +504,6 @@ export async function refreshMcpServerTools(
       ]),
     ).catch(() => undefined);
     throw error;
-  } finally {
-    await session?.close().catch(() => undefined);
   }
 }
 
@@ -732,17 +587,24 @@ export async function callMcpServerTool(
     throw new Error("该工具不在连接器白名单内");
   }
 
-  const used = await withUserContext(context, async (client) => {
-    const { rows } = await client.query<{ count: number }>(
-      `select count(*)::int as count from mcp_server_calls
-        where server_id = $1 and created_at > now() - interval '1 minute'`,
+  const usage = await withUserContext(context, async (client) => {
+    const { rows } = await client.query<{ minute_count: number; day_count: number }>(
+      `select
+         (select count(*) from mcp_server_calls
+           where server_id = $1 and created_at > now() - interval '1 minute')::int as minute_count,
+         (select count(*) from mcp_server_calls
+           where server_id = $1 and created_at >= date_trunc('day', now()))::int as day_count`,
       [server.id],
     );
-    return Number(rows[0]?.count ?? 0);
+    return rows[0] ?? { minute_count: 0, day_count: 0 };
   });
-  if (used >= server.rate_limit_per_min) {
+  if (Number(usage.minute_count) >= server.rate_limit_per_min) {
     await recordCall(context, server, toolName, "denied", null, "超出每分钟调用上限");
     throw new Error(`超出每分钟调用上限（${server.rate_limit_per_min} 次）`);
+  }
+  if (server.daily_quota > 0 && Number(usage.day_count) >= server.daily_quota) {
+    await recordCall(context, server, toolName, "denied", null, "超出每日调用配额");
+    throw new Error(`超出每日调用配额（${server.daily_quota} 次）`);
   }
 
   const startedAt = Date.now();

@@ -11,7 +11,16 @@ import { headers } from "next/headers";
 
 import { auditStandalone } from "@/lib/audit";
 import { log } from "@/lib/logger";
-import { findTool, isToolAllowed, visibleTools } from "@/lib/mcp/tools";
+import { submitToolApproval } from "@/lib/mcp/approvals";
+import {
+  channelAllowed,
+  findTool,
+  isToolAllowed,
+  needsApproval,
+  requestChannel,
+  scopeViolation,
+  visibleTools,
+} from "@/lib/mcp/tools";
 import { resolveMcpToken, type ResolvedMcpToken } from "@/lib/mcp/tokens";
 
 export const dynamic = "force-dynamic";
@@ -135,6 +144,25 @@ async function handleMessage(
       });
     }
 
+    const violation = scopeViolation(tool, args, token.scope);
+    if (violation) {
+      await auditCall(token, tool.name, "denied", { reason: "pipeline_not_allowed" });
+      return rpcResult(id, { content: [{ type: "text", text: violation }], isError: true });
+    }
+
+    if (needsApproval(tool, token.scope)) {
+      const approvalId = await submitToolApproval(token, tool.name, args);
+      return rpcResult(id, {
+        content: [
+          {
+            type: "text",
+            text: `已提交人工审批（单号 ${approvalId}）。审批通过后由 L1 执行，本次未执行。`,
+          },
+        ],
+        isError: true,
+      });
+    }
+
     const startedAt = Date.now();
     try {
       const result = await tool.run(args, token.context);
@@ -166,6 +194,19 @@ export async function POST(request: Request): Promise<Response> {
   const token = await authenticate(request);
   if (!token) {
     return unauthorized();
+  }
+
+  const channel = requestChannel(request.headers);
+  if (!channelAllowed(token.scope, channel)) {
+    await auditStandalone({
+      actorUserId: token.context.userId,
+      action: "mcp.channel_denied",
+      targetType: "mcp_token",
+      targetId: token.tokenId,
+      departmentId: token.context.activeDepartmentId,
+      payload: { channel: channel || "(empty)" },
+    });
+    return Response.json(rpcError(null, -32003, "当前客户端通道不在令牌允许范围内"), { status: 403 });
   }
 
   let payload: unknown;
