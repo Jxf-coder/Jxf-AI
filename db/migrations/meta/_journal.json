@@ -204,6 +204,13 @@
       "when": 1794092400000,
       "tag": "0028_metrics",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1794096000000,
+      "tag": "0029_pipeline_events",
+      "breakpoints": true
     }
   ]
 }

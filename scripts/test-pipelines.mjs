@@ -15,6 +15,19 @@ import {
   runPipeline,
 } from "../src/lib/pipelines.ts";
 import { advancePipelineRuns, applyPrevious, sweepScheduledPipelines } from "../src/lib/pipeline-runner.ts";
+import {
+  dispatchPipelineEvents,
+  publishPipelineEvent,
+  setPipelineEventSubscription,
+} from "../src/lib/pipeline-events.ts";
+import {
+  disableWebhook,
+  hashWebhookToken,
+  lookupWebhookPipeline,
+  rotateWebhookToken,
+  verifyWebhookToken,
+} from "../src/lib/pipelines-webhook.ts";
+import { POST as webhookPost } from "../src/app/api/webhooks/pipelines/[id]/route.ts";
 
 const TENANT = process.env.JXF_TENANT_ID;
 const HOST = process.env.SEED_DB_HOST ?? "127.0.0.1";
@@ -113,6 +126,7 @@ async function main() {
   const pipelineIds = [];
   const workItemIds = [];
   const runIds = [];
+  const eventIds = [];
   let hooks = null;
 
   try {
@@ -310,7 +324,135 @@ async function main() {
     check("无占位符时原样返回", applyPrevious("直接执行", "无关") === "直接执行");
 
     // ------------------------------------------------------------------
-    // 5. 审计与权限边界
+    // 5. 外部 Webhook
+    // ------------------------------------------------------------------
+    const rotated = await rotateWebhookToken(l1, pipeline.id);
+    check("Webhook 令牌为 64 位十六进制", /^[0-9a-f]{64}$/.test(rotated.token));
+    const storedToken = await owner.query(
+      "select webhook_enabled, webhook_token_hash, webhook_token_hint from pipelines where id = $1",
+      [pipeline.id],
+    );
+    const tokenRow = storedToken.rows[0];
+    check(
+      "库内只存令牌哈希与末 4 位",
+      tokenRow?.webhook_enabled === true &&
+        tokenRow?.webhook_token_hash === hashWebhookToken(rotated.token) &&
+        tokenRow?.webhook_token_hash !== rotated.token &&
+        tokenRow?.webhook_token_hint === `••••${rotated.token.slice(-4)}`,
+    );
+
+    const webhookLookup = await lookupWebhookPipeline(pipeline.id);
+    check(
+      "Webhook 查询返回启用状态",
+      webhookLookup?.webhookEnabled === true && webhookLookup?.enabled === true,
+    );
+    check("正确令牌校验通过", verifyWebhookToken(webhookLookup, rotated.token));
+    check("错误令牌校验失败", !verifyWebhookToken(webhookLookup, "0".repeat(64)));
+
+    const callWebhook = (headers = {}, body = "{}") =>
+      webhookPost(
+        new Request(`http://127.0.0.1/api/webhooks/pipelines/${pipeline.id}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...headers },
+          body,
+        }),
+        { params: Promise.resolve({ id: pipeline.id }) },
+      );
+
+    check("缺少令牌返回 401", (await callWebhook()).status === 401);
+    check("错误令牌返回 401", (await callWebhook({ "x-jxf-token": "0".repeat(64) })).status === 401);
+
+    const webhookResponse = await callWebhook(
+      { "x-jxf-token": rotated.token },
+      JSON.stringify({ event: "push" }),
+    );
+    const webhookBody = await webhookResponse.json();
+    check("正确令牌触发运行 202", webhookResponse.status === 202 && Boolean(webhookBody.runId));
+    if (webhookBody.runId) {
+      const webhookRun = await owner.query(
+        "select trigger_kind, trigger_ref, work_item_ids from pipeline_runs where id = $1",
+        [webhookBody.runId],
+      );
+      check(
+        "Webhook 运行标注触发来源",
+        webhookRun.rows[0]?.trigger_kind === "webhook" &&
+          String(webhookRun.rows[0]?.trigger_ref ?? "").startsWith("webhook:"),
+      );
+      for (const id of webhookRun.rows[0]?.work_item_ids ?? []) {
+        workItemIds.push(id);
+        const item = await workItem(owner, id);
+        if (item?.current_run_id) {
+          runIds.push(item.current_run_id);
+        }
+      }
+    }
+
+    await disableWebhook(l1, pipeline.id);
+    check(
+      "停用后 Webhook 返回 404",
+      (await callWebhook({ "x-jxf-token": rotated.token })).status === 404,
+    );
+
+    // ------------------------------------------------------------------
+    // 6. 内部事件总线
+    // ------------------------------------------------------------------
+    await setPipelineEventSubscription(l1, pipeline.id, "work_item.finished", true);
+    const subscribed = await listPipelines(l1);
+    check(
+      "事件订阅写入产线视图",
+      subscribed.find((item) => item.id === pipeline.id)?.eventTypes.includes("work_item.finished") ===
+        true,
+    );
+
+    const eventId = await publishPipelineEvent(owner, {
+      tenantId: TENANT,
+      eventType: "work_item.finished",
+      payload: { work_item_id: "test", status: "done" },
+    });
+    eventIds.push(eventId);
+    const dispatched = await dispatchPipelineEvents(owner, hooks, { eventIds: [eventId] });
+    check(
+      "订阅事件触发产线",
+      dispatched[0]?.triggered === 1 && dispatched[0]?.status === "processed",
+      JSON.stringify(dispatched[0]),
+    );
+    if (dispatched[0]?.triggered === 1) {
+      const eventRow = await owner.query("select run_ids from pipeline_events where id = $1", [
+        eventId,
+      ]);
+      const eventRunId = eventRow.rows[0]?.run_ids?.[0];
+      const eventRun = await owner.query(
+        "select trigger_kind, trigger_ref, work_item_ids from pipeline_runs where id = $1",
+        [eventRunId],
+      );
+      check(
+        "事件运行标注 trigger=event 与事件 ID",
+        eventRun.rows[0]?.trigger_kind === "event" &&
+          eventRun.rows[0]?.trigger_ref === `event:${eventId}`,
+      );
+      for (const id of eventRun.rows[0]?.work_item_ids ?? []) {
+        workItemIds.push(id);
+        const item = await workItem(owner, id);
+        if (item?.current_run_id) {
+          runIds.push(item.current_run_id);
+        }
+      }
+    }
+
+    const unsubscribedId = await publishPipelineEvent(owner, {
+      tenantId: TENANT,
+      eventType: "knowledge.ingest_done",
+      payload: {},
+    });
+    eventIds.push(unsubscribedId);
+    const unsubscribed = await dispatchPipelineEvents(owner, hooks, { eventIds: [unsubscribedId] });
+    check(
+      "未订阅的事件不触发产线",
+      unsubscribed[0]?.triggered === 0 && unsubscribed[0]?.status === "processed",
+    );
+
+    // ------------------------------------------------------------------
+    // 7. 审计与权限边界
     // ------------------------------------------------------------------
     const audits = await owner.query(
       "select action from audit_events where target_id = any($1::uuid[])",
@@ -332,8 +474,18 @@ async function main() {
         .then(() => false)
         .catch(() => true);
       check("L2 无管理产线权限时创建被拒绝", denied);
+
+      const deniedRotate = await rotateWebhookToken(l2, pipeline.id)
+        .then(() => false)
+        .catch(() => true);
+      check("L2 不能生成 Webhook 令牌", deniedRotate);
     }
   } finally {
+    if (eventIds.length > 0) {
+      await owner
+        .query("delete from pipeline_events where id = any($1::uuid[])", [eventIds.filter(Boolean)])
+        .catch(() => undefined);
+    }
     if (pipelineIds.length > 0) {
       await owner
         .query("delete from audit_events where target_id = any($1::uuid[])", [pipelineIds])

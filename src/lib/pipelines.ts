@@ -39,10 +39,17 @@ export interface PipelineView {
   /** 定时触发间隔（分钟）；null = 只手动触发 */
   scheduleIntervalMinutes: number | null;
   lastScheduledAt: string | null;
+  /** 外部 Webhook 是否可用（令牌只存哈希，页面只显示末 4 位） */
+  webhookEnabled: boolean;
+  webhookTokenHint: string | null;
+  /** 已订阅的内部事件类型 */
+  eventTypes: string[];
   createdAt: string;
 }
 
 export type PipelineRunStatus = "running" | "waiting_review" | "done" | "partial";
+
+export type PipelineTriggerKind = "manual" | "schedule" | "webhook" | "event";
 
 export interface PipelineRunView {
   id: string;
@@ -56,8 +63,10 @@ export interface PipelineRunView {
   failedStep: string | null;
   /** 因失败被跳过的可选步骤 */
   skippedSteps: string[];
-  /** manual = 手动触发；schedule = 定时触发 */
-  triggerKind: "manual" | "schedule";
+  /** manual / schedule / webhook / event */
+  triggerKind: PipelineTriggerKind;
+  /** 触发来源摘要（webhook 请求摘要 / 事件 ID） */
+  triggerRef: string | null;
   status: PipelineRunStatus;
   createdAt: string;
 }
@@ -82,6 +91,9 @@ interface PipelineRow {
   enabled: boolean;
   schedule_interval_minutes: number | null;
   last_scheduled_at: Date | null;
+  webhook_enabled: boolean;
+  webhook_token_hint: string | null;
+  event_types?: string[] | null;
   created_at: Date;
 }
 
@@ -93,6 +105,7 @@ interface PipelineRunRow {
   failed_step: string | null;
   skipped_steps: string[] | null;
   trigger_kind: string;
+  trigger_ref: string | null;
   created_at: Date;
   active_count: number;
   review_count: number;
@@ -101,7 +114,16 @@ interface PipelineRunRow {
 }
 
 const PIPELINE_COLUMNS = `id, name, description, steps, enabled,
-       schedule_interval_minutes, last_scheduled_at, created_at`;
+       schedule_interval_minutes, last_scheduled_at,
+       webhook_enabled, webhook_token_hint, created_at`;
+
+const TRIGGER_KINDS: readonly PipelineTriggerKind[] = ["manual", "schedule", "webhook", "event"];
+
+function toTriggerKind(raw: string): PipelineTriggerKind {
+  return (TRIGGER_KINDS as readonly string[]).includes(raw)
+    ? (raw as PipelineTriggerKind)
+    : "manual";
+}
 
 function departmentResource(context: UserContext): PermissionResource {
   const departmentId = context.activeDepartmentId;
@@ -117,6 +139,9 @@ function toPipelineView(row: PipelineRow): PipelineView {
     enabled: row.enabled,
     scheduleIntervalMinutes: row.schedule_interval_minutes ?? null,
     lastScheduledAt: row.last_scheduled_at ? row.last_scheduled_at.toISOString() : null,
+    webhookEnabled: Boolean(row.webhook_enabled),
+    webhookTokenHint: row.webhook_token_hint ?? null,
+    eventTypes: Array.isArray(row.event_types) ? row.event_types : [],
     createdAt: row.created_at.toISOString(),
   };
 }
@@ -186,10 +211,18 @@ export async function listPipelines(context: UserContext): Promise<PipelineView[
   return withUserContext(context, async (client) => {
     await requireContextPermission(client, context, "pipeline:use", departmentResource(context));
     const { rows } = await client.query<PipelineRow>(
-      `select ${PIPELINE_COLUMNS}
-         from pipelines
-        where tenant_id = $1
-        order by created_at desc
+      `select p.id, p.name, p.description, p.steps, p.enabled,
+              p.schedule_interval_minutes, p.last_scheduled_at,
+              p.webhook_enabled, p.webhook_token_hint, p.created_at,
+              coalesce(
+                array_agg(s.event_type) filter (where s.enabled),
+                '{}'::text[]
+              ) as event_types
+         from pipelines p
+         left join pipeline_event_subscriptions s on s.pipeline_id = p.id
+        where p.tenant_id = $1
+        group by p.id
+        order by p.created_at desc
         limit 50`,
       [context.tenantId],
     );
@@ -275,7 +308,7 @@ export async function setPipelineEnabled(
   });
 }
 
-export type PipelineTrigger = "manual" | "schedule";
+export type PipelineTrigger = PipelineTriggerKind;
 
 export interface PipelineRunResult {
   runId: string;
@@ -289,6 +322,8 @@ export interface PipelineRunResult {
 
 export interface RunPipelineOptions {
   trigger?: PipelineTrigger;
+  /** 触发来源摘要（Webhook 请求摘要 / 事件 ID），落库便于追溯 */
+  triggerRef?: string | null;
 }
 
 export async function runPipeline(
@@ -296,7 +331,10 @@ export async function runPipeline(
   pipelineId: string,
   options: RunPipelineOptions = {},
 ): Promise<PipelineRunResult> {
-  const trigger: PipelineTrigger = options.trigger === "schedule" ? "schedule" : "manual";
+  const trigger: PipelineTrigger = TRIGGER_KINDS.includes(options.trigger as PipelineTrigger)
+    ? (options.trigger as PipelineTrigger)
+    : "manual";
+  const triggerRef = options.triggerRef?.slice(0, 200) || null;
   const pipeline = await withUserContext(context, async (client: PoolClient) => {
     await requireContextPermission(client, context, "pipeline:use", departmentResource(context));
     const { rows } = await client.query<PipelineRow>(
@@ -346,8 +384,8 @@ export async function runPipeline(
     const { rows } = await client.query<{ id: string }>(
       `insert into pipeline_runs
          (pipeline_id, tenant_id, department_id, work_item_ids, failed_step,
-          trigger_kind, next_step_index, finished_at, requested_by)
-       values ($1, $2, $3, $4::uuid[], $5, $6, $7, case when $8 then now() else null end, $9)
+          trigger_kind, trigger_ref, next_step_index, finished_at, requested_by)
+       values ($1, $2, $3, $4::uuid[], $5, $6, $7, $8, case when $9 then now() else null end, $10)
        returning id`,
       [
         pipeline.id,
@@ -356,6 +394,7 @@ export async function runPipeline(
         workItemIds,
         failedStep,
         trigger,
+        triggerRef,
         nextStepIndex,
         failedStep !== null,
         context.userId,
@@ -377,6 +416,7 @@ export async function runPipeline(
         created: workItemIds.length,
         failed_step: failedStep,
         trigger,
+        trigger_ref: triggerRef,
       },
     });
     return runId;
@@ -394,7 +434,7 @@ export async function listPipelineRuns(
     await requireContextPermission(client, context, "pipeline:use", departmentResource(context));
     const { rows } = await client.query<PipelineRunRow>(
       `select r.id, r.pipeline_id, p.name as pipeline_name, r.work_item_ids,
-              r.failed_step, r.skipped_steps, r.trigger_kind, r.created_at,
+              r.failed_step, r.skipped_steps, r.trigger_kind, r.trigger_ref, r.created_at,
               coalesce(sum(case when wi.status in ('queued', 'running') then 1 else 0 end), 0)::int as active_count,
               coalesce(sum(case when wi.status = 'waiting_review' then 1 else 0 end), 0)::int as review_count,
               coalesce(sum(case when wi.status = 'done' then 1 else 0 end), 0)::int as done_count,
@@ -419,7 +459,8 @@ export async function listPipelineRuns(
       failedCount: row.failed_count,
       failedStep: row.failed_step,
       skippedSteps: row.skipped_steps ?? [],
-      triggerKind: row.trigger_kind === "schedule" ? "schedule" : "manual",
+      triggerKind: toTriggerKind(row.trigger_kind),
+      triggerRef: row.trigger_ref ?? null,
       status: runStatus(row),
       createdAt: row.created_at.toISOString(),
     }));

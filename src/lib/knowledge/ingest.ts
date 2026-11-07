@@ -590,6 +590,25 @@ export async function ingestUpload(
       });
     }
 
+    // 事件总线：入库完成可供产线订阅；事件写入失败不能回滚整批入库
+    if (runStatus === "done") {
+      await client.query("savepoint pipeline_event");
+      try {
+        await client.query("select app.publish_event($1, 'knowledge.ingest_done', $2::jsonb)", [
+          context.tenantId,
+          JSON.stringify({
+            run_id: createdRunId,
+            department_id: departmentId,
+            counts,
+            scope: sharedScope ? "shared" : "department",
+          }),
+        ]);
+      } catch (error) {
+        await client.query("rollback to savepoint pipeline_event");
+        log("warn", "ingest_event_publish_failed", { run_id: createdRunId, error: errorMessage(error) });
+      }
+    }
+
     return createdRunId;
   });
 

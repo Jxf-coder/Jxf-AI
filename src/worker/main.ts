@@ -113,8 +113,41 @@ async function syncWorkItem(
         where id = $1`,
       [workItemId, status, deliverable ? JSON.stringify(deliverable) : null],
     );
+    await publishWorkItemFinished(pool, workItemId, status);
   } catch (error) {
     log("warn", "work_item_sync_failed", {
+      work_item_id: workItemId,
+      status,
+      error: errorMessage(error),
+    });
+  }
+}
+
+/**
+ * 工作项进入终态后投递内部事件（供产线订阅）。
+ * 使用 app.publish_event()：worker 角色只有 EXECUTE 权限，不直接写业务表。
+ */
+async function publishWorkItemFinished(
+  pool: Pool,
+  workItemId: string | null,
+  status: string,
+): Promise<void> {
+  if (!workItemId || status === "running") {
+    return;
+  }
+  try {
+    await pool.query(
+      `select app.publish_event(
+         tenant_id,
+         'work_item.finished',
+         jsonb_build_object('work_item_id', id, 'status', $2::text, 'title', left(title, 80))
+       )
+         from work_items
+        where id = $1`,
+      [workItemId, status],
+    );
+  } catch (error) {
+    log("warn", "work_item_event_failed", {
       work_item_id: workItemId,
       status,
       error: errorMessage(error),
@@ -165,6 +198,7 @@ async function completeWorkItem(
         [workItemId, JSON.stringify(deliverable), `自动验收通过（${chars} 字 ≥ ${minChars} 字）`],
       );
       log("info", "work_item_auto_approved", { work_item_id: workItemId, chars });
+      await publishWorkItemFinished(pool, workItemId, "done");
       return;
     }
 
@@ -184,6 +218,7 @@ async function completeWorkItem(
         where id = $1`,
       [workItemId, JSON.stringify(deliverable), fallbackNote],
     );
+    await publishWorkItemFinished(pool, workItemId, "waiting_review");
   } catch (error) {
     log("warn", "work_item_complete_failed", {
       work_item_id: workItemId,

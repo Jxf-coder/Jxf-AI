@@ -10,6 +10,7 @@
   - 状态迁移写审计：`mcp.connector_unhealthy` / `mcp.connector_recovered`
   - 配置 `MCP_ALERT_WEBHOOK` 时推送 JSON 告警
 - 每 `PIPELINE_TICK_MS`（默认 60 秒）推进自动化产线：
+  - 派发内部事件（`pipeline_events` → `pipeline_event_subscriptions` → 运行产线）
   - 到点的定时产线发起一次运行（`trigger_kind = 'schedule'`）
   - 上一步完成后派下一步，`{{previous}}` 替换为上一步交付文本
   - 可选步骤失败则跳过并继续；非可选步骤失败则整条产线停止

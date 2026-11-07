@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { Field } from "@/components/knowledge/Field";
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
@@ -21,7 +22,10 @@ import type { PipelineRunStatus, PipelineRunView, PipelineView } from "@/lib/pip
 
 import {
   createPipelineAction,
+  disableWebhookAction,
+  rotateWebhookAction,
   runPipelineAction,
+  setEventSubscriptionAction,
   togglePipelineAction,
 } from "./actions";
 
@@ -30,11 +34,17 @@ interface EmployeeOption {
   name: string;
 }
 
+interface EventOption {
+  value: string;
+  label: string;
+}
+
 interface PipelinesClientProps {
   pipelines: PipelineView[];
   runs: PipelineRunView[];
   employees: EmployeeOption[];
   canManage: boolean;
+  eventOptions: EventOption[];
 }
 
 interface StepDraft {
@@ -54,6 +64,13 @@ const RUN_STATUS_LABEL: Record<PipelineRunStatus, string> = {
   waiting_review: "待验收",
   done: "已完成",
   partial: "有失败",
+};
+
+const TRIGGER_LABEL: Record<string, string> = {
+  manual: "手动",
+  schedule: "定时",
+  webhook: "Webhook",
+  event: "事件",
 };
 
 function runTone(status: PipelineRunStatus): Tone {
@@ -77,7 +94,9 @@ export function PipelinesClient({
   runs,
   employees,
   canManage,
+  eventOptions,
 }: PipelinesClientProps) {
+  const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -85,6 +104,16 @@ export function PipelinesClient({
   const [steps, setSteps] = useState<StepDraft[]>([{ ...EMPTY_STEP }]);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
+  const [webhookToken, setWebhookToken] = useState<{
+    pipelineId: string;
+    token: string;
+    path: string;
+  } | null>(null);
+  const [origin, setOrigin] = useState("");
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
 
   function updateStep(index: number, patch: Partial<StepDraft>) {
     setSteps((current) => current.map((step, item) => (item === index ? { ...step, ...patch } : step)));
@@ -133,6 +162,9 @@ export function PipelinesClient({
     try {
       const result = await runPipelineAction(pipelineId);
       setMessage({ tone: result.ok ? "info" : "error", text: result.message });
+      if (result.ok) {
+        router.refresh();
+      }
     } finally {
       setBusy(null);
     }
@@ -144,6 +176,52 @@ export function PipelinesClient({
     try {
       const result = await togglePipelineAction(pipelineId, enabled);
       setMessage({ tone: result.ok ? "info" : "error", text: result.message });
+      if (result.ok) {
+        router.refresh();
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function rotateWebhook(pipelineId: string) {
+    setBusy(pipelineId);
+    setMessage(null);
+    try {
+      const result = await rotateWebhookAction(pipelineId);
+      setMessage({ tone: result.ok ? "info" : "error", text: result.message });
+      if (result.ok && result.token && result.webhookPath) {
+        setWebhookToken({ pipelineId, token: result.token, path: result.webhookPath });
+        router.refresh();
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function disableWebhook(pipelineId: string) {
+    setBusy(pipelineId);
+    setMessage(null);
+    try {
+      const result = await disableWebhookAction(pipelineId);
+      setMessage({ tone: result.ok ? "info" : "error", text: result.message });
+      if (result.ok) {
+        router.refresh();
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function toggleEvent(pipelineId: string, eventType: string, enabled: boolean) {
+    setBusy(pipelineId);
+    setMessage(null);
+    try {
+      const result = await setEventSubscriptionAction(pipelineId, eventType, enabled);
+      setMessage({ tone: result.ok ? "info" : "error", text: result.message });
+      if (result.ok) {
+        router.refresh();
+      }
     } finally {
       setBusy(null);
     }
@@ -354,6 +432,78 @@ export function PipelinesClient({
                     ) : null}
                   </div>
                 </div>
+
+                {canManage ? (
+                  <div className="mt-2 grid gap-2 rounded-xl bg-apple-canvas px-3 py-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={meta}>Webhook</span>
+                      {pipeline.webhookEnabled ? (
+                        <span className={badge("ok")}>
+                          已启用 {pipeline.webhookTokenHint ?? ""}
+                        </span>
+                      ) : (
+                        <span className={badge("muted")}>未启用</span>
+                      )}
+                      <button
+                        type="button"
+                        className={`${linkBtn} text-[11px]`}
+                        disabled={busy === pipeline.id}
+                        onClick={() => rotateWebhook(pipeline.id)}
+                      >
+                        {pipeline.webhookEnabled ? "重置令牌" : "生成令牌"}
+                      </button>
+                      {pipeline.webhookEnabled ? (
+                        <button
+                          type="button"
+                          className={`${linkBtn} text-[11px]`}
+                          disabled={busy === pipeline.id}
+                          onClick={() => disableWebhook(pipeline.id)}
+                        >
+                          停用 Webhook
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {webhookToken?.pipelineId === pipeline.id ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-900">
+                        <div className="break-all">
+                          URL：<code className="font-mono">{`${origin}${webhookToken.path}`}</code>
+                        </div>
+                        <div className="mt-1 break-all">
+                          Token（仅显示一次）：<code className="font-mono">{webhookToken.token}</code>
+                        </div>
+                        <div className="mt-1">
+                          请求头：<code className="font-mono">X-JXF-Token: &lt;token&gt;</code>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                      <span className={meta}>事件订阅</span>
+                      {eventOptions.map((option) => (
+                        <label
+                          key={option.value}
+                          className="inline-flex items-center gap-1.5 text-[12px] text-zinc-600"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={pipeline.eventTypes.includes(option.value)}
+                            disabled={busy === pipeline.id}
+                            onChange={(event) =>
+                              toggleEvent(pipeline.id, option.value, event.target.checked)
+                            }
+                          />
+                          {option.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : pipeline.webhookEnabled || pipeline.eventTypes.length > 0 ? (
+                  <p className={`${meta} mt-2`}>
+                    Webhook {pipeline.webhookEnabled ? "已启用" : "未启用"} · 已订阅{" "}
+                    {pipeline.eventTypes.length} 类事件
+                  </p>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -387,7 +537,12 @@ export function PipelinesClient({
                     <td>
                       <span className={badge(runTone(run.status))}>{RUN_STATUS_LABEL[run.status]}</span>
                     </td>
-                    <td>{run.triggerKind === "schedule" ? "定时" : "手动"}</td>
+                    <td>
+                      {TRIGGER_LABEL[run.triggerKind] ?? run.triggerKind}
+                      {run.triggerRef ? (
+                        <span className={`${meta} ml-1`}>{run.triggerRef.slice(0, 22)}</span>
+                      ) : null}
+                    </td>
                     <td className="mono">
                       执行 {run.activeCount} · 待验收 {run.reviewCount} · 完成 {run.doneCount} · 失败{" "}
                       {run.failedCount}
