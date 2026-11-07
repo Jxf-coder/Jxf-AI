@@ -38,7 +38,9 @@ import {
   saveAiSettingsAction,
   saveAuditRetentionAction,
   saveBrandingAction,
+  saveNotificationAction,
   testAiConnectionAction,
+  testNotificationAction,
 } from "./actions";
 
 interface SettingsClientProps {
@@ -150,6 +152,19 @@ export function SettingsClient({
   const [retentionBusy, setRetentionBusy] = useState(false);
   const [retentionMessage, setRetentionMessage] = useState<Message | null>(null);
 
+  const [mailEnabled, setMailEnabled] = useState(settings.notifications.enabled);
+  const [smtpHost, setSmtpHost] = useState(settings.notifications.smtpHost ?? "");
+  const [smtpPort, setSmtpPort] = useState(settings.notifications.smtpPort?.toString() ?? "587");
+  const [smtpUser, setSmtpUser] = useState(settings.notifications.smtpUser ?? "");
+  const [smtpPass, setSmtpPass] = useState("");
+  const [clearSmtpPass, setClearSmtpPass] = useState(false);
+  const [passConfigured, setPassConfigured] = useState(settings.notifications.passConfigured);
+  const [passHint, setPassHint] = useState(settings.notifications.passHint);
+  const [mailRecipients, setMailRecipients] = useState(settings.notifications.to ?? "");
+  const [mailBusy, setMailBusy] = useState(false);
+  const [mailTestBusy, setMailTestBusy] = useState(false);
+  const [mailMessage, setMailMessage] = useState<Message | null>(null);
+
   const [opsKind, setOpsKind] = useState<OpsTaskKind | null>(null);
   const [opsMessage, setOpsMessage] = useState<Message | null>(null);
 
@@ -219,6 +234,42 @@ export function SettingsClient({
       setRetentionMessage({ tone: result.ok ? "info" : "error", text: result.message });
     } finally {
       setRetentionBusy(false);
+    }
+  }
+
+  async function submitMail() {
+    setMailBusy(true);
+    setMailMessage(null);
+    try {
+      const parsedPort = smtpPort.trim() ? Number.parseInt(smtpPort.trim(), 10) : null;
+      const result = await saveNotificationAction({
+        enabled: mailEnabled,
+        smtpHost,
+        smtpPort: parsedPort !== null && Number.isFinite(parsedPort) ? parsedPort : null,
+        smtpUser,
+        smtpPass: clearSmtpPass ? CLEAR_API_KEY : smtpPass,
+        to: mailRecipients,
+      });
+      setMailMessage({ tone: result.ok ? "info" : "error", text: result.message });
+      if (result.ok) {
+        setSmtpPass("");
+        setClearSmtpPass(false);
+        setPassConfigured(Boolean(result.keyConfigured));
+        setPassHint(result.keyHint ?? null);
+      }
+    } finally {
+      setMailBusy(false);
+    }
+  }
+
+  async function runMailTest() {
+    setMailTestBusy(true);
+    setMailMessage(null);
+    try {
+      const result = await testNotificationAction();
+      setMailMessage({ tone: result.ok ? "info" : "error", text: result.message });
+    } finally {
+      setMailTestBusy(false);
     }
   }
 
@@ -472,6 +523,105 @@ export function SettingsClient({
           {keyConfigured ? <span className={meta}>库内 Key：{keyHint ?? "已配置"}</span> : null}
         </div>
         {aiMessage ? <InlineMessage tone={aiMessage.tone}>{aiMessage.text}</InlineMessage> : null}
+      </SectionCard>
+
+      <SectionCard
+        title="邮件通知"
+        desc="连接器异常/恢复、运维任务失败与产线失败时发送邮件提醒。设置面优先于环境变量；SMTP 口令加密入库。"
+        right={<StatusBadge ok={mailEnabled} text={mailEnabled ? "已启用" : "未启用"} />}
+      >
+        <div className={formGrid}>
+          <Field label="启用邮件通知">
+            <select
+              className={input}
+              value={mailEnabled ? "on" : "off"}
+              onChange={(event) => setMailEnabled(event.target.value === "on")}
+            >
+              <option value="off">关闭</option>
+              <option value="on">开启</option>
+            </select>
+          </Field>
+          <Field label="SMTP_HOST">
+            <input
+              className={input}
+              value={smtpHost}
+              maxLength={255}
+              onChange={(event) => setSmtpHost(event.target.value)}
+              placeholder="例如 smtp.example.com"
+            />
+          </Field>
+          <Field label="SMTP_PORT">
+            <input
+              type="number"
+              min={1}
+              max={65535}
+              className={input}
+              value={smtpPort}
+              onChange={(event) => setSmtpPort(event.target.value)}
+              placeholder="587（465 自动使用 TLS）"
+            />
+          </Field>
+          <Field label="SMTP_USER">
+            <input
+              className={input}
+              value={smtpUser}
+              maxLength={255}
+              onChange={(event) => setSmtpUser(event.target.value)}
+              placeholder="登录用户名，留空为匿名发信"
+            />
+          </Field>
+          <Field label="SMTP_PASS" className="block sm:col-span-2">
+            <input
+              type="password"
+              className={input}
+              value={smtpPass}
+              disabled={clearSmtpPass}
+              autoComplete="new-password"
+              onChange={(event) => setSmtpPass(event.target.value)}
+              placeholder={
+                passConfigured
+                  ? `已配置 ${passHint ?? ""}，留空不修改`
+                  : "粘贴 SMTP 口令（保存后只显示末 4 位）"
+              }
+            />
+          </Field>
+          <Field label="收件人（逗号分隔）" className="block sm:col-span-2">
+            <input
+              className={input}
+              value={mailRecipients}
+              maxLength={500}
+              onChange={(event) => setMailRecipients(event.target.value)}
+              placeholder="ops@example.com, boss@example.com"
+            />
+          </Field>
+        </div>
+
+        <label className="mt-3 inline-flex items-center gap-2 text-[12px] text-zinc-600">
+          <input
+            type="checkbox"
+            checked={clearSmtpPass}
+            onChange={(event) => setClearSmtpPass(event.target.checked)}
+          />
+          清除已保存的 SMTP 口令（回退到环境变量）
+        </label>
+
+        <div className={actions}>
+          <button type="button" className={btnBlue} disabled={mailBusy} onClick={submitMail}>
+            {mailBusy ? "保存中…" : "保存邮件通知"}
+          </button>
+          <button type="button" className={btnGhost} disabled={mailTestBusy} onClick={runMailTest}>
+            {mailTestBusy ? "发送中…" : "发送测试邮件"}
+          </button>
+          {passConfigured ? <span className={meta}>口令：{passHint ?? "已配置"}</span> : null}
+        </div>
+        {mailMessage ? <InlineMessage tone={mailMessage.tone}>{mailMessage.text}</InlineMessage> : null}
+
+        <p className={`${meta} mt-3`}>
+          环境变量兜底：<code className="font-mono">SMTP_HOST</code> /{" "}
+          <code className="font-mono">SMTP_PORT</code> / <code className="font-mono">SMTP_USER</code> /{" "}
+          <code className="font-mono">SMTP_PASS</code> /{" "}
+          <code className="font-mono">NOTIFICATION_EMAIL_TO</code>。设置面保存过 SMTP_HOST 后以设置面为准。
+        </p>
       </SectionCard>
 
       <SectionCard

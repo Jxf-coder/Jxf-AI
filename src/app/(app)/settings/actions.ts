@@ -3,19 +3,23 @@
 import { revalidatePath } from "next/cache";
 
 import { requireSession } from "@/lib/auth/session";
-import { resolveUserContext } from "@/lib/db/user-context";
+import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 import { errorMessage, log } from "@/lib/logger";
 import { OpsTaskError, createOpsTask } from "@/lib/ops/tasks";
 import type { OpsTaskKind, OpsTaskView } from "@/lib/ops/types";
 import { PermissionDeniedError, toPermissionMessage } from "@/lib/permissions/guard";
+import { requireContextPermission } from "@/lib/permissions/server";
+import { invalidateMailConfigCache, resolveMailConfig, sendNotification } from "@/lib/notifications/mailer";
 import { testAiConnection, type AiTestResult } from "@/lib/settings/ai";
 import { refreshRuntimeSettings } from "@/lib/settings/runtime-server";
 import {
   saveAiSettings,
   saveAuditRetention,
   saveBranding,
+  saveNotificationSettings,
   SettingsInputError,
   type BrandingSettings,
+  type NotificationSettingsInput,
 } from "@/lib/settings/store";
 
 export interface SettingsActionResult {
@@ -96,6 +100,62 @@ export async function saveAuditRetentionAction(days: number | null): Promise<Set
     };
   } catch (error) {
     return failure("save_audit_retention", error);
+  }
+}
+
+export async function saveNotificationAction(
+  input: NotificationSettingsInput,
+): Promise<SettingsActionResult> {
+  try {
+    const saved = await saveNotificationSettings(await contextOf(), input);
+    invalidateMailConfigCache();
+    revalidatePath("/settings");
+    return {
+      ok: true,
+      message: saved.passConfigured
+        ? `邮件通知已保存（口令 ${saved.passHint ?? "已配置"}）`
+        : "邮件通知已保存",
+      keyConfigured: saved.passConfigured,
+      keyHint: saved.passHint,
+    };
+  } catch (error) {
+    return failure("save_notification", error);
+  }
+}
+
+export async function testNotificationAction(): Promise<SettingsActionResult> {
+  try {
+    const context = await contextOf();
+    if (context.accessLevel !== "L1") {
+      return { ok: false, message: "只有 L1 可以测试通知" };
+    }
+    await withUserContext(context, (client) =>
+      requireContextPermission(client, context, "platform:settings"),
+    );
+    const resolved = await resolveMailConfig();
+    if (!resolved.config) {
+      return { ok: false, message: `邮件通知未就绪：${resolved.reason ?? "未配置"}` };
+    }
+    const result = await sendNotification(
+      {
+        subject: "[Jxf-AI] 邮件通知测试",
+        text: [
+          "这是一封测试邮件，说明 SMTP 配置可用。",
+          "",
+          `收件人数量：${resolved.config.to.length}`,
+          `SMTP：${resolved.config.host}:${resolved.config.port}`,
+          "",
+          "此邮件由系统自动发送，请勿直接回复。",
+        ].join("\n"),
+      },
+      { config: resolved.config },
+    );
+    if (result.sent) {
+      return { ok: true, message: `测试邮件已发送至 ${resolved.config.to.join(", ")}` };
+    }
+    return { ok: false, message: `发送失败：${result.error ?? "未知错误"}` };
+  } catch (error) {
+    return failure("test_notification", error);
   }
 }
 

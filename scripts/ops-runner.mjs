@@ -28,6 +28,11 @@ import { Client } from "pg";
 import { checkConnectorsAsOwner, sendHealthWebhook } from "../src/lib/mcp/health.ts";
 import { resolveUserContext } from "../src/lib/db/user-context.ts";
 import { advancePipelineRuns, sweepScheduledPipelines } from "../src/lib/pipeline-runner.ts";
+import {
+  notifyHealthAlert,
+  notifyOpsTaskFailure,
+  notifyPipelineFailure,
+} from "../src/lib/notifications/events.ts";
 import { ROOT, latestBackupDir, parseArgs } from "./lib/delivery.mjs";
 
 const HOST = process.env.SEED_DB_HOST ?? "127.0.0.1";
@@ -138,11 +143,16 @@ async function finishTask(client, id, status, result, error) {
   );
 }
 
-/** 连接器心跳：连续失败 ≥3 次标记熔断，状态迁移写审计并可推 webhook */
+/** 连接器心跳：连续失败 ≥3 次标记熔断，状态迁移写审计、推 webhook 并发邮件 */
 async function runHealthSweep(client) {
   const startedAt = Date.now();
   try {
-    const results = await checkConnectorsAsOwner(client, { onAlert: sendHealthWebhook });
+    const results = await checkConnectorsAsOwner(client, {
+      onAlert: async (alert) => {
+        await sendHealthWebhook(alert);
+        await notifyHealthAlert(alert);
+      },
+    });
     const down = results.filter((item) => item.status === "down").length;
     const degraded = results.filter((item) => item.status === "degraded").length;
     log("连接器体检完成", {
@@ -168,6 +178,12 @@ async function runPipelineTick(client) {
     for (const item of scheduled) {
       if (item.error) {
         log("定时产线触发失败", { pipeline: item.pipelineName, error: item.error });
+        await notifyPipelineFailure({
+          pipelineName: item.pipelineName,
+          step: null,
+          error: item.error,
+          runId: item.runId,
+        });
       }
     }
     for (const item of advanced) {
@@ -176,6 +192,12 @@ async function runPipelineTick(client) {
           pipeline: item.pipelineName,
           step: item.failedStep,
           error: item.error,
+        });
+        await notifyPipelineFailure({
+          pipelineName: item.pipelineName,
+          step: item.failedStep,
+          error: item.error,
+          runId: item.runId,
         });
       }
     }
@@ -285,6 +307,7 @@ async function main() {
         const message = error instanceof Error ? error.message : String(error);
         await finishTask(client, task.id, "failed", null, message.slice(0, 2000));
         log("任务失败", { id: task.id, kind: task.kind, error: message.slice(0, 300) });
+        await notifyOpsTaskFailure({ id: task.id, kind: task.kind, error: message.slice(0, 2000) });
       }
 
       if (args.once === true) {

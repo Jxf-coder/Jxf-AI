@@ -218,6 +218,7 @@ function toAlert(result: ConnectorHealthResult): HealthAlert {
 export async function checkConnectorsAsL1(
   context: UserContext,
   probe: ProbeFn = probeConnectorTools,
+  onAlert?: (alert: HealthAlert) => Promise<void>,
 ): Promise<ConnectorHealthResult[]> {
   const targets = await withUserContext(context, async (client) => {
     await requireContextPermission(client, context, "platform:settings");
@@ -261,6 +262,17 @@ export async function checkConnectorsAsL1(
       }
     }
   });
+
+  if (onAlert) {
+    for (const result of results) {
+      if (!result.transition) {
+        continue;
+      }
+      await onAlert(toAlert(result)).catch((caught) => {
+        log("warn", "mcp_health_alert_failed", { error: errorMessage(caught) });
+      });
+    }
+  }
 
   return results;
 }

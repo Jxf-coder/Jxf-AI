@@ -14,6 +14,7 @@ import {
   type McpToolSummary,
 } from "@/lib/mcp/connectors";
 import { checkConnectorsAsL1 } from "@/lib/mcp/health";
+import { notifyHealthAlert } from "@/lib/notifications/events";
 import { issueMcpToken, revokeMcpToken } from "@/lib/mcp/tokens";
 import { toPermissionMessage } from "@/lib/permissions/guard";
 
@@ -149,7 +150,7 @@ export async function callMcpServerToolAction(
 /** 批量心跳体检：逐个 listTools 探测，连续失败 ≥3 次的连接器会被运行时跳过 */
 export async function runMcpHealthCheckAction(): Promise<McpActionResult> {
   try {
-    const results = await checkConnectorsAsL1(await contextOf());
+    const results = await checkConnectorsAsL1(await contextOf(), undefined, notifyHealthAlert);
     revalidatePath("/settings/mcp");
     if (results.length === 0) {
       return { ok: true, message: "没有启用的连接器需要体检" };

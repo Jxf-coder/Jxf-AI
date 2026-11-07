@@ -279,6 +279,7 @@ export type PipelineTrigger = "manual" | "schedule";
 
 export interface PipelineRunResult {
   runId: string;
+  pipelineName: string;
   workItemIds: string[];
   failedStep: string | null;
   /** 下一个待派步骤下标；等于步骤总数表示已全部派出 */
@@ -381,7 +382,7 @@ export async function runPipeline(
     return runId;
   });
 
-  return { runId: run, workItemIds, failedStep, nextStepIndex, trigger };
+  return { runId: run, pipelineName: pipeline.name, workItemIds, failedStep, nextStepIndex, trigger };
 }
 
 export async function listPipelineRuns(

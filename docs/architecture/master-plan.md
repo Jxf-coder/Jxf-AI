@@ -183,7 +183,9 @@ docker compose (单机)
 
 > **切片 5（已落地）：产线进阶**：运行只派第一步，之后由宿主机 `ops:runner`（`PIPELINE_TICK_MS`，默认 60 秒）在「上一步进入终态」后派下一步；步骤说明支持 `{{previous}}` 引用上一步交付文本（无交付时显式注明，不编造）；步骤可标记 `optional`，失败时跳过并继续，跳过清单记录在 `pipeline_runs.skipped_steps`；产线可设置 `schedule_interval_minutes`（5–10080），到点自动运行（`trigger_kind='schedule'`），同一时间窗不重复触发。
 
-> **后续切片**：产线事件触发（外部 webhook / 系统事件）；连接器告警渠道模板（飞书/企微卡片）。
+> **切片 6（已落地）：邮件通知**：新增 SMTP 配置（设置面优先，`SMTP_*` / `NOTIFICATION_EMAIL_TO` 环境变量兜底），口令与模型 Key 一样 AES-256-GCM 加密入库；`src/lib/notifications/mailer.ts` 基于 nodemailer 统一发送，未配置时安静跳过、发送失败只落日志；连接器 degraded / down 熔断与恢复、运维任务失败、产线失败自动发出含错误详情的邮件。设置页新增「邮件通知」区块与测试发送。
+
+> **后续切片**：产线事件触发（外部 webhook / 系统事件）；通知渠道扩展（飞书/企微卡片）。
 
 ---
 

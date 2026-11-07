@@ -39,10 +39,22 @@ export interface AuditSettings {
   earliestEventAt: string | null;
 }
 
+/** 邮件通知（SMTP）：口令只展示末 4 位 */
+export interface NotificationSettings {
+  enabled: boolean;
+  smtpHost: string | null;
+  smtpPort: number | null;
+  smtpUser: string | null;
+  passConfigured: boolean;
+  passHint: string | null;
+  to: string | null;
+}
+
 export interface PlatformSettingsView {
   branding: BrandingSettings;
   ai: AiSettings;
   audit: AuditSettings;
+  notifications: NotificationSettings;
   updatedAt: string | null;
 }
 
