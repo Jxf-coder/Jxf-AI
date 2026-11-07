@@ -29,7 +29,7 @@ export default async function SettingsPage() {
       <div>
         <h1 className={pageTitle}>平台设置</h1>
         <p className={pageSubtitle}>
-          品牌、模型 Key、审计留存与交付状态的统一入口。只有 L1 可以修改；
+          品牌、模型 Key、邮件通知、审计留存与交付状态的统一入口。只有 L1 可以修改；
           所有变更都会写入审计日志。
         </p>
       </div>

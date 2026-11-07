@@ -210,6 +210,13 @@ services:
       MCP_TRUSTED_HOSTS: ${MCP_TRUSTED_HOSTS:-}
       # stdio 连接器允许的可执行文件（逗号分隔，建议绝对路径）；为空表示禁用 stdio
       MCP_STDIO_ALLOWED_COMMANDS: ${MCP_STDIO_ALLOWED_COMMANDS:-}
+      # 通知邮件：设置面优先，环境变量兜底（留空即不发送）
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      NOTIFICATION_EMAIL_TO: ${NOTIFICATION_EMAIL_TO:-}
     depends_on:
       postgres:
         condition: service_healthy

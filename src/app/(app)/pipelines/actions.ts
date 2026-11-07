@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext } from "@/lib/db/user-context";
 import { errorMessage, log } from "@/lib/logger";
 import { PermissionDeniedError, toPermissionMessage } from "@/lib/permissions/guard";
+import { notifyPipelineFailure } from "@/lib/notifications/events";
 import {
   PipelineInputError,
   createPipeline,
@@ -53,6 +54,12 @@ export async function runPipelineAction(pipelineId: string): Promise<PipelineAct
     revalidatePath("/pipelines");
     revalidatePath("/ai-employees");
     if (result.failedStep) {
+      await notifyPipelineFailure({
+        pipelineName: result.pipelineName,
+        step: result.failedStep,
+        error: "首步派发失败（AI 员工未上线或授权已撤销）",
+        runId: result.runId,
+      });
       return {
         ok: false,
         message: `第一步「${result.failedStep}」派发失败，请检查 AI 员工是否在岗`,
