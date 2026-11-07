@@ -18,6 +18,7 @@ const steps = [
   ...(quick ? [] : [{ name: "TypeScript 类型检查", args: ["run", "typecheck"] }]),
   { name: "部署冒烟", args: ["run", "smoke"] },
   { name: "设置面校验", args: ["run", "test:settings"] },
+  { name: "连接器心跳校验", args: ["run", "test:mcp-health"] },
   { name: "授权收口体检", args: ["run", "audit:grants"] },
 ];
 

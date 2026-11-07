@@ -30,9 +30,27 @@ import {
   callMcpServerToolAction,
   createMcpServerAction,
   refreshMcpServerToolsAction,
+  runMcpHealthCheckAction,
   toggleMcpServerAction,
   type McpActionResult,
 } from "./actions";
+
+const HEALTH_LABEL: Record<McpServerView["healthStatus"], string> = {
+  unknown: "未体检",
+  healthy: "健康",
+  degraded: "降级",
+  down: "熔断",
+};
+
+function healthTone(status: McpServerView["healthStatus"]) {
+  if (status === "healthy") {
+    return "ok" as const;
+  }
+  if (status === "down") {
+    return "error" as const;
+  }
+  return status === "degraded" ? "warn" as const : "muted" as const;
+}
 
 const TIME_FORMAT = new Intl.DateTimeFormat("zh-CN", {
   timeZone: "Asia/Shanghai",
@@ -80,6 +98,10 @@ export function ConnectorSection({
   const [openId, setOpenId] = useState<string | null>(null);
   const [callTool, setCallTool] = useState("");
   const [callArgs, setCallArgs] = useState("{}");
+
+  const unhealthy = servers.filter(
+    (server) => server.enabled && (server.healthStatus === "degraded" || server.healthStatus === "down"),
+  );
 
   function run(action: () => Promise<McpActionResult>, done?: () => void) {
     startTransition(async () => {
@@ -157,14 +179,31 @@ export function ConnectorSection({
               MCP_TRUSTED_HOSTS；stdio 仅允许白名单命令。
             </p>
           </div>
-          <button
-            type="button"
-            className={`${linkBtn} shrink-0 text-[11px]`}
-            onClick={() => setCreating((value) => !value)}
-          >
-            {creating ? "收起" : "新建连接器"}
-          </button>
+          <div className="flex shrink-0 items-center gap-3">
+            <button
+              type="button"
+              className={`${linkBtn} text-[11px]`}
+              onClick={() => run(() => runMcpHealthCheckAction())}
+              disabled={pending}
+            >
+              批量体检
+            </button>
+            <button
+              type="button"
+              className={`${linkBtn} text-[11px]`}
+              onClick={() => setCreating((value) => !value)}
+            >
+              {creating ? "收起" : "新建连接器"}
+            </button>
+          </div>
         </div>
+
+        {unhealthy.length > 0 ? (
+          <div className="mb-3 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-[13px] leading-relaxed text-rose-600">
+            异常连接器（{unhealthy.length}）：{unhealthy.map((server) => server.name).join("、")}。
+            连续失败 ≥3 次会熔断，AI 员工运行时自动跳过；恢复后下次体检自动解除。
+          </div>
+        ) : null}
 
         {creating ? (
           <div className="grid gap-3 rounded-2xl bg-apple-canvas p-3">
@@ -328,6 +367,9 @@ export function ConnectorSection({
                         <span className={badge(server.enabled ? "ok" : "muted")}>
                           {server.enabled ? "启用中" : "已停用"}
                         </span>
+                        <span className={badge(healthTone(server.healthStatus))}>
+                          {HEALTH_LABEL[server.healthStatus]}
+                        </span>
                         <span className={badge("blue")}>{server.transport}</span>
                         <span className={`${meta} font-mono`}>{server.target}</span>
                       </span>
@@ -336,6 +378,18 @@ export function ConnectorSection({
                         限流 {server.rateLimitPerMin}/分 · 配额{" "}
                         {server.dailyQuota > 0 ? `${server.dailyQuota}/日` : "不限"}
                       </span>
+                      <span className={`${meta} mt-0.5 block`}>
+                        体检 {HEALTH_LABEL[server.healthStatus]} · 最近 {formatTime(server.healthCheckedAt)}
+                        {server.healthLatencyMs !== null ? ` · ${server.healthLatencyMs}ms` : ""}
+                        {server.healthConsecutiveFailures > 0
+                          ? ` · 连续失败 ${server.healthConsecutiveFailures} 次`
+                          : ""}
+                      </span>
+                      {server.healthLastError ? (
+                        <span className={`${meta} mt-0.5 block text-rose-600`}>
+                          {server.healthLastError}
+                        </span>
+                      ) : null}
                       {server.lastError ? (
                         <span className={`${meta} mt-0.5 block text-rose-600`}>{server.lastError}</span>
                       ) : null}

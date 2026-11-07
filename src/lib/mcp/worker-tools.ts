@@ -107,7 +107,8 @@ export async function loadWorkerToolPlan(
     `select id, name, transport, url, command, args, env, timeout_ms, rate_limit_per_min,
             daily_quota, tools_cache
        from mcp_servers
-      where tenant_id = $1 and enabled and id = any($2::uuid[])`,
+      where tenant_id = $1 and enabled and health_status <> 'down'
+        and id = any($2::uuid[])`,
     [tenantId, serverIds],
   );
   if (rows.length === 0) {

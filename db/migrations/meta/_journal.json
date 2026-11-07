@@ -169,6 +169,13 @@
       "when": 1794074400000,
       "tag": "0023_ops_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794078000000,
+      "tag": "0024_mcp_health",
+      "breakpoints": true
     }
   ]
 }

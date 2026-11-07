@@ -20,6 +20,8 @@ import { requireContextPermission } from "@/lib/permissions/server";
 
 export type McpTransport = "http" | "stdio";
 
+export type McpHealthStatus = "unknown" | "healthy" | "degraded" | "down";
+
 export interface McpServerView {
   id: string;
   name: string;
@@ -33,6 +35,11 @@ export interface McpServerView {
   toolCount: number;
   lastCheckedAt: string | null;
   lastError: string | null;
+  healthStatus: McpHealthStatus;
+  healthCheckedAt: string | null;
+  healthLatencyMs: number | null;
+  healthConsecutiveFailures: number;
+  healthLastError: string | null;
   createdAt: string;
 }
 
@@ -86,6 +93,11 @@ interface ServerRow {
   tools_cache: unknown;
   last_checked_at: Date | null;
   last_error: string | null;
+  health_status: string;
+  health_checked_at: Date | null;
+  health_latency_ms: number | null;
+  health_consecutive_failures: number;
+  health_last_error: string | null;
   created_at: Date;
 }
 
@@ -109,6 +121,10 @@ function toIso(value: Date | null): string | null {
   return value ? value.toISOString() : null;
 }
 
+function toHealthStatus(raw: string): McpHealthStatus {
+  return raw === "healthy" || raw === "degraded" || raw === "down" ? raw : "unknown";
+}
+
 function toView(row: ServerRow): McpServerView {
   const transport: McpTransport = row.transport === "stdio" ? "stdio" : "http";
   return {
@@ -124,9 +140,19 @@ function toView(row: ServerRow): McpServerView {
     toolCount: Array.isArray(row.tools_cache) ? row.tools_cache.length : 0,
     lastCheckedAt: toIso(row.last_checked_at),
     lastError: row.last_error,
+    healthStatus: toHealthStatus(row.health_status),
+    healthCheckedAt: toIso(row.health_checked_at),
+    healthLatencyMs: row.health_latency_ms,
+    healthConsecutiveFailures: row.health_consecutive_failures,
+    healthLastError: row.health_last_error,
     createdAt: row.created_at.toISOString(),
   };
 }
+
+const SERVER_COLUMNS = `id, name, transport, url, command, args, env, enabled, allowed_tools,
+       timeout_ms, rate_limit_per_min, daily_quota, tools_cache,
+       last_checked_at, last_error, health_status, health_checked_at, health_latency_ms,
+       health_consecutive_failures, health_last_error, created_at`;
 
 async function requireSettings(context: UserContext): Promise<void> {
   await withUserContext(context, (client) =>
@@ -138,9 +164,7 @@ export async function listMcpServers(context: UserContext): Promise<McpServerVie
   return withUserContext(context, async (client) => {
     await requireContextPermission(client, context, "platform:settings");
     const { rows } = await client.query<ServerRow>(
-      `select id, name, transport, url, command, args, env, enabled, allowed_tools,
-              timeout_ms, rate_limit_per_min, daily_quota, tools_cache,
-              last_checked_at, last_error, created_at
+      `select ${SERVER_COLUMNS}
          from mcp_servers
         where tenant_id = $1
         order by created_at desc
@@ -320,9 +344,7 @@ async function loadServer(context: UserContext, serverId: string): Promise<Serve
   return withUserContext(context, async (client) => {
     await requireContextPermission(client, context, "platform:settings");
     const { rows } = await client.query<ServerRow>(
-      `select id, name, transport, url, command, args, env, enabled, allowed_tools,
-              timeout_ms, rate_limit_per_min, daily_quota, tools_cache,
-              last_checked_at, last_error, created_at
+      `select ${SERVER_COLUMNS}
          from mcp_servers
         where id = $1 and tenant_id = $2`,
       [serverId, context.tenantId],
@@ -455,6 +477,11 @@ function normalizeTools(raw: unknown): McpToolSummary[] {
     .slice(0, MAX_TOOLS);
 }
 
+/** 建连并 listTools：管理端「探测工具」与心跳体检共用同一条链路 */
+export async function probeConnectorTools(config: ConnectorCallConfig): Promise<McpToolSummary[]> {
+  return withSdkClient(config, (session) => session.listTools());
+}
+
 /** 探测工具列表并缓存；失败写 last_error */
 export async function refreshMcpServerTools(
   context: UserContext,
@@ -466,31 +493,33 @@ export async function refreshMcpServerTools(
   }
 
   try {
-    const tools = await withSdkClient(
-      {
-        transport: server.transport === "stdio" ? "stdio" : "http",
-        url: server.url,
-        command: server.command,
-        args: server.args ?? [],
-        env: server.env ?? {},
-        timeoutMs: server.timeout_ms,
-      },
-      (session) => session.listTools(),
-    );
+    const startedAt = Date.now();
+    const tools = await probeConnectorTools({
+      transport: server.transport === "stdio" ? "stdio" : "http",
+      url: server.url,
+      command: server.command,
+      args: server.args ?? [],
+      env: server.env ?? {},
+      timeoutMs: server.timeout_ms,
+    });
+    const latencyMs = Date.now() - startedAt;
 
     await withUserContext(context, async (client) => {
       await client.query(
         `update mcp_servers
-            set tools_cache = $2::jsonb, last_checked_at = now(), last_error = null, updated_at = now()
+            set tools_cache = $2::jsonb, last_checked_at = now(), last_error = null,
+                health_status = 'healthy', health_checked_at = now(),
+                health_latency_ms = $3, health_consecutive_failures = 0,
+                health_last_error = null, updated_at = now()
           where id = $1`,
-        [server.id, JSON.stringify(tools)],
+        [server.id, JSON.stringify(tools), latencyMs],
       );
       await auditInTx(client, context, {
         actorUserId: context.userId,
         action: "mcp.server_tools_refreshed",
         targetType: "mcp_server",
         targetId: server.id,
-        payload: { tool_count: tools.length },
+        payload: { tool_count: tools.length, latency_ms: latencyMs },
       });
     });
 

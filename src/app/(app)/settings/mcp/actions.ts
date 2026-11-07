@@ -13,6 +13,7 @@ import {
   type CreateMcpServerInput,
   type McpToolSummary,
 } from "@/lib/mcp/connectors";
+import { checkConnectorsAsL1 } from "@/lib/mcp/health";
 import { issueMcpToken, revokeMcpToken } from "@/lib/mcp/tokens";
 import { toPermissionMessage } from "@/lib/permissions/guard";
 
@@ -139,6 +140,26 @@ export async function callMcpServerToolAction(
     const result = await callMcpServerTool(await contextOf(), serverId, toolName, args);
     revalidatePath("/settings/mcp");
     return { ok: true, message: result.text.slice(0, 2000) };
+  } catch (error) {
+    revalidatePath("/settings/mcp");
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 批量心跳体检：逐个 listTools 探测，连续失败 ≥3 次的连接器会被运行时跳过 */
+export async function runMcpHealthCheckAction(): Promise<McpActionResult> {
+  try {
+    const results = await checkConnectorsAsL1(await contextOf());
+    revalidatePath("/settings/mcp");
+    if (results.length === 0) {
+      return { ok: true, message: "没有启用的连接器需要体检" };
+    }
+    const unhealthy = results.filter((result) => result.status !== "healthy");
+    const down = results.filter((result) => result.status === "down");
+    const summary = `已体检 ${results.length} 个连接器：健康 ${
+      results.length - unhealthy.length
+    } · 降级 ${unhealthy.length - down.length} · 熔断 ${down.length}`;
+    return { ok: unhealthy.length === 0, message: summary };
   } catch (error) {
     revalidatePath("/settings/mcp");
     return { ok: false, message: toPermissionMessage(error) };

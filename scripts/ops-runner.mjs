@@ -5,8 +5,12 @@
  * 本脚本用 owner 连接领取任务，执行白名单内的固定命令，再回写状态。
  *
  * 用法：
- *   npm run ops:runner            # 常驻轮询（3 秒一次）
- *   npm run ops:runner -- --once  # 执行一轮后退出，可交给 cron / systemd timer
+ *   npm run ops:runner            # 常驻轮询（3 秒一次）+ 每 5 分钟连接器心跳
+ *   npm run ops:runner -- --once  # 执行一轮任务后退出，可交给 cron / systemd timer
+ *   npm run ops:runner -- --health-once   # 只做一次连接器体检后退出
+ *   npm run ops:runner -- --no-health     # 关闭周期性连接器体检
+ *
+ * 依赖：宿主机已 `npm install`（runner 通过 tsx 直接加载 src/lib/mcp/health.ts）。
  *
  * 安全边界：
  * - 只支持 backup / restore_verify 两种类型，参数只有 cold；
@@ -18,6 +22,7 @@ import path from "node:path";
 
 import { Client } from "pg";
 
+import { checkConnectorsAsOwner, sendHealthWebhook } from "../src/lib/mcp/health.ts";
 import { ROOT, latestBackupDir, parseArgs } from "./lib/delivery.mjs";
 
 const HOST = process.env.SEED_DB_HOST ?? "127.0.0.1";
@@ -25,6 +30,8 @@ const PORT = process.env.SEED_DB_PORT ?? process.env.POSTGRES_PORT ?? "5432";
 const DB = process.env.POSTGRES_DB;
 const OWNER_URL = `postgresql://${process.env.JXF_OWNER_USER}:${process.env.JXF_OWNER_PASSWORD}@${HOST}:${PORT}/${DB}`;
 const POLL_MS = 3_000;
+const HEALTH_INTERVAL_MS =
+  Number.parseInt(process.env.MCP_HEALTH_INTERVAL_MS ?? "300000", 10) || 300_000;
 
 let stopping = false;
 
@@ -124,6 +131,25 @@ async function finishTask(client, id, status, result, error) {
   );
 }
 
+/** 连接器心跳：连续失败 ≥3 次标记熔断，状态迁移写审计并可推 webhook */
+async function runHealthSweep(client) {
+  const startedAt = Date.now();
+  try {
+    const results = await checkConnectorsAsOwner(client, { onAlert: sendHealthWebhook });
+    const down = results.filter((item) => item.status === "down").length;
+    const degraded = results.filter((item) => item.status === "degraded").length;
+    log("连接器体检完成", {
+      total: results.length,
+      healthy: results.length - down - degraded,
+      degraded,
+      down,
+      duration_ms: Date.now() - startedAt,
+    });
+  } catch (error) {
+    log("连接器体检失败", { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!DB || !process.env.JXF_OWNER_USER || !process.env.JXF_OWNER_PASSWORD) {
@@ -143,6 +169,14 @@ async function main() {
     log("已收口中断任务", { count: swept.rowCount });
   }
 
+  // 只做一次连接器体检（可交给 cron / systemd timer）
+  if (args["health-once"] === true) {
+    await runHealthSweep(client);
+    await client.end().catch(() => undefined);
+    log("已退出");
+    return;
+  }
+
   process.on("SIGINT", () => {
     stopping = true;
   });
@@ -150,10 +184,23 @@ async function main() {
     stopping = true;
   });
 
-  log("已启动", { once: args.once === true, poll_ms: POLL_MS });
+  const healthEnabled = args["no-health"] !== true;
+  let lastHealthAt = args.once === true ? Date.now() : 0;
+
+  log("已启动", {
+    once: args.once === true,
+    poll_ms: POLL_MS,
+    health_enabled: healthEnabled,
+    health_interval_ms: HEALTH_INTERVAL_MS,
+  });
 
   try {
     while (!stopping) {
+      if (healthEnabled && Date.now() - lastHealthAt >= HEALTH_INTERVAL_MS) {
+        lastHealthAt = Date.now();
+        await runHealthSweep(client);
+      }
+
       let task = null;
       try {
         task = await claimTask(client);
