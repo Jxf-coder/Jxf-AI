@@ -9,7 +9,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 ARG NPM_REGISTRY=https://registry.npmjs.org
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci --registry="${NPM_REGISTRY}" \
       --fetch-retries=5 \
       --fetch-retry-mintimeout=20000 \
