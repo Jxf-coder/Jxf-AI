@@ -1,11 +1,13 @@
 /**
- * 自动化产线（最小可用切片）：办产线定义 + 批量派活。
+ * 自动化产线：定义 + 派活 + 链式推进。
  *
  * 设计边界：
  * - 产线是「一组派活步骤」的模板，不新增执行引擎；每一步复用 assignWork，
  *   生成 work_item + kind='task' 的 run，沿用现有 worker 队列与人工验收；
- * - 运行一次 = 按顺序为每一步派活；某一步失败时停止后续步骤，已派出的工作保留；
- * - 产线定义可编辑/停用；运行记录只追加，状态由工作项实时聚合。
+ * - 运行一次只派出第一步，之后由上一步的结果驱动下一步（宿主机 runner 推进），
+ *   这样后续步骤可以引用上一步交付物；
+ * - 某一步失败时停止后续步骤；标记 optional 的步骤失败则跳过并继续；
+ * - 产线可设置定时（间隔分钟数），由 runner 到点自动发起运行。
  */
 
 import type { PoolClient } from "pg";
@@ -24,6 +26,8 @@ export interface PipelineStep {
   aiEmployeeId: string;
   /** 员工名称快照：员工改名/停用后仍能展示当时的产线定义 */
   aiEmployeeName: string;
+  /** 可选步骤：失败时跳过并继续后续步骤，而不是整条产线停止 */
+  optional?: boolean;
 }
 
 export interface PipelineView {
@@ -32,6 +36,9 @@ export interface PipelineView {
   description: string;
   steps: PipelineStep[];
   enabled: boolean;
+  /** 定时触发间隔（分钟）；null = 只手动触发 */
+  scheduleIntervalMinutes: number | null;
+  lastScheduledAt: string | null;
   createdAt: string;
 }
 
@@ -47,6 +54,10 @@ export interface PipelineRunView {
   doneCount: number;
   failedCount: number;
   failedStep: string | null;
+  /** 因失败被跳过的可选步骤 */
+  skippedSteps: string[];
+  /** manual = 手动触发；schedule = 定时触发 */
+  triggerKind: "manual" | "schedule";
   status: PipelineRunStatus;
   createdAt: string;
 }
@@ -54,10 +65,13 @@ export interface PipelineRunView {
 export interface CreatePipelineInput {
   name: string;
   description?: string;
-  steps: Array<{ title: string; brief: string; aiEmployeeId: string; aiEmployeeName: string }>;
+  scheduleIntervalMinutes?: number | null;
+  steps: Array<{ title: string; brief: string; aiEmployeeId: string; aiEmployeeName: string; optional?: boolean }>;
 }
 
-const MAX_STEPS = 10;
+export const MAX_STEPS = 10;
+export const MIN_SCHEDULE_MINUTES = 5;
+export const MAX_SCHEDULE_MINUTES = 10_080;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface PipelineRow {
@@ -66,6 +80,8 @@ interface PipelineRow {
   description: string;
   steps: PipelineStep[] | null;
   enabled: boolean;
+  schedule_interval_minutes: number | null;
+  last_scheduled_at: Date | null;
   created_at: Date;
 }
 
@@ -75,12 +91,17 @@ interface PipelineRunRow {
   pipeline_name: string;
   work_item_ids: string[] | null;
   failed_step: string | null;
+  skipped_steps: string[] | null;
+  trigger_kind: string;
   created_at: Date;
   active_count: number;
   review_count: number;
   done_count: number;
   failed_count: number;
 }
+
+const PIPELINE_COLUMNS = `id, name, description, steps, enabled,
+       schedule_interval_minutes, last_scheduled_at, created_at`;
 
 function departmentResource(context: UserContext): PermissionResource {
   const departmentId = context.activeDepartmentId;
@@ -94,6 +115,8 @@ function toPipelineView(row: PipelineRow): PipelineView {
     description: row.description,
     steps: Array.isArray(row.steps) ? row.steps : [],
     enabled: row.enabled,
+    scheduleIntervalMinutes: row.schedule_interval_minutes ?? null,
+    lastScheduledAt: row.last_scheduled_at ? row.last_scheduled_at.toISOString() : null,
     createdAt: row.created_at.toISOString(),
   };
 }
@@ -105,7 +128,10 @@ function runStatus(row: PipelineRunRow): PipelineRunStatus {
   if (row.review_count > 0) {
     return "waiting_review";
   }
-  if (row.failed_step || row.failed_count > 0) {
+  // 可选步骤失败已被跳过并继续，不应把整条产线判定为有失败
+  const skipped = row.skipped_steps?.length ?? 0;
+  const effectiveFailed = Math.max(row.failed_count - skipped, 0);
+  if (row.failed_step || effectiveFailed > 0) {
     return "partial";
   }
   return "done";
@@ -137,15 +163,30 @@ function normalizeSteps(raw: CreatePipelineInput["steps"]): PipelineStep[] {
       brief,
       aiEmployeeId,
       aiEmployeeName: aiEmployeeName.slice(0, 60) || "AI 员工",
+      optional: step?.optional === true,
     };
   });
+}
+
+/** 定时间隔：null = 不定时；数字必须在 5–10080 分钟之间 */
+function normalizeSchedule(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const minutes = Number(value);
+  if (!Number.isInteger(minutes) || minutes < MIN_SCHEDULE_MINUTES || minutes > MAX_SCHEDULE_MINUTES) {
+    throw new PipelineInputError(
+      `定时间隔必须是 ${MIN_SCHEDULE_MINUTES}–${MAX_SCHEDULE_MINUTES} 之间的整数分钟`,
+    );
+  }
+  return minutes;
 }
 
 export async function listPipelines(context: UserContext): Promise<PipelineView[]> {
   return withUserContext(context, async (client) => {
     await requireContextPermission(client, context, "pipeline:use", departmentResource(context));
     const { rows } = await client.query<PipelineRow>(
-      `select id, name, description, steps, enabled, created_at
+      `select ${PIPELINE_COLUMNS}
          from pipelines
         where tenant_id = $1
         order by created_at desc
@@ -169,6 +210,7 @@ export async function createPipeline(
     throw new PipelineInputError("产线说明不能超过 300 字");
   }
   const steps = normalizeSteps(input.steps);
+  const scheduleIntervalMinutes = normalizeSchedule(input.scheduleIntervalMinutes);
   const departmentId = context.activeDepartmentId;
   if (!departmentId) {
     throw new PipelineInputError("当前账号没有有效部门上下文");
@@ -177,10 +219,19 @@ export async function createPipeline(
   return withUserContext(context, async (client) => {
     await requireContextPermission(client, context, "pipeline:manage", departmentResource(context));
     const { rows } = await client.query<PipelineRow>(
-      `insert into pipelines (tenant_id, department_id, name, description, steps, created_by)
-       values ($1, $2, $3, $4, $5::jsonb, $6)
-       returning id, name, description, steps, enabled, created_at`,
-      [context.tenantId, departmentId, name, description, JSON.stringify(steps), context.userId],
+      `insert into pipelines
+         (tenant_id, department_id, name, description, steps, schedule_interval_minutes, created_by)
+       values ($1, $2, $3, $4, $5::jsonb, $6, $7)
+       returning ${PIPELINE_COLUMNS}`,
+      [
+        context.tenantId,
+        departmentId,
+        name,
+        description,
+        JSON.stringify(steps),
+        scheduleIntervalMinutes,
+        context.userId,
+      ],
     );
     const row = rows[0];
     if (!row) {
@@ -224,20 +275,31 @@ export async function setPipelineEnabled(
   });
 }
 
+export type PipelineTrigger = "manual" | "schedule";
+
 export interface PipelineRunResult {
   runId: string;
   workItemIds: string[];
   failedStep: string | null;
+  /** 下一个待派步骤下标；等于步骤总数表示已全部派出 */
+  nextStepIndex: number;
+  trigger: PipelineTrigger;
+}
+
+export interface RunPipelineOptions {
+  trigger?: PipelineTrigger;
 }
 
 export async function runPipeline(
   context: UserContext,
   pipelineId: string,
+  options: RunPipelineOptions = {},
 ): Promise<PipelineRunResult> {
+  const trigger: PipelineTrigger = options.trigger === "schedule" ? "schedule" : "manual";
   const pipeline = await withUserContext(context, async (client: PoolClient) => {
     await requireContextPermission(client, context, "pipeline:use", departmentResource(context));
     const { rows } = await client.query<PipelineRow>(
-      `select id, name, description, steps, enabled, created_at
+      `select ${PIPELINE_COLUMNS}
          from pipelines
         where id = $1 and tenant_id = $2`,
       [pipelineId, context.tenantId],
@@ -255,22 +317,24 @@ export async function runPipeline(
     return row;
   });
 
+  const steps = pipeline.steps ?? [];
+  const first = steps[0];
   const workItemIds: string[] = [];
   let failedStep: string | null = null;
 
-  for (const step of pipeline.steps ?? []) {
-    try {
-      const assigned = await assignWork(context, {
-        title: step.title,
-        brief: step.brief,
-        aiEmployeeId: step.aiEmployeeId,
-      });
-      workItemIds.push(assigned.workItemId);
-    } catch {
-      failedStep = step.title;
-      break;
-    }
+  // 只派第一步：后续步骤等上一步结束后由 runner 推进，便于引用上一步产物
+  try {
+    const assigned = await assignWork(context, {
+      title: first.title,
+      brief: first.brief,
+      aiEmployeeId: first.aiEmployeeId,
+    });
+    workItemIds.push(assigned.workItemId);
+  } catch {
+    failedStep = first.title;
   }
+
+  const nextStepIndex = failedStep ? 0 : 1;
 
   const run = await withUserContext(context, async (client) => {
     await requireContextPermission(client, context, "pipeline:use", departmentResource(context));
@@ -280,10 +344,21 @@ export async function runPipeline(
     }
     const { rows } = await client.query<{ id: string }>(
       `insert into pipeline_runs
-         (pipeline_id, tenant_id, department_id, work_item_ids, failed_step, requested_by)
-       values ($1, $2, $3, $4::uuid[], $5, $6)
+         (pipeline_id, tenant_id, department_id, work_item_ids, failed_step,
+          trigger_kind, next_step_index, finished_at, requested_by)
+       values ($1, $2, $3, $4::uuid[], $5, $6, $7, case when $8 then now() else null end, $9)
        returning id`,
-      [pipeline.id, context.tenantId, departmentId, workItemIds, failedStep, context.userId],
+      [
+        pipeline.id,
+        context.tenantId,
+        departmentId,
+        workItemIds,
+        failedStep,
+        trigger,
+        nextStepIndex,
+        failedStep !== null,
+        context.userId,
+      ],
     );
     const runId = rows[0]?.id;
     if (!runId) {
@@ -300,12 +375,13 @@ export async function runPipeline(
         pipeline_name: pipeline.name,
         created: workItemIds.length,
         failed_step: failedStep,
+        trigger,
       },
     });
     return runId;
   });
 
-  return { runId: run, workItemIds, failedStep };
+  return { runId: run, workItemIds, failedStep, nextStepIndex, trigger };
 }
 
 export async function listPipelineRuns(
@@ -317,7 +393,7 @@ export async function listPipelineRuns(
     await requireContextPermission(client, context, "pipeline:use", departmentResource(context));
     const { rows } = await client.query<PipelineRunRow>(
       `select r.id, r.pipeline_id, p.name as pipeline_name, r.work_item_ids,
-              r.failed_step, r.created_at,
+              r.failed_step, r.skipped_steps, r.trigger_kind, r.created_at,
               coalesce(sum(case when wi.status in ('queued', 'running') then 1 else 0 end), 0)::int as active_count,
               coalesce(sum(case when wi.status = 'waiting_review' then 1 else 0 end), 0)::int as review_count,
               coalesce(sum(case when wi.status = 'done' then 1 else 0 end), 0)::int as done_count,
@@ -341,6 +417,8 @@ export async function listPipelineRuns(
       doneCount: row.done_count,
       failedCount: row.failed_count,
       failedStep: row.failed_step,
+      skippedSteps: row.skipped_steps ?? [],
+      triggerKind: row.trigger_kind === "schedule" ? "schedule" : "manual",
       status: runStatus(row),
       createdAt: row.created_at.toISOString(),
     }));

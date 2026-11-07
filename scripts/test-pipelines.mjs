@@ -1,5 +1,5 @@
 /**
- * 自动化产线（P5 后续切片）验收：定义、批量派活、运行记录与权限边界。
+ * 自动化产线验收：定义、首步派活、链式推进、可选步骤、产物传递与定时触发。
  *
  * 会创建真实 work_item 与 queued run；请在测试前停止 worker 避免被领取：
  *   docker stop jxf-ai-worker-app-1
@@ -14,6 +14,7 @@ import {
   listPipelines,
   runPipeline,
 } from "../src/lib/pipelines.ts";
+import { advancePipelineRuns, applyPrevious, sweepScheduledPipelines } from "../src/lib/pipeline-runner.ts";
 
 const TENANT = process.env.JXF_TENANT_ID;
 const HOST = process.env.SEED_DB_HOST ?? "127.0.0.1";
@@ -73,6 +74,26 @@ async function buildContext(client, actor) {
   };
 }
 
+async function workItem(owner, id) {
+  const { rows } = await owner.query(
+    `select id, status, brief, current_run_id, deliverable->>'text' as text
+       from work_items where id = $1`,
+    [id],
+  );
+  return rows[0] ?? null;
+}
+
+async function finishWorkItem(owner, id, status, text = "") {
+  await owner.query(
+    `update work_items
+        set status = $2::work_item_status,
+            deliverable = case when $3::text = '' then deliverable else jsonb_build_object('text', $3::text) end,
+            updated_at = now()
+      where id = $1`,
+    [id, status, text],
+  );
+}
+
 async function main() {
   if (!TENANT || !DB || !process.env.JXF_OWNER_USER || !process.env.JXF_APP_USER) {
     throw new Error("缺少数据库环境变量，请用 npm run test:pipelines 执行");
@@ -89,10 +110,10 @@ async function main() {
 
   const stamp = Date.now();
   let employeeId = null;
-  let pipelineId = null;
-  let pipelineRunId = null;
+  const pipelineIds = [];
   const workItemIds = [];
   const runIds = [];
+  let hooks = null;
 
   try {
     const employee = await owner.query(
@@ -109,50 +130,197 @@ async function main() {
     );
 
     const l1 = await buildContext(owner, l1Actor);
+    hooks = { resolveContext: async () => l1 };
 
+    // ------------------------------------------------------------------
+    // 1. 链式推进：首步派发 → 完成 → 带产物派下一步 → 可选步骤失败跳过
+    // ------------------------------------------------------------------
+    const chainTitles = [`整理数据 ${stamp}`, `生成摘要 ${stamp}`, `输出终稿 ${stamp}`];
     const pipeline = await createPipeline(l1, {
       name: `产线测试 ${stamp}`,
       description: "自动化测试创建的临时产线",
+      scheduleIntervalMinutes: null,
       steps: [
-        { title: "整理数据", brief: "整理本季度销售数据并输出要点", aiEmployeeId: employeeId, aiEmployeeName: "产线测试员工" },
-        { title: "生成摘要", brief: "基于上一步结果生成三层摘要", aiEmployeeId: employeeId, aiEmployeeName: "产线测试员工" },
+        { title: chainTitles[0], brief: "整理本季度销售数据并输出要点", aiEmployeeId: employeeId, aiEmployeeName: "产线测试员工" },
+        {
+          title: chainTitles[1],
+          brief: "基于上一步结果生成三层摘要：{{previous}}",
+          aiEmployeeId: employeeId,
+          aiEmployeeName: "产线测试员工",
+          optional: true,
+        },
+        { title: chainTitles[2], brief: "基于摘要输出 200 字终稿", aiEmployeeId: employeeId, aiEmployeeName: "产线测试员工" },
       ],
     });
-    pipelineId = pipeline.id;
-    check("L1 可创建产线", pipeline.steps.length === 2 && pipeline.enabled);
+    pipelineIds.push(pipeline.id);
+    check("L1 可创建产线", pipeline.steps.length === 3 && pipeline.enabled);
+    check("可选步骤标记已保存", pipeline.steps[1]?.optional === true);
 
     const listed = await listPipelines(l1);
-    check("L1 可见新建产线", listed.some((item) => item.id === pipelineId));
+    check("L1 可见新建产线", listed.some((item) => item.id === pipeline.id));
 
-    const result = await runPipeline(l1, pipelineId);
-    pipelineRunId = result.runId;
-    check("运行产线派出全部步骤", result.workItemIds.length === 2 && result.failedStep === null);
+    const result = await runPipeline(l1, pipeline.id);
+    check(
+      "运行只派第一步",
+      result.workItemIds.length === 1 && result.nextStepIndex === 1 && result.failedStep === null,
+    );
+    check("运行触发方式为手动", result.trigger === "manual");
     workItemIds.push(...result.workItemIds);
 
-    const items = await owner.query(
-      "select id, status, current_run_id from work_items where id = any($1::uuid[])",
-      [workItemIds],
+    let runs = await listPipelineRuns(l1);
+    let target = runs.find((item) => item.id === result.runId);
+    const counted =
+      (target?.activeCount ?? 0) +
+      (target?.reviewCount ?? 0) +
+      (target?.doneCount ?? 0) +
+      (target?.failedCount ?? 0);
+    check(
+      "运行记录聚合到已派出的 1 个步骤",
+      target?.workItemIds.length === 1 && counted === 1,
+      JSON.stringify({ counted, target }),
     );
-    check("工作项已落库并排队", items.rows.length === 2 && items.rows.every((row) => row.status === "queued"));
-    for (const row of items.rows) {
-      if (row.current_run_id) {
-        runIds.push(row.current_run_id);
-      }
+
+    let first = await workItem(owner, result.workItemIds[0]);
+    check(
+      "第一步工作项已进入队列",
+      ["queued", "running"].includes(first?.status ?? "") && Boolean(first?.current_run_id),
+      first?.status ?? "missing",
+    );
+    if (first?.current_run_id) {
+      runIds.push(first.current_run_id);
     }
-    check("每一步都受理了 run", runIds.length === 2);
 
-    const runs = await listPipelineRuns(l1);
-    const target = runs.find((item) => item.pipelineId === pipelineId);
-    check("运行记录聚合状态为执行中", target?.status === "running" && target.activeCount === 2);
+    await finishWorkItem(owner, result.workItemIds[0], "done", "第一步交付：销售额 120 万");
+    const advanced = await advancePipelineRuns(owner, hooks, { runIds: [result.runId] });
+    check("上一步完成后推进下一步", advanced[0]?.action === "dispatched" && advanced[0]?.step === chainTitles[1]);
 
-    const audits = await owner.query(
-      "select action from audit_events where target_id = any($1::uuid[])",
-      [[pipelineId, pipelineRunId].filter(Boolean)],
+    let runRow = await owner.query(
+      "select work_item_ids, next_step_index from pipeline_runs where id = $1",
+      [result.runId],
+    );
+    check("运行记录推进到第 2 步", runRow.rows[0]?.next_step_index === 2);
+
+    const secondId = runRow.rows[0].work_item_ids[1];
+    workItemIds.push(secondId);
+    const second = await workItem(owner, secondId);
+    check("第二步引用了上一步交付", second?.brief.includes("销售额 120 万") === true, second?.brief ?? "");
+    check("第二步未残留占位符", second?.brief.includes("{{previous}}") === false);
+    if (second?.current_run_id) {
+      runIds.push(second.current_run_id);
+    }
+
+    // 可选步骤失败 → 跳过并继续第 3 步
+    await finishWorkItem(owner, secondId, "failed");
+    const skipped = await advancePipelineRuns(owner, hooks, { runIds: [result.runId] });
+    check("可选步骤失败后跳过并继续", skipped[0]?.action === "skipped" && skipped[0]?.step === chainTitles[2]);
+
+    runRow = await owner.query(
+      "select work_item_ids, next_step_index, skipped_steps, failed_step, finished_at from pipeline_runs where id = $1",
+      [result.runId],
+    );
+    const thirdId = runRow.rows[0].work_item_ids[2];
+    workItemIds.push(thirdId);
+    check("跳过步骤已记录", (runRow.rows[0].skipped_steps ?? []).includes(chainTitles[1]));
+    check("整条产线未被标记失败", runRow.rows[0].failed_step === null);
+
+    await finishWorkItem(owner, thirdId, "done", "终稿");
+    const completed = await advancePipelineRuns(owner, hooks, { runIds: [result.runId] });
+    check("最后一步完成后运行收口", completed[0]?.action === "completed");
+
+    runs = await listPipelineRuns(l1);
+    target = runs.find((item) => item.id === result.runId);
+    check(
+      "运行记录展示跳过步骤且状态为完成",
+      target?.status === "done" && target.skippedSteps.includes(chainTitles[1]),
+    );
+
+    // ------------------------------------------------------------------
+    // 2. 非可选步骤失败 → 整条产线停止
+    // ------------------------------------------------------------------
+    const strict = await createPipeline(l1, {
+      name: `严格产线 ${stamp}`,
+      steps: [
+        { title: `严格第一步 ${stamp}`, brief: "第一步", aiEmployeeId: employeeId, aiEmployeeName: "产线测试员工" },
+        { title: `严格第二步 ${stamp}`, brief: "第二步", aiEmployeeId: employeeId, aiEmployeeName: "产线测试员工" },
+      ],
+    });
+    pipelineIds.push(strict.id);
+    const strictRun = await runPipeline(l1, strict.id);
+    workItemIds.push(...strictRun.workItemIds);
+    const strictItem = await workItem(owner, strictRun.workItemIds[0]);
+    if (strictItem?.current_run_id) {
+      runIds.push(strictItem.current_run_id);
+    }
+    await finishWorkItem(owner, strictRun.workItemIds[0], "failed");
+    const stopped = await advancePipelineRuns(owner, hooks, { runIds: [strictRun.runId] });
+    check("非可选步骤失败即停止", stopped[0]?.action === "failed");
+    const strictRow = await owner.query(
+      "select failed_step, finished_at, next_step_index from pipeline_runs where id = $1",
+      [strictRun.runId],
     );
     check(
-      "创建与运行均写审计",
+      "失败步骤与收口时间已写入",
+      strictRow.rows[0]?.failed_step === `严格第一步 ${stamp}` &&
+        Boolean(strictRow.rows[0]?.finished_at) &&
+        strictRow.rows[0]?.next_step_index === 1,
+    );
+
+    // ------------------------------------------------------------------
+    // 3. 定时触发：到点发起、同窗口不重复
+    // ------------------------------------------------------------------
+    const scheduled = await createPipeline(l1, {
+      name: `定时产线 ${stamp}`,
+      scheduleIntervalMinutes: 5,
+      steps: [
+        { title: `定时第一步 ${stamp}`, brief: "定时任务", aiEmployeeId: employeeId, aiEmployeeName: "产线测试员工" },
+        { title: `定时第二步 ${stamp}`, brief: "定时后续", aiEmployeeId: employeeId, aiEmployeeName: "产线测试员工" },
+      ],
+    });
+    pipelineIds.push(scheduled.id);
+    check("定时间隔已保存", scheduled.scheduleIntervalMinutes === 5);
+
+    const swept = await sweepScheduledPipelines(owner, hooks);
+    const mine = swept.find((item) => item.pipelineId === scheduled.id);
+    check("定时产线到点自动发起", Boolean(mine?.runId) && mine?.error === null, mine?.error ?? "");
+    if (mine?.runId) {
+      const scheduledRun = await owner.query(
+        "select trigger_kind, work_item_ids from pipeline_runs where id = $1",
+        [mine.runId],
+      );
+      check("定时运行记录 trigger=schedule", scheduledRun.rows[0]?.trigger_kind === "schedule");
+      for (const id of scheduledRun.rows[0]?.work_item_ids ?? []) {
+        workItemIds.push(id);
+        const item = await workItem(owner, id);
+        if (item?.current_run_id) {
+          runIds.push(item.current_run_id);
+        }
+      }
+    }
+    const sweptAgain = await sweepScheduledPipelines(owner, hooks);
+    check("同一时间窗不重复触发", !sweptAgain.some((item) => item.pipelineId === scheduled.id));
+
+    // ------------------------------------------------------------------
+    // 4. 产物占位符
+    // ------------------------------------------------------------------
+    check("占位符替换为交付文本", applyPrevious("基于：{{previous}}", "结论 A") === "基于：结论 A");
+    check(
+      "无产物时显式说明",
+      applyPrevious("基于：{{previous}}", null) === "基于：（上一步没有可用交付物）",
+    );
+    check("无占位符时原样返回", applyPrevious("直接执行", "无关") === "直接执行");
+
+    // ------------------------------------------------------------------
+    // 5. 审计与权限边界
+    // ------------------------------------------------------------------
+    const audits = await owner.query(
+      "select action from audit_events where target_id = any($1::uuid[])",
+      [[...pipelineIds, result.runId].filter(Boolean)],
+    );
+    check(
+      "创建、运行与推进均写审计",
       audits.rows.some((row) => row.action === "pipeline.created") &&
-        audits.rows.some((row) => row.action === "pipeline.run"),
+        audits.rows.some((row) => row.action === "pipeline.run") &&
+        audits.rows.some((row) => row.action === "pipeline.step_dispatched"),
     );
 
     if (l2Actor) {
@@ -166,23 +334,33 @@ async function main() {
       check("L2 无管理产线权限时创建被拒绝", denied);
     }
   } finally {
-    if (pipelineId) {
-      await owner.query("delete from audit_events where target_id = $1", [pipelineId]).catch(() => undefined);
-    }
-    if (pipelineRunId) {
-      await owner.query("delete from audit_events where target_id = $1", [pipelineRunId]).catch(() => undefined);
+    if (pipelineIds.length > 0) {
+      await owner
+        .query("delete from audit_events where target_id = any($1::uuid[])", [pipelineIds])
+        .catch(() => undefined);
     }
     if (workItemIds.length > 0) {
-      await owner.query("delete from audit_events where target_id = any($1::uuid[])", [workItemIds]).catch(() => undefined);
+      await owner
+        .query("delete from audit_events where target_id = any($1::uuid[])", [workItemIds])
+        .catch(() => undefined);
       await owner.query("delete from work_items where id = any($1::uuid[])", [workItemIds]).catch(() => undefined);
     }
     if (runIds.length > 0) {
       await owner.query("delete from audit_events where target_id = any($1::uuid[])", [runIds]).catch(() => undefined);
       await owner.query("delete from runs where id = any($1::uuid[])", [runIds]).catch(() => undefined);
     }
-    if (pipelineId) {
-      await owner.query("delete from pipeline_runs where pipeline_id = $1", [pipelineId]).catch(() => undefined);
-      await owner.query("delete from pipelines where id = $1", [pipelineId]).catch(() => undefined);
+    if (pipelineIds.length > 0) {
+      const runRows = await owner
+        .query("select id from pipeline_runs where pipeline_id = any($1::uuid[])", [pipelineIds])
+        .catch(() => ({ rows: [] }));
+      const pipelineRunIds = runRows.rows.map((row) => row.id);
+      if (pipelineRunIds.length > 0) {
+        await owner
+          .query("delete from audit_events where target_id = any($1::uuid[])", [pipelineRunIds])
+          .catch(() => undefined);
+      }
+      await owner.query("delete from pipeline_runs where pipeline_id = any($1::uuid[])", [pipelineIds]).catch(() => undefined);
+      await owner.query("delete from pipelines where id = any($1::uuid[])", [pipelineIds]).catch(() => undefined);
     }
     if (employeeId) {
       await owner.query("delete from ai_employee_grants where ai_employee_id = $1", [employeeId]).catch(() => undefined);

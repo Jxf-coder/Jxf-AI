@@ -28,8 +28,9 @@ export default async function PipelinesPage() {
       <div>
         <h1 className={pageTitle}>自动化产线</h1>
         <p className={pageSubtitle}>
-          把一组派活步骤固化成产线，一键批量交给 AI 员工执行。每一步复用现有任务队列，
-          交付物仍在 AI 员工页人工验收。
+          把一组派活步骤固化成产线：运行只派第一步，上一步完成后由 runner 自动推进；
+          可设置定时触发、可选步骤，并用 {"{{previous}}"} 把上一步交付传给下一步。
+          每一步复用现有任务队列，交付物仍在 AI 员工页人工验收。
         </p>
       </div>
     </header>

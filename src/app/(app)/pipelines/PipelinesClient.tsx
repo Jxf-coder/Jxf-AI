@@ -41,6 +41,7 @@ interface StepDraft {
   title: string;
   brief: string;
   aiEmployeeId: string;
+  optional: boolean;
 }
 
 interface Message {
@@ -69,7 +70,7 @@ function formatTime(value: string): string {
   return `${value.slice(0, 19).replace("T", " ")} UTC`;
 }
 
-const EMPTY_STEP: StepDraft = { title: "", brief: "", aiEmployeeId: "" };
+const EMPTY_STEP: StepDraft = { title: "", brief: "", aiEmployeeId: "", optional: false };
 
 export function PipelinesClient({
   pipelines,
@@ -80,6 +81,7 @@ export function PipelinesClient({
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [schedule, setSchedule] = useState("");
   const [steps, setSteps] = useState<StepDraft[]>([{ ...EMPTY_STEP }]);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
@@ -103,11 +105,13 @@ export function PipelinesClient({
       const result = await createPipelineAction({
         name: name.trim(),
         description: description.trim(),
+        scheduleIntervalMinutes: schedule.trim() ? Number.parseInt(schedule.trim(), 10) : null,
         steps: steps.map((step) => ({
           title: step.title.trim(),
           brief: step.brief.trim(),
           aiEmployeeId: step.aiEmployeeId,
           aiEmployeeName: employees.find((employee) => employee.id === step.aiEmployeeId)?.name ?? "AI 员工",
+          optional: step.optional,
         })),
       });
       setMessage({ tone: result.ok ? "info" : "error", text: result.message });
@@ -115,6 +119,7 @@ export function PipelinesClient({
         setCreating(false);
         setName("");
         setDescription("");
+        setSchedule("");
         setSteps([{ ...EMPTY_STEP }]);
       }
     } finally {
@@ -150,7 +155,7 @@ export function PipelinesClient({
 
       <SectionCard
         title="产线定义"
-        desc="一步一个任务：选择 AI 员工并写清目标与交付要求。运行后按顺序派活，失败即停。"
+        desc="一步一个任务：选员工、写清目标与交付要求。运行只派第一步，上一步完成后由 runner 自动推进下一步；可用 {{previous}} 引用上一步交付。"
         right={
           canManage ? (
             <button
@@ -184,6 +189,17 @@ export function PipelinesClient({
                   maxLength={300}
                   placeholder="这条产线解决什么问题"
                   onChange={(event) => setDescription(event.target.value)}
+                />
+              </Field>
+              <Field label="定时触发（分钟，留空只手动）">
+                <input
+                  type="number"
+                  min={5}
+                  max={10080}
+                  className={input}
+                  value={schedule}
+                  placeholder="例如 1440 = 每天一次"
+                  onChange={(event) => setSchedule(event.target.value)}
                 />
               </Field>
             </div>
@@ -235,10 +251,18 @@ export function PipelinesClient({
                       className={`${input} min-h-[70px] resize-y`}
                       value={step.brief}
                       maxLength={2000}
-                      placeholder="目标、背景、约束、交付格式"
+                      placeholder="目标、背景、约束、交付格式；可用 {{previous}} 引用上一步交付"
                       onChange={(event) => updateStep(index, { brief: event.target.value })}
                     />
                   </Field>
+                  <label className="inline-flex items-center gap-2 text-[12px] text-zinc-600">
+                    <input
+                      type="checkbox"
+                      checked={step.optional}
+                      onChange={(event) => updateStep(index, { optional: event.target.checked })}
+                    />
+                    可选步骤：失败时跳过并继续，不阻断整条产线
+                  </label>
                 </div>
               ))}
             </div>
@@ -289,13 +313,23 @@ export function PipelinesClient({
                         {pipeline.enabled ? "启用中" : "已停用"}
                       </span>
                       <span className={badge()}>{pipeline.steps.length} 步</span>
+                      {pipeline.scheduleIntervalMinutes ? (
+                        <span className={badge("blue")}>
+                          每 {pipeline.scheduleIntervalMinutes} 分钟
+                        </span>
+                      ) : null}
                     </div>
                     {pipeline.description ? (
                       <p className={`${meta} mt-1`}>{pipeline.description}</p>
                     ) : null}
                     <p className={`${meta} mt-1`}>
                       {pipeline.steps
-                        .map((step, index) => `${index + 1}. ${step.title}（${step.aiEmployeeName}）`)
+                        .map(
+                          (step, index) =>
+                            `${index + 1}. ${step.title}（${step.aiEmployeeName}${
+                              step.optional ? " · 可选" : ""
+                            }）`,
+                        )
                         .join(" → ")}
                     </p>
                   </div>
@@ -340,8 +374,9 @@ export function PipelinesClient({
                 <tr>
                   <th>产线</th>
                   <th>状态</th>
+                  <th>触发</th>
                   <th>进度</th>
-                  <th>失败步骤</th>
+                  <th>失败 / 跳过</th>
                   <th>发起时间</th>
                 </tr>
               </thead>
@@ -352,11 +387,15 @@ export function PipelinesClient({
                     <td>
                       <span className={badge(runTone(run.status))}>{RUN_STATUS_LABEL[run.status]}</span>
                     </td>
+                    <td>{run.triggerKind === "schedule" ? "定时" : "手动"}</td>
                     <td className="mono">
                       执行 {run.activeCount} · 待验收 {run.reviewCount} · 完成 {run.doneCount} · 失败{" "}
                       {run.failedCount}
                     </td>
-                    <td className="mono">{run.failedStep ?? "—"}</td>
+                    <td className="mono">
+                      {run.failedStep ? `失败：${run.failedStep}` : "—"}
+                      {run.skippedSteps.length > 0 ? ` · 跳过：${run.skippedSteps.join("、")}` : ""}
+                    </td>
                     <td className="mono">{formatTime(run.createdAt)}</td>
                   </tr>
                 ))}

@@ -5,17 +5,20 @@
  * 本脚本用 owner 连接领取任务，执行白名单内的固定命令，再回写状态。
  *
  * 用法：
- *   npm run ops:runner            # 常驻轮询（3 秒一次）+ 每 5 分钟连接器心跳
+ *   npm run ops:runner            # 常驻轮询（3 秒一次）+ 连接器心跳 + 产线推进
  *   npm run ops:runner -- --once  # 执行一轮任务后退出，可交给 cron / systemd timer
  *   npm run ops:runner -- --health-once   # 只做一次连接器体检后退出
+ *   npm run ops:runner -- --pipelines-once # 只推进一轮产线后退出
  *   npm run ops:runner -- --no-health     # 关闭周期性连接器体检
+ *   npm run ops:runner -- --no-pipelines  # 关闭产线定时触发与链式推进
  *
- * 依赖：宿主机已 `npm install`（runner 通过 tsx 直接加载 src/lib/mcp/health.ts）。
+ * 依赖：宿主机已 `npm install`（runner 通过 tsx 直接加载 src/lib 下的 TS 模块）。
  *
  * 安全边界：
  * - 只支持 backup / restore_verify 两种类型，参数只有 cold；
  * - 不拼接 shell，不执行来自数据库的任意命令或路径；
- * - 恢复演练固定使用最近一次备份，永不覆盖生产库。
+ * - 恢复演练固定使用最近一次备份，永不覆盖生产库；
+ * - 产线推进仍走 assignWork（jxf_app + RLS），使用产线发起人的用户上下文。
  */
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -23,6 +26,8 @@ import path from "node:path";
 import { Client } from "pg";
 
 import { checkConnectorsAsOwner, sendHealthWebhook } from "../src/lib/mcp/health.ts";
+import { resolveUserContext } from "../src/lib/db/user-context.ts";
+import { advancePipelineRuns, sweepScheduledPipelines } from "../src/lib/pipeline-runner.ts";
 import { ROOT, latestBackupDir, parseArgs } from "./lib/delivery.mjs";
 
 const HOST = process.env.SEED_DB_HOST ?? "127.0.0.1";
@@ -32,6 +37,8 @@ const OWNER_URL = `postgresql://${process.env.JXF_OWNER_USER}:${process.env.JXF_
 const POLL_MS = 3_000;
 const HEALTH_INTERVAL_MS =
   Number.parseInt(process.env.MCP_HEALTH_INTERVAL_MS ?? "300000", 10) || 300_000;
+const PIPELINE_TICK_MS =
+  Number.parseInt(process.env.PIPELINE_TICK_MS ?? "60000", 10) || 60_000;
 
 let stopping = false;
 
@@ -150,6 +157,43 @@ async function runHealthSweep(client) {
   }
 }
 
+/** 产线推进：到点触发定时产线，并推动已完成的运行进入下一步 */
+async function runPipelineTick(client) {
+  const startedAt = Date.now();
+  const hooks = { resolveContext: (userId) => resolveUserContext(userId) };
+  try {
+    const scheduled = await sweepScheduledPipelines(client, hooks);
+    const advanced = await advancePipelineRuns(client, hooks);
+
+    for (const item of scheduled) {
+      if (item.error) {
+        log("定时产线触发失败", { pipeline: item.pipelineName, error: item.error });
+      }
+    }
+    for (const item of advanced) {
+      if (item.action === "failed") {
+        log("产线推进失败", {
+          pipeline: item.pipelineName,
+          step: item.failedStep,
+          error: item.error,
+        });
+      }
+    }
+
+    const moved = advanced.filter((item) => item.action !== "waiting").length;
+    if (scheduled.length > 0 || moved > 0) {
+      log("产线推进完成", {
+        scheduled: scheduled.length,
+        advanced: moved,
+        waiting: advanced.length - moved,
+        duration_ms: Date.now() - startedAt,
+      });
+    }
+  } catch (error) {
+    log("产线推进失败", { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!DB || !process.env.JXF_OWNER_USER || !process.env.JXF_OWNER_PASSWORD) {
@@ -169,6 +213,14 @@ async function main() {
     log("已收口中断任务", { count: swept.rowCount });
   }
 
+  // 只推进一轮产线（可交给 cron / systemd timer）
+  if (args["pipelines-once"] === true) {
+    await runPipelineTick(client);
+    await client.end().catch(() => undefined);
+    log("已退出");
+    return;
+  }
+
   // 只做一次连接器体检（可交给 cron / systemd timer）
   if (args["health-once"] === true) {
     await runHealthSweep(client);
@@ -185,13 +237,17 @@ async function main() {
   });
 
   const healthEnabled = args["no-health"] !== true;
+  const pipelineEnabled = args["no-pipelines"] !== true;
   let lastHealthAt = args.once === true ? Date.now() : 0;
+  let lastPipelineAt = args.once === true ? Date.now() : 0;
 
   log("已启动", {
     once: args.once === true,
     poll_ms: POLL_MS,
     health_enabled: healthEnabled,
     health_interval_ms: HEALTH_INTERVAL_MS,
+    pipelines_enabled: pipelineEnabled,
+    pipeline_tick_ms: PIPELINE_TICK_MS,
   });
 
   try {
@@ -199,6 +255,11 @@ async function main() {
       if (healthEnabled && Date.now() - lastHealthAt >= HEALTH_INTERVAL_MS) {
         lastHealthAt = Date.now();
         await runHealthSweep(client);
+      }
+
+      if (pipelineEnabled && Date.now() - lastPipelineAt >= PIPELINE_TICK_MS) {
+        lastPipelineAt = Date.now();
+        await runPipelineTick(client);
       }
 
       let task = null;
