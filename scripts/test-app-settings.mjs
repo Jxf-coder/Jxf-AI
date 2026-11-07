@@ -56,6 +56,19 @@ async function runAs(actor, fn) {
   });
 }
 
+/** 期望被权限 / RLS 拒绝的语句：用 savepoint 包住，避免事务进入 aborted 状态 */
+async function expectDenied(client, sql, params = []) {
+  await client.query("savepoint deny");
+  try {
+    await client.query(sql, params);
+    await client.query("release savepoint deny");
+    return false;
+  } catch {
+    await client.query("rollback to savepoint deny");
+    return true;
+  }
+}
+
 async function loadActor(level) {
   return withClient(OWNER_URL, async (owner) => {
     const { rows } = await owner.query(
@@ -155,6 +168,22 @@ async function main() {
       [TENANT, l1.userId, l1.departmentId],
     );
     check("审计可写入 target_id=null", audit.rowCount === 1);
+
+    const opsInsert = await client.query(
+      `insert into ops_tasks (tenant_id, kind, params, requested_by_user_id)
+       values ($1, 'backup', '{"cold":false}'::jsonb, $2)
+       returning id`,
+      [TENANT, l1.userId],
+    );
+    check("L1 可发起运维任务", opsInsert.rowCount === 1);
+
+    const opsRead = await client.query("select id, status from ops_tasks where id = $1", [
+      opsInsert.rows[0]?.id,
+    ]);
+    check("L1 可读运维任务", opsRead.rows.length === 1 && opsRead.rows[0]?.status === "queued");
+
+    const opsUpdateDenied = await expectDenied(client, "update ops_tasks set status = 'done'");
+    check("业务角色不能修改任务状态", opsUpdateDenied);
   });
 
   await runAs(l3, async (client) => {
@@ -164,11 +193,19 @@ async function main() {
     const updated = await client.query("update app_settings set site_name = '越权' where id = 1");
     check("L3 更新影响 0 行", updated.rowCount === 0);
 
-    const inserted = await client
-      .query("insert into app_settings (id) values (2)")
-      .then(() => true)
-      .catch(() => false);
-    check("业务角色不能新增设置行", inserted === false);
+    const insertedDenied = await expectDenied(client, "insert into app_settings (id) values (2)");
+    check("业务角色不能新增设置行", insertedDenied);
+
+    const opsInsertDenied = await expectDenied(
+      client,
+      `insert into ops_tasks (tenant_id, kind, params, requested_by_user_id)
+       values ($1, 'backup', '{}'::jsonb, $2)`,
+      [TENANT, l3.userId],
+    );
+    check("L3 不能发起运维任务", opsInsertDenied);
+
+    const opsRead = await client.query("select count(*)::int as n from ops_tasks");
+    check("L3 看不到运维任务", opsRead.rows[0]?.n === 0);
   });
 
   console.log(`\n[settings] passed=${passed} failed=${failed}`);

@@ -10,6 +10,7 @@ import {
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext } from "@/lib/db/user-context";
 import { loadEnv } from "@/lib/env";
+import { listOpsTasks } from "@/lib/ops/tasks";
 import { getEffectiveAiSummary } from "@/lib/settings/ai";
 import { readDeliveryStatus } from "@/lib/settings/delivery-status";
 import { readPlatformSettings } from "@/lib/settings/store";
@@ -44,9 +45,10 @@ export default async function SettingsPage() {
     );
   }
 
-  const [settings, effective] = await Promise.all([
+  const [settings, effective, opsTasks] = await Promise.all([
     readPlatformSettings(context),
     Promise.resolve(getEffectiveAiSummary()),
+    listOpsTasks(context),
   ]);
   const delivery = readDeliveryStatus();
   const env = loadEnv();
@@ -63,6 +65,7 @@ export default async function SettingsPage() {
           settings={settings}
           effective={effective}
           delivery={delivery}
+          opsTasks={opsTasks}
           version={env.version}
           appEnv={env.appEnv}
         />

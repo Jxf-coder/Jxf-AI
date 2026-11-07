@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext } from "@/lib/db/user-context";
 import { errorMessage, log } from "@/lib/logger";
+import { OpsTaskError, createOpsTask } from "@/lib/ops/tasks";
+import type { OpsTaskKind, OpsTaskView } from "@/lib/ops/types";
 import { PermissionDeniedError, toPermissionMessage } from "@/lib/permissions/guard";
 import { testAiConnection, type AiTestResult } from "@/lib/settings/ai";
 import { refreshRuntimeSettings } from "@/lib/settings/runtime-server";
@@ -108,3 +110,35 @@ export async function testAiConnectionAction(): Promise<AiTestResult> {
     return { ok: false, message: "测试失败，请稍后重试" };
   }
 }
+
+export interface OpsTaskActionResult {
+  ok: boolean;
+  message: string;
+  task?: OpsTaskView;
+}
+
+const OPS_TASK_MESSAGES: Record<OpsTaskKind, string> = {
+  backup: "备份任务已排队：宿主机 runner 执行后状态会自动刷新",
+  restore_verify: "恢复演练任务已排队：将使用最近一次备份，不会覆盖生产库",
+};
+
+export async function createOpsTaskAction(
+  kind: OpsTaskKind,
+  cold = false,
+): Promise<OpsTaskActionResult> {
+  try {
+    const task = await createOpsTask(await contextOf(), { kind, cold });
+    revalidatePath("/settings");
+    return { ok: true, message: OPS_TASK_MESSAGES[task.kind], task };
+  } catch (error) {
+    if (error instanceof OpsTaskError) {
+      return { ok: false, message: error.message };
+    }
+    if (error instanceof PermissionDeniedError) {
+      return { ok: false, message: toPermissionMessage(error) };
+    }
+    log("error", "settings_ops_task_failed", { kind, error: errorMessage(error) });
+    return { ok: false, message: "任务创建失败，请稍后重试" };
+  }
+}
+

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { Field } from "@/components/knowledge/Field";
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
@@ -16,7 +17,14 @@ import {
   inputInline,
   linkBtn,
   meta,
+  type Tone,
 } from "@/components/knowledge/tokens";
+import {
+  OPS_TASK_KIND_LABEL,
+  type OpsTaskKind,
+  type OpsTaskStatus,
+  type OpsTaskView,
+} from "@/lib/ops/types";
 import type { DeliveryStatus } from "@/lib/settings/delivery-status";
 import {
   CLEAR_API_KEY,
@@ -26,6 +34,7 @@ import {
 } from "@/lib/settings/types";
 
 import {
+  createOpsTaskAction,
   saveAiSettingsAction,
   saveAuditRetentionAction,
   saveBrandingAction,
@@ -36,6 +45,7 @@ interface SettingsClientProps {
   settings: PlatformSettingsView;
   effective: EffectiveAiSummary;
   delivery: DeliveryStatus;
+  opsTasks: OpsTaskView[];
   version: string;
   appEnv: string;
 }
@@ -70,13 +80,54 @@ function StatusBadge({ ok, text }: { ok: boolean; text: string }) {
   return <span className={badge(ok ? "ok" : "muted")}>{text}</span>;
 }
 
+const OPS_STATUS_LABEL: Record<OpsTaskStatus, string> = {
+  queued: "排队中",
+  running: "执行中",
+  done: "已完成",
+  failed: "失败",
+};
+
+function opsTone(status: OpsTaskStatus): Tone {
+  if (status === "done") {
+    return "ok";
+  }
+  if (status === "failed") {
+    return "error";
+  }
+  return status === "running" ? "blue" : "warn";
+}
+
+function formatDuration(value: unknown): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return "—";
+  }
+  return value >= 1000 ? `${(value / 1000).toFixed(1)}s` : `${value}ms`;
+}
+
+function opsResultText(task: OpsTaskView): string {
+  if (task.error) {
+    return task.error;
+  }
+  const dir = task.result?.backup_dir;
+  const from = task.result?.from;
+  if (typeof dir === "string") {
+    return dir;
+  }
+  if (typeof from === "string") {
+    return `来源 ${from}`;
+  }
+  return "—";
+}
+
 export function SettingsClient({
   settings,
   effective,
   delivery,
+  opsTasks,
   version,
   appEnv,
 }: SettingsClientProps) {
+  const router = useRouter();
   const [brand, setBrand] = useState<BrandingSettings>(settings.branding);
   const [brandBusy, setBrandBusy] = useState(false);
   const [brandMessage, setBrandMessage] = useState<Message | null>(null);
@@ -98,6 +149,21 @@ export function SettingsClient({
   const [retention, setRetention] = useState(settings.audit.retentionDays?.toString() ?? "");
   const [retentionBusy, setRetentionBusy] = useState(false);
   const [retentionMessage, setRetentionMessage] = useState<Message | null>(null);
+
+  const [opsKind, setOpsKind] = useState<OpsTaskKind | null>(null);
+  const [opsMessage, setOpsMessage] = useState<Message | null>(null);
+
+  const hasActiveOps = opsTasks.some(
+    (task) => task.status === "queued" || task.status === "running",
+  );
+
+  useEffect(() => {
+    if (!hasActiveOps) {
+      return;
+    }
+    const timer = setInterval(() => router.refresh(), 5_000);
+    return () => clearInterval(timer);
+  }, [hasActiveOps, router]);
 
   async function submitBranding() {
     setBrandBusy(true);
@@ -153,6 +219,20 @@ export function SettingsClient({
       setRetentionMessage({ tone: result.ok ? "info" : "error", text: result.message });
     } finally {
       setRetentionBusy(false);
+    }
+  }
+
+  async function requestOpsTask(kind: OpsTaskKind, cold = false) {
+    setOpsKind(kind);
+    setOpsMessage(null);
+    try {
+      const result = await createOpsTaskAction(kind, cold);
+      setOpsMessage({ tone: result.ok ? "info" : "error", text: result.message });
+      if (result.ok) {
+        router.refresh();
+      }
+    } finally {
+      setOpsKind(null);
     }
   }
 
@@ -527,6 +607,89 @@ export function SettingsClient({
           <Link className={linkBtn} href="/health">
             系统健康状态
           </Link>
+        </p>
+      </SectionCard>
+
+      <SectionCard
+        title="运维任务"
+        desc="由宿主机 runner 执行固定命令，Web 容器不持有 docker 权限。发起后保持本页打开会自动刷新状态。"
+        right={
+          hasActiveOps ? (
+            <span className={badge("warn")}>
+              {opsTasks.filter((task) => task.status === "queued" || task.status === "running").length} 个进行中
+            </span>
+          ) : (
+            <span className={badge()}>{opsTasks.length} 条记录</span>
+          )
+        }
+      >
+        <div className={actions}>
+          <button
+            type="button"
+            className={btnBlue}
+            disabled={opsKind !== null}
+            onClick={() => requestOpsTask("backup")}
+          >
+            {opsKind === "backup" ? "提交中…" : "发起备份（热备）"}
+          </button>
+          <button
+            type="button"
+            className={btnGhost}
+            disabled={opsKind !== null}
+            onClick={() => requestOpsTask("backup", true)}
+          >
+            发起冷备（短暂停应用）
+          </button>
+          <button
+            type="button"
+            className={btnGhost}
+            disabled={opsKind !== null}
+            onClick={() => requestOpsTask("restore_verify")}
+          >
+            {opsKind === "restore_verify" ? "提交中…" : "最近备份恢复演练"}
+          </button>
+        </div>
+        {opsMessage ? <InlineMessage tone={opsMessage.tone}>{opsMessage.text}</InlineMessage> : null}
+
+        {opsTasks.length === 0 ? (
+          <div className="rounded-2xl bg-apple-canvas px-4 py-6 text-center text-[13px] text-zinc-500">
+            还没有运维任务。确认宿主机已运行 <code className="font-mono">npm run ops:runner</code> 后再发起。
+          </div>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>类型</th>
+                  <th>状态</th>
+                  <th>发起时间</th>
+                  <th>耗时</th>
+                  <th>结果</th>
+                </tr>
+              </thead>
+              <tbody>
+                {opsTasks.map((task) => (
+                  <tr key={task.id}>
+                    <td>
+                      {OPS_TASK_KIND_LABEL[task.kind]}
+                      {task.cold ? " · 冷备" : ""}
+                    </td>
+                    <td>
+                      <span className={badge(opsTone(task.status))}>{OPS_STATUS_LABEL[task.status]}</span>
+                    </td>
+                    <td className="mono">{formatUtc(task.requestedAt)}</td>
+                    <td className="mono">{formatDuration(task.result?.duration_ms)}</td>
+                    <td className="mono break-all">{opsResultText(task)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <p className={`${meta} mt-3`}>
+          宿主机常驻：<code className="font-mono">npm run ops:runner</code>；也可用{" "}
+          <code className="font-mono">--once</code> 交给 cron。未启动 runner 时任务会停在「排队中」。
         </p>
       </SectionCard>
     </>
