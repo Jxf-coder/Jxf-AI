@@ -53,6 +53,8 @@ const base = "http://127.0.0.1:3000";
   await hit("handover", "/api/handover/export?membershipId=00000000-0000-4000-8000-000000000000");
   await hit("settings", "/settings", { redirect: "manual" });
   await hit("pipelines", "/pipelines", { redirect: "manual" });
+  await hit("metrics", "/api/metrics");
+  await hit("metricsProm", "/api/metrics?format=prometheus");
   console.log(JSON.stringify(out));
 })();
 `;
@@ -152,6 +154,20 @@ function main() {
     "产线页未登录跳转登录",
     [302, 307].includes(http.pipelines?.status) ? "PASS" : "FAIL",
     `HTTP ${http.pipelines?.status ?? "-"}`,
+  );
+
+  const metrics = http.metrics ? parseJson(http.metrics.body) : null;
+  record(
+    "指标端点 /api/metrics",
+    http.metrics?.status === 200 && metrics?.runs !== undefined ? "PASS" : "FAIL",
+    metrics ? `runs=${Object.keys(metrics.runs ?? {}).length} 状态` : `HTTP ${http.metrics?.status ?? "-"}`,
+  );
+  record(
+    "指标 Prometheus 格式",
+    http.metricsProm?.status === 200 && String(http.metricsProm.body).includes("jxf_up 1")
+      ? "PASS"
+      : "FAIL",
+    `HTTP ${http.metricsProm?.status ?? "-"}`,
   );
 
   const version = dbVersion();
