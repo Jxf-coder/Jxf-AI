@@ -39,6 +39,8 @@ interface EmployeeSnapshot {
   persona: string | null;
   systemPrompt: string | null;
   modelConfig: Record<string, unknown>;
+  /** 允许调用的外部工具，形如 mcp:<serverId>:<toolName> */
+  allowedTools: string[];
 }
 
 function questionTitle(input: Record<string, unknown>): string | null {
@@ -68,9 +70,10 @@ export async function acceptRun(context: UserContext, request: AcceptRunInput): 
         persona: string | null;
         system_prompt: string | null;
         model_config: Record<string, unknown> | null;
+        allowed_tools: string[] | null;
         status: string;
       }>(
-        `select id, name, persona, system_prompt, model_config, status
+        `select id, name, persona, system_prompt, model_config, allowed_tools, status
            from ai_employees where id = $1`,
         [request.aiEmployeeId],
       );
@@ -84,6 +87,7 @@ export async function acceptRun(context: UserContext, request: AcceptRunInput): 
         persona: found.persona,
         systemPrompt: found.system_prompt,
         modelConfig: found.model_config ?? {},
+        allowedTools: found.allowed_tools ?? [],
       };
     }
 

@@ -1,3 +1,5 @@
+import { BrandMark } from "@/components/brand/BrandMark";
+
 import { LoginForm } from "./LoginForm";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +21,9 @@ export default async function LoginPage({
   return (
     <main className="login-page">
       <div className="login-card">
-        <h1 className="login-title">Jxf-AI 工作台</h1>
+        <h1 className="login-title">
+          <BrandMark size="md" />
+        </h1>
         <p className="page-subtitle">使用组织账号登录</p>
 
         {notice ? <div className="alert-error">{notice}</div> : null}

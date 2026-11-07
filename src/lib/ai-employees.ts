@@ -17,8 +17,33 @@ import { PermissionDeniedError } from "@/lib/permissions/guard";
 
 export type AiEmployeeStatus = "draft" | "active" | "disabled";
 
+/** 验收方式：manual 必须人工验收；auto 满足质量门槛时自动通过 */
+export type ReviewMode = "manual" | "auto";
+
+export interface WorkReviewConfig {
+  mode: ReviewMode;
+  /** 自动验收的最小交付物字数 */
+  minChars: number;
+}
+
+export const DEFAULT_AUTO_MIN_CHARS = 120;
+
 const STATUSES: readonly AiEmployeeStatus[] = ["draft", "active", "disabled"];
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
+
+/** 验收配置存在 model_config.review，派活时快照进 work_items.input.review */
+export function parseReviewConfig(
+  modelConfig: Record<string, unknown> | null | undefined,
+): WorkReviewConfig {
+  const raw = modelConfig?.review;
+  const review =
+    raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const minCharsRaw = Number(review.minChars);
+  const minChars = Number.isFinite(minCharsRaw)
+    ? Math.min(Math.max(Math.round(minCharsRaw), 0), 5000)
+    : DEFAULT_AUTO_MIN_CHARS;
+  return { mode: review.mode === "auto" ? "auto" : "manual", minChars };
+}
 
 export interface AiEmployeeView {
   id: string;
@@ -40,6 +65,20 @@ export interface AiEmployeeGrantView {
 
 export interface AiEmployeeDetail extends AiEmployeeView {
   grants: AiEmployeeGrantView[];
+  /** 人格描述：运行时拼进系统提示 */
+  persona: string;
+  /** 显式系统提示；为空时由 persona + 默认约束生成 */
+  systemPrompt: string;
+  /** 技能包 key（如 knowledge-search / distill / regression） */
+  skillKeys: string[];
+  /** 允许调用的工具名（M4 由 MCP 治理层继续收窄） */
+  allowedTools: string[];
+  /** 模型档位：deep / fast */
+  modelTier: "deep" | "fast";
+  /** 验收方式：人工 / 自动 */
+  reviewMode: ReviewMode;
+  /** 自动验收最小字数 */
+  autoMinChars: number;
 }
 
 export interface AiEmployeeGrantCandidates {
@@ -71,6 +110,27 @@ function normalizeDescription(value: string | null | undefined): string | null {
   return trimmed.length === 0 ? null : trimmed;
 }
 
+/** 逗号 / 换行分隔的 key 列表：去空、去重、限长（工具引用 mcp:<serverId>:<tool> 较长） */
+function normalizeKeys(values: string[] | undefined): string[] {
+  if (!values) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of values) {
+    const key = raw.trim();
+    if (!key || key.length > 200 || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(key);
+    if (result.length >= 20) {
+      break;
+    }
+  }
+  return result;
+}
+
 interface EmployeeRow {
   id: string;
   slug: string;
@@ -79,6 +139,11 @@ interface EmployeeRow {
   status: AiEmployeeStatus;
   created_at: Date;
   created_by_name: string | null;
+  persona: string | null;
+  system_prompt: string | null;
+  skill_keys: string[];
+  allowed_tools: string[];
+  model_config: Record<string, unknown> | null;
 }
 
 function toView(row: EmployeeRow): AiEmployeeView {
@@ -94,6 +159,7 @@ function toView(row: EmployeeRow): AiEmployeeView {
 }
 
 const EMPLOYEE_COLUMNS = `e.id, e.slug, e.name, e.description, e.status, e.created_at,
+  e.persona, e.system_prompt, e.skill_keys, e.allowed_tools, e.model_config,
   (select name from users where id = e.created_by) as created_by_name`;
 
 /** 目录：只返回当前账号可见的 AI 员工（RLS 过滤） */
@@ -146,8 +212,17 @@ export async function loadAiEmployee(
       [aiEmployeeId],
     );
 
+    const review = parseReviewConfig(row.model_config);
+
     return {
       ...toView(row),
+      persona: row.persona ?? "",
+      systemPrompt: row.system_prompt ?? "",
+      skillKeys: row.skill_keys ?? [],
+      allowedTools: row.allowed_tools ?? [],
+      modelTier: row.model_config?.tier === "fast" ? "fast" : "deep",
+      reviewMode: review.mode,
+      autoMinChars: review.minChars,
       grants: grants.rows.map((grant) => ({
         id: grant.id,
         targetType: grant.target_type,
@@ -226,21 +301,46 @@ export async function createAiEmployee(
   });
 }
 
-/** 编辑：只允许改名称与描述；slug 参与对外引用，创建后保持不变 */
+/** 编辑：名称 / 描述 / 工作配置；slug 参与对外引用，创建后保持不变 */
 export async function updateAiEmployee(
   context: UserContext,
   aiEmployeeId: string,
-  input: { name: string; description?: string | null },
+  input: {
+    name: string;
+    description?: string | null;
+    persona?: string;
+    systemPrompt?: string;
+    skillKeys?: string[];
+    allowedTools?: string[];
+    modelTier?: "deep" | "fast";
+    reviewMode?: ReviewMode;
+    autoMinChars?: number;
+  },
 ): Promise<void> {
   assertCanManage(context);
 
   const name = input.name.trim();
   const description = normalizeDescription(input.description);
+  const persona = (input.persona ?? "").trim();
+  const systemPrompt = (input.systemPrompt ?? "").trim();
+  const skillKeys = normalizeKeys(input.skillKeys);
+  const allowedTools = normalizeKeys(input.allowedTools);
+  const modelTier = input.modelTier === "fast" ? "fast" : "deep";
+  const review = parseReviewConfig({
+    review: { mode: input.reviewMode, minChars: input.autoMinChars },
+  });
+
   if (name.length === 0 || name.length > 60) {
     throw new Error("名称不能为空且不超过 60 字");
   }
   if (description && description.length > 500) {
     throw new Error("描述不超过 500 字");
+  }
+  if (persona.length > 2000) {
+    throw new Error("人格描述不超过 2000 字");
+  }
+  if (systemPrompt.length > 8000) {
+    throw new Error("系统提示不超过 8000 字");
   }
 
   await withUserContext(context, async (client) => {
@@ -253,8 +353,30 @@ export async function updateAiEmployee(
     }
 
     await client.query(
-      "update ai_employees set name = $2, description = $3 where id = $1",
-      [aiEmployeeId, name, description],
+      `update ai_employees
+          set name = $2,
+              description = $3,
+              persona = $4,
+              system_prompt = $5,
+              skill_keys = $6::text[],
+              allowed_tools = $7::text[],
+              model_config = model_config || jsonb_build_object(
+                'tier', $8::text,
+                'review', jsonb_build_object('mode', $9::text, 'minChars', $10::int)
+              )
+        where id = $1`,
+      [
+        aiEmployeeId,
+        name,
+        description,
+        persona || null,
+        systemPrompt || null,
+        skillKeys,
+        allowedTools,
+        modelTier,
+        review.mode,
+        review.minChars,
+      ],
     );
 
     await auditInTx(client, context, {
@@ -262,7 +384,7 @@ export async function updateAiEmployee(
       action: "ai_employee.updated",
       targetType: "ai_employee",
       targetId: aiEmployeeId,
-      payload: { name },
+      payload: { name, modelTier, skillKeys, allowedTools, ...review },
     });
   });
 }

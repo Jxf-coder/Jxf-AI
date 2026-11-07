@@ -120,5 +120,16 @@ export async function sweepExhausted(pool: Pool): Promise<string[]> {
       returning id`,
     [MAX_ATTEMPTS],
   );
-  return rows.map((row) => row.id);
+  const ids = rows.map((row) => row.id);
+  if (ids.length > 0) {
+    // 派活任务重试耗尽：工作项同步为失败，避免停留在排队 / 执行中
+    await pool.query(
+      `update work_items
+          set status = 'failed', updated_at = now()
+        where current_run_id = any($1::uuid[])
+          and status in ('queued', 'running')`,
+      [ids],
+    );
+  }
+  return ids;
 }

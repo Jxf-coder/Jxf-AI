@@ -18,6 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let memberships: ActiveMembership[] = [];
   let snapshot: PermissionSnapshot | null = null;
   let pendingApprovals = 0;
+  let pendingWorkReviews = 0;
 
   try {
     const context = await resolveUserContext(user.userId, requestId);
@@ -34,6 +35,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             "select app.pending_approval_count() as count",
           );
           pendingApprovals = countResult.rows[0]?.count ?? 0;
+          // AI 员工「待验收」数字：工作项表未建时降级为 0
+          const workCount = await client.query<{ count: number }>(
+            `select case when to_regclass('public.work_items') is null then 0
+                         else (select count(*)::int from work_items where status = 'waiting_review')
+                    end as count`,
+          );
+          pendingWorkReviews = workCount.rows[0]?.count ?? 0;
           return toPermissionSnapshot(actor);
         });
       } catch (error) {
@@ -59,8 +67,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           departmentName: membership.departmentName,
           level: membership.level,
         }))}
-        siteName={process.env.JXF_SITE_NAME?.trim() || "Jxf-AI"}
         pendingApprovals={pendingApprovals}
+        pendingWorkReviews={pendingWorkReviews}
       >
         {children}
       </Shell>

@@ -204,6 +204,10 @@ services:
       JXF_OCR_MODEL: ${JXF_OCR_MODEL:-gemini-3.1-flash-lite}
       JXF_OCR_TIMEOUT_MS: ${JXF_OCR_TIMEOUT_MS:-90000}
       JXF_OCR_MAX_BYTES: ${JXF_OCR_MAX_BYTES:-15000000}
+      # MCP 外部连接器：内网主机白名单（逗号分隔主机名/IP）；为空时只允许公网地址
+      MCP_TRUSTED_HOSTS: ${MCP_TRUSTED_HOSTS:-}
+      # stdio 连接器允许的可执行文件（逗号分隔，建议绝对路径）；为空表示禁用 stdio
+      MCP_STDIO_ALLOWED_COMMANDS: ${MCP_STDIO_ALLOWED_COMMANDS:-}
     depends_on:
       postgres:
         condition: service_healthy

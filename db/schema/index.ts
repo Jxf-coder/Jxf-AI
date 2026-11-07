@@ -13,3 +13,6 @@ export * from "./knowledge";
 export * from "./regression";
 export * from "./ai-employees";
 export * from "./runtime";
+export * from "./work-items";
+export * from "./mcp";
+export * from "./mcp-servers";

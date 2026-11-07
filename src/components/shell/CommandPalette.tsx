@@ -21,10 +21,10 @@ interface CommandItem {
 
 const ITEMS: CommandItem[] = [
   {
-    label: "AI 工作台",
+    label: "Agent",
     hint: "运行时会话 · 流式回答",
     href: "/chat",
-    keywords: ["chat", "run", "ai", "对话", "会话", "工作台", "流式"],
+    keywords: ["chat", "run", "ai", "agent", "对话", "会话", "工作台", "流式"],
     permission: "skill:use",
   },
   {

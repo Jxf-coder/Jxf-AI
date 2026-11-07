@@ -116,60 +116,104 @@ export async function resolveUserContext(userId: string, requestId?: string): Pr
       null;
 
     if (!active) {
-      return {
-        userId,
-        tenantId: env.tenantId,
-        activeMembership: null,
-        activeMemberships: memberships,
-        activeMembershipId: null,
-        activeDepartmentId: null,
-        activeDepartmentName: null,
-        membershipDepartmentIds: memberships.map((membership) => membership.departmentId),
-        departmentIds: [],
-        subtreeDepartmentIds: [],
-        accessLevel: null,
-        permissionVersion: 0,
-        requestId,
-      };
+      return emptyContext(userId, env.tenantId, memberships, requestId);
     }
 
-    const scopeResult =
-      active.level === "L1"
-        ? await client.query<{ ids: string[] }>(
-            "select app.tenant_department_ids($1) as ids",
-            [env.tenantId],
-          )
-        : await client.query<{ ids: string[] }>(
-            "select app.department_subtree_ids($1) as ids",
-            [active.departmentId],
-          );
-
-    const versionResult = await client.query<{ version: string | number }>(
-      "select app.user_permission_version($1) as version",
-      [userId],
-    );
-
-    const subtreeDepartmentIds = scopeResult.rows[0]?.ids ?? [active.departmentId];
-
-    return {
-      userId,
-      tenantId: env.tenantId,
-      activeMembership: active,
-      activeMemberships: memberships,
-      activeMembershipId: active.id,
-      activeDepartmentId: active.departmentId,
-      activeDepartmentName: active.departmentName,
-      membershipDepartmentIds: memberships.map((membership) => membership.departmentId),
-      // L1 需要全租户写范围；L2/L3 只写当前部门
-      departmentIds: active.level === "L1" ? subtreeDepartmentIds : [active.departmentId],
-      subtreeDepartmentIds,
-      accessLevel: active.level,
-      permissionVersion: Number(versionResult.rows[0]?.version ?? 0),
-      requestId,
-    };
+    return await buildContext(client, userId, env.tenantId, active, memberships, requestId);
   } finally {
     client.release();
   }
+}
+
+/**
+ * 按「指定任用」解析上下文（MCP 令牌 / 机器调用使用）。
+ * 任用不存在、不属于该用户、非在岗或已移除时返回空上下文（fail-closed）。
+ */
+export async function resolveUserContextForMembership(
+  userId: string,
+  membershipId: string,
+  requestId?: string,
+): Promise<UserContext> {
+  const env = loadEnv();
+  const client = await getPool().connect();
+
+  try {
+    // 走 SECURITY DEFINER 的任用列表函数：直接查 memberships 会被 RLS 挡掉
+    const rows = await queryActiveMemberships(client, userId);
+    const active = rows.find((membership) => membership.id === membershipId);
+    if (!active) {
+      return emptyContext(userId, env.tenantId, [], requestId);
+    }
+
+    return await buildContext(client, userId, env.tenantId, active, [active], requestId);
+  } finally {
+    client.release();
+  }
+}
+
+function emptyContext(
+  userId: string,
+  tenantId: string,
+  memberships: ActiveMembership[],
+  requestId?: string,
+): UserContext {
+  return {
+    userId,
+    tenantId,
+    activeMembership: null,
+    activeMemberships: memberships,
+    activeMembershipId: null,
+    activeDepartmentId: null,
+    activeDepartmentName: null,
+    membershipDepartmentIds: memberships.map((membership) => membership.departmentId),
+    departmentIds: [],
+    subtreeDepartmentIds: [],
+    accessLevel: null,
+    permissionVersion: 0,
+    requestId,
+  };
+}
+
+async function buildContext(
+  client: PoolClient,
+  userId: string,
+  tenantId: string,
+  active: ActiveMembership,
+  memberships: ActiveMembership[],
+  requestId?: string,
+): Promise<UserContext> {
+  const scopeResult =
+    active.level === "L1"
+      ? await client.query<{ ids: string[] }>("select app.tenant_department_ids($1) as ids", [
+          tenantId,
+        ])
+      : await client.query<{ ids: string[] }>("select app.department_subtree_ids($1) as ids", [
+          active.departmentId,
+        ]);
+
+  const versionResult = await client.query<{ version: string | number }>(
+    "select app.user_permission_version($1) as version",
+    [userId],
+  );
+
+  const subtreeDepartmentIds = scopeResult.rows[0]?.ids ?? [active.departmentId];
+
+  return {
+    userId,
+    tenantId,
+    activeMembership: active,
+    activeMemberships: memberships,
+    activeMembershipId: active.id,
+    activeDepartmentId: active.departmentId,
+    activeDepartmentName: active.departmentName,
+    membershipDepartmentIds: memberships.map((membership) => membership.departmentId),
+    // L1 需要全租户写范围；L2/L3 只写当前部门
+    departmentIds: active.level === "L1" ? subtreeDepartmentIds : [active.departmentId],
+    subtreeDepartmentIds,
+    accessLevel: active.level,
+    permissionVersion: Number(versionResult.rows[0]?.version ?? 0),
+    requestId,
+  };
 }
 
 function toPgUuidArray(ids: string[]): string {

@@ -9,6 +9,9 @@ export const dynamic = "force-dynamic";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_QUESTION_LENGTH = 4_000;
+const MAX_ATTACHMENTS = 5;
+const MAX_ATTACHMENT_CHARS = 12_000;
+const MAX_ATTACHMENT_TOTAL_CHARS = 30_000;
 
 function isSameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
@@ -41,6 +44,35 @@ function readOptionalUuid(value: unknown): string | null {
   }
   const trimmed = value.trim();
   return UUID_PATTERN.test(trimmed) ? trimmed : null;
+}
+
+/** 附件正文：只接受纯文本，单条与总量都设上限，避免把提示词撑爆 */
+function readAttachments(value: unknown): Array<{ name: string; text: string }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const result: Array<{ name: string; text: string }> = [];
+  let total = 0;
+
+  for (const item of value) {
+    if (result.length >= MAX_ATTACHMENTS || total >= MAX_ATTACHMENT_TOTAL_CHARS) {
+      break;
+    }
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name.trim().slice(0, 120) : "附件";
+    const text = typeof record.text === "string" ? record.text.trim() : "";
+    if (!text) {
+      continue;
+    }
+    const clipped = text.slice(0, Math.min(MAX_ATTACHMENT_CHARS, MAX_ATTACHMENT_TOTAL_CHARS - total));
+    total += clipped.length;
+    result.push({ name: name || "附件", text: clipped });
+  }
+
+  return result;
 }
 
 /**
@@ -93,11 +125,17 @@ export async function POST(request: Request) {
   }
 
   const context = await resolveUserContext(session.user.id);
+  const modelTier = rawInput.modelTier === "fast" ? "fast" : "deep";
+  const attachments = readAttachments(rawInput.attachments);
 
   try {
     const accepted = await acceptRun(context, {
       kind: "chat",
-      input: { question },
+      input: {
+        question,
+        modelTier,
+        ...(attachments.length > 0 ? { attachments } : {}),
+      },
       threadId,
       aiEmployeeId,
       clientTurnId: readOptionalString(payload.clientTurnId, 100),

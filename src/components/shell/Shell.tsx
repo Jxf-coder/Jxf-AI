@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { usePermission } from "@/components/permissions/usePermission";
-import { AiIcon, BellIcon, ChatIcon, CloseIcon, KnowledgeIcon, MenuIcon, SearchIcon } from "@/components/ui/icons";
+import { BrandMark } from "@/components/brand/BrandMark";
+import { AiIcon, BellIcon, ChatIcon, CloseIcon, KnowledgeIcon, LayersIcon, MenuIcon, PlugIcon, SearchIcon } from "@/components/ui/icons";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { DepartmentSwitcher, type DepartmentOption } from "@/components/shell/DepartmentSwitcher";
 import { ProfileMenu } from "@/components/shell/ProfileMenu";
@@ -16,8 +17,8 @@ interface ShellProps {
   accessLevel: string | null;
   activeDepartmentId: string | null;
   memberships: DepartmentOption[];
-  siteName: string;
   pendingApprovals: number;
+  pendingWorkReviews: number;
   children: ReactNode;
 }
 
@@ -27,8 +28,8 @@ export function Shell({
   accessLevel,
   activeDepartmentId,
   memberships,
-  siteName,
   pendingApprovals,
+  pendingWorkReviews,
   children,
 }: ShellProps) {
   const { can } = usePermission();
@@ -39,13 +40,26 @@ export function Shell({
   const chatLink = can("skill:use") ? (
     <Link
       href="/chat"
-      className={`nav-item${pathname.startsWith("/chat") ? " is-active" : ""}`}
+      className={`nav-item nav-item-primary${pathname.startsWith("/chat") ? " is-active" : ""}`}
       aria-current={pathname.startsWith("/chat") ? "page" : undefined}
     >
       <span className="nav-icon">
         <ChatIcon size={18} />
       </span>
-      <span className="nav-label">AI 工作台</span>
+      <span className="nav-label">Agent</span>
+    </Link>
+  ) : null;
+
+  const mcpLink = can("token:issue") ? (
+    <Link
+      href="/settings/mcp"
+      className={`nav-item${pathname.startsWith("/settings/mcp") ? " is-active" : ""}`}
+      aria-current={pathname.startsWith("/settings/mcp") ? "page" : undefined}
+    >
+      <span className="nav-icon">
+        <PlugIcon size={18} />
+      </span>
+      <span className="nav-label">MCP 连接</span>
     </Link>
   ) : null;
 
@@ -72,7 +86,32 @@ export function Shell({
         <AiIcon size={18} />
       </span>
       <span className="nav-label">AI 员工</span>
+      {pendingWorkReviews > 0 ? (
+        <span className="nav-badge">{pendingWorkReviews > 99 ? "99+" : pendingWorkReviews}</span>
+      ) : null}
     </Link>
+  );
+
+  const navContent = (
+    <>
+      {chatLink}
+      {mcpLink}
+      <div className="nav-section">
+        <p className="nav-section-label">Workspace</p>
+        {knowledgeLink}
+        <span className="nav-item nav-item-muted" aria-disabled="true" title="自动化能力即将上线">
+          <span className="nav-icon">
+            <LayersIcon size={18} />
+          </span>
+          <span className="nav-label">自动化</span>
+          <span className="nav-soon">即将上线</span>
+        </span>
+      </div>
+      <div className="nav-section">
+        <p className="nav-section-label">AI Employees</p>
+        {aiEmployeesLink}
+      </div>
+    </>
   );
 
   useEffect(() => {
@@ -105,14 +144,12 @@ export function Shell({
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-header">
-          <span className="sidebar-brand-text">{siteName}</span>
+          <BrandMark size="md" />
         </div>
 
-        {/* 主侧边栏只承载主业务（AI 工作台 / Agent / 知识库）；管理入口收敛到顶栏与个人菜单 */}
+        {/* 主侧边栏只承载主业务（Agent / 知识库）；管理入口收敛到顶栏与个人菜单 */}
         <nav className="sidebar-nav" aria-label="主导航">
-          {chatLink}
-          {knowledgeLink}
-          {aiEmployeesLink}
+          {navContent}
         </nav>
 
         <div className="sidebar-profile">
@@ -127,7 +164,9 @@ export function Shell({
       <div className="app-body">
         <header className="topbar">
           <div className="topbar-inner">
-            <span className="topbar-logo">{siteName}</span>
+            <span className="topbar-logo">
+              <BrandMark size="sm" />
+            </span>
 
             <button
               type="button"
@@ -186,7 +225,7 @@ export function Shell({
           />
           <aside className="drawer" role="dialog" aria-modal="true" aria-label="导航">
             <div className="drawer-header">
-              <span className="sidebar-brand-text">{siteName}</span>
+              <BrandMark size="sm" />
               <button type="button" className="drawer-close" aria-label="关闭" onClick={() => setDrawerOpen(false)}>
                 <CloseIcon size={18} />
               </button>
@@ -207,9 +246,7 @@ export function Shell({
             </button>
 
             <nav className="sidebar-nav" aria-label="移动导航">
-              {chatLink}
-              {knowledgeLink}
-              {aiEmployeesLink}
+              {navContent}
             </nav>
 
             <div className="drawer-bottom">

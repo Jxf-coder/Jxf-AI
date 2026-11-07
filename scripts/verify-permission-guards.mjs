@@ -56,6 +56,18 @@ const WHITELIST = new Map([
     "src/app/api/knowledge/documents/[id]/route.ts::GET",
     "原始文件只读下载：RLS 校验可见性，越权与不存在统一 404",
   ],
+  [
+    "src/app/api/mcp/route.ts::POST",
+    "MCP 端点：Bearer 令牌按 hash 反查并绑定在岗任用，工具 scope 与权限点均在工具内校验",
+  ],
+  [
+    "src/app/api/mcp/route.ts::GET",
+    "无状态 MCP 端点的非 POST 方法，固定返回 405，不读写数据",
+  ],
+  [
+    "src/app/api/mcp/route.ts::DELETE",
+    "无状态 MCP 端点不维护会话，固定返回 405，不读写数据",
+  ],
 ]);
 
 const FUNCTION_PATTERN = /export\s+(?:async\s+)?function\s+([A-Za-z0-9_]+)/g;

@@ -13,8 +13,13 @@ import os from "node:os";
 
 import { Pool } from "pg";
 
-import { chatCompletionStreamDetailed } from "@/lib/ai/openai";
+import { chatCompletionStreamDetailed, chatCompletionWithTools, type ChatUsage, type ToolChatMessage } from "@/lib/ai/openai";
 import { log, errorMessage } from "@/lib/logger";
+import {
+  executePlannedTool,
+  loadWorkerToolPlan,
+  type WorkerToolPlan,
+} from "@/lib/mcp/worker-tools";
 import { claimRun, heartbeatRun, sweepExhausted, type ClaimedRun } from "@/lib/runtime/claim";
 import { isCancelRequested } from "@/lib/runtime/cancel";
 import { emitEvent, savePartialText } from "@/lib/runtime/emit";
@@ -38,6 +43,8 @@ interface EmployeeSnapshot {
   persona?: string | null;
   systemPrompt?: string | null;
   modelConfig?: Record<string, unknown>;
+  /** 形如 mcp:<serverId>:<toolName> */
+  allowedTools?: string[];
 }
 
 function systemPromptFor(run: ClaimedRun): string {
@@ -46,6 +53,11 @@ function systemPromptFor(run: ClaimedRun): string {
     return employee.systemPrompt.trim();
   }
   const parts = ["你是企业内部的 AI 助手，回答必须基于已知信息，不确定就如实说明。"];
+  if (run.kind === "task") {
+    parts.push(
+      "这是一项被派发的工作任务：请直接产出可验收的交付物，结构清晰、结论明确，不要反问用户；无法确定的信息要标注出来。",
+    );
+  }
   if (employee?.name) {
     parts.push(`你的身份是「${employee.name}」。`);
   }
@@ -53,6 +65,130 @@ function systemPromptFor(run: ClaimedRun): string {
     parts.push(`人格设定：${employee.persona.trim()}`);
   }
   return parts.join("\n");
+}
+
+/** 把附件正文拼进本轮用户消息；附件只在执行上下文里，不改变界面上的提问 */
+function userContentFor(run: ClaimedRun, question: string): string {
+  const raw = Array.isArray(run.input.attachments) ? run.input.attachments : [];
+  const files = raw
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        return null;
+      }
+      const record = item as Record<string, unknown>;
+      const name = typeof record.name === "string" ? record.name.trim() : "附件";
+      const text = typeof record.text === "string" ? record.text.trim() : "";
+      return text ? { name: name || "附件", text } : null;
+    })
+    .filter((item): item is { name: string; text: string } => item !== null)
+    .slice(0, 5);
+
+  if (files.length === 0) {
+    return question;
+  }
+
+  const blocks = files.map(
+    (file, index) => `【附件 ${index + 1}：${file.name}】\n${file.text}`,
+  );
+  return [question, "以下是用户随消息上传的附件内容，请结合附件回答：", ...blocks].join("\n\n");
+}
+
+/** 把执行状态同步回工作项；chat 没有 workItemId 时为 no-op；成功路径走 completeWorkItem */
+async function syncWorkItem(
+  pool: Pool,
+  workItemId: string | null,
+  status: "running" | "failed" | "cancelled",
+  deliverable?: Record<string, unknown> | null,
+): Promise<void> {
+  if (!workItemId) {
+    return;
+  }
+  try {
+    await pool.query(
+      `update work_items
+          set status = $2::work_item_status,
+              deliverable = case when $3::jsonb is null then deliverable else $3::jsonb end,
+              updated_at = now()
+        where id = $1`,
+      [workItemId, status, deliverable ? JSON.stringify(deliverable) : null],
+    );
+  } catch (error) {
+    log("warn", "work_item_sync_failed", {
+      work_item_id: workItemId,
+      status,
+      error: errorMessage(error),
+    });
+  }
+}
+
+/** 自动验收：出现这些标记说明交付物还有未决信息，必须转人工 */
+const AUTO_BLOCKERS = ["待确认", "待补充", "无法确定", "不确定", "TODO"];
+const DEFAULT_AUTO_MIN_CHARS = 120;
+
+/**
+ * 交付物回写：按工作项快照的验收方式决定「自动通过」还是「待人工验收」。
+ * 自动通过只做门槛校验（字数 + 无未决标记），不替代人工判断。
+ */
+async function completeWorkItem(
+  pool: Pool,
+  workItemId: string | null,
+  deliverable: Record<string, unknown>,
+  text: string,
+): Promise<void> {
+  if (!workItemId) {
+    return;
+  }
+  try {
+    const { rows } = await pool.query<{ mode: string | null; min_chars: number | null }>(
+      `select input->'review'->>'mode' as mode,
+              nullif(input->'review'->>'minChars', '')::int as min_chars
+         from work_items
+        where id = $1`,
+      [workItemId],
+    );
+    const config = rows[0];
+    const chars = text.trim().length;
+    const minChars = config?.min_chars ?? DEFAULT_AUTO_MIN_CHARS;
+    const blocker = AUTO_BLOCKERS.find((marker) => text.includes(marker)) ?? null;
+    const autoApproved = config?.mode === "auto" && chars >= minChars && !blocker;
+
+    if (autoApproved) {
+      await pool.query(
+        `update work_items
+            set status = 'done',
+                deliverable = $2::jsonb,
+                review_note = $3,
+                reviewed_at = now(),
+                updated_at = now()
+          where id = $1`,
+        [workItemId, JSON.stringify(deliverable), `自动验收通过（${chars} 字 ≥ ${minChars} 字）`],
+      );
+      log("info", "work_item_auto_approved", { work_item_id: workItemId, chars });
+      return;
+    }
+
+    const fallbackNote =
+      config?.mode === "auto"
+        ? blocker
+          ? `自动验收未通过：交付物含「${blocker}」，需人工确认`
+          : `自动验收未通过：${chars} 字 < ${minChars} 字门槛`
+        : null;
+
+    await pool.query(
+      `update work_items
+          set status = 'waiting_review',
+              deliverable = $2::jsonb,
+              review_note = $3,
+              updated_at = now()
+        where id = $1`,
+      [workItemId, JSON.stringify(deliverable), fallbackNote],
+    );
+  } catch (error) {
+    log("warn", "work_item_complete_failed", {
+      work_item_id: workItemId,
+      error: errorMessage(error),
+    });
+  }
 }
 
 async function finish(
@@ -85,9 +221,87 @@ async function finish(
   }
 }
 
+const MAX_TOOL_ROUNDS = 4;
+const MAX_TOOL_CALLS = 10;
+
+interface ToolConversationResult {
+  text: string;
+  model: string;
+  provider: string;
+  usage: ChatUsage | null;
+}
+
+/**
+ * 任务型执行里的工具对话：模型可多轮调用已授权的外部 MCP 工具。
+ * 返回 null 表示调用失败或已取消，由调用方按原有失败 / 取消分支收口。
+ */
+async function runToolConversation(
+  pool: Pool,
+  run: ClaimedRun,
+  plan: WorkerToolPlan,
+  stepId: string,
+  tier: "deep" | "fast",
+  question: string,
+): Promise<ToolConversationResult | null> {
+  const conversation: ToolChatMessage[] = [
+    {
+      role: "system",
+      content: `${systemPromptFor(run)}\n你可以调用已授权的工具获取事实；需要外部数据时先调用工具，不要臆造。`,
+    },
+    { role: "user", content: userContentFor(run, question) },
+  ];
+
+  let last: ToolConversationResult | null = null;
+  let toolCallCount = 0;
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+    if (await isCancelRequested(pool, run.id)) {
+      return null;
+    }
+
+    const result = await chatCompletionWithTools(conversation, plan.definitions, {
+      tier,
+      temperature: 0.2,
+    });
+    if (!result) {
+      return null;
+    }
+    last = { text: result.text, model: result.model, provider: result.provider, usage: result.usage };
+    conversation.push(result.assistantMessage);
+
+    if (result.toolCalls.length === 0) {
+      return last;
+    }
+
+    for (const call of result.toolCalls.slice(0, 5)) {
+      if (toolCallCount >= MAX_TOOL_CALLS) {
+        break;
+      }
+      toolCallCount += 1;
+      const text = await executePlannedTool(pool, plan, call.name, call.arguments, {
+        tenantId: run.tenantId,
+        departmentId: run.departmentId,
+        runId: run.id,
+        stepId,
+      });
+      conversation.push({ role: "tool", tool_call_id: call.id, content: text.slice(0, 8000) });
+    }
+  }
+
+  log("warn", "worker_tool_budget_exhausted", { run_id: run.id, tool_calls: toolCallCount });
+  if (!last) {
+    return null;
+  }
+  return {
+    ...last,
+    text: last.text.trim() || "已达到工具调用上限，未能形成结论，请缩小问题范围后重试。",
+  };
+}
+
 async function execute(pool: Pool, run: ClaimedRun): Promise<void> {
   const question = typeof run.input.question === "string" ? run.input.question.trim() : "";
   const tier = run.input.modelTier === "fast" ? "fast" : "deep";
+  const workItemId = typeof run.input.workItemId === "string" ? run.input.workItemId : null;
 
   const initial = await pool.connect();
   try {
@@ -101,8 +315,11 @@ async function execute(pool: Pool, run: ClaimedRun): Promise<void> {
     initial.release();
   }
 
+  await syncWorkItem(pool, workItemId, "running");
+
   if (question.length === 0) {
     await finish(pool, run.id, "failed", { error: "缺少 question 参数" });
+    await syncWorkItem(pool, workItemId, "failed");
     return;
   }
 
@@ -119,6 +336,7 @@ async function execute(pool: Pool, run: ClaimedRun): Promise<void> {
     // step 边界：先看是否已被取消，取消后不再产生新的模型调用
     if (await isCancelRequested(pool, run.id)) {
       await finish(pool, run.id, "cancelled", { status: "cancelled", reason: "user_cancelled" });
+      await syncWorkItem(pool, workItemId, "cancelled");
       return;
     }
 
@@ -193,19 +411,35 @@ async function execute(pool: Pool, run: ClaimedRun): Promise<void> {
     };
 
     const startedAt = Date.now();
-    const completion = await chatCompletionStreamDetailed(
-      [
-        { role: "system", content: systemPromptFor(run) },
-        { role: "user", content: question },
-      ],
-      { tier, temperature: 0.2 },
-      { onDelta, signal: controller.signal },
-    );
+    const employeeSnapshot = (run.input.employee ?? null) as EmployeeSnapshot | null;
+    const hasTools =
+      run.kind === "task" && (employeeSnapshot?.allowedTools?.length ?? 0) > 0;
+    let toolPlan: WorkerToolPlan = { definitions: [], tools: new Map() };
+    if (hasTools) {
+      try {
+        toolPlan = await loadWorkerToolPlan(pool, run.tenantId, employeeSnapshot?.allowedTools ?? []);
+      } catch (error) {
+        log("warn", "worker_tool_plan_failed", { run_id: run.id, error: errorMessage(error) });
+      }
+    }
+
+    const completion =
+      toolPlan.definitions.length > 0
+        ? await runToolConversation(pool, run, toolPlan, stepId, tier, question)
+        : await chatCompletionStreamDetailed(
+            [
+              { role: "system", content: systemPromptFor(run) },
+              { role: "user", content: userContentFor(run, question) },
+            ],
+            { tier, temperature: 0.2 },
+            { onDelta, signal: controller.signal },
+          );
     const durationMs = Date.now() - startedAt;
 
     if (!completion) {
       if (controller.signal.aborted || (await isCancelRequested(pool, run.id))) {
         await finish(pool, run.id, "cancelled", { status: "cancelled", reason: "user_cancelled" });
+        await syncWorkItem(pool, workItemId, "cancelled");
         return;
       }
       await pool.query(
@@ -213,12 +447,14 @@ async function execute(pool: Pool, run: ClaimedRun): Promise<void> {
         [stepId, durationMs],
       );
       await finish(pool, run.id, "failed", { error: "AI 未启用或调用失败" });
+      await syncWorkItem(pool, workItemId, "failed");
       return;
     }
 
     // 取消优先于产出：模型可能已经返回，但用户已中止就不写入答案
     if (await isCancelRequested(pool, run.id)) {
       await finish(pool, run.id, "cancelled", { status: "cancelled", reason: "user_cancelled" });
+      await syncWorkItem(pool, workItemId, "cancelled");
       return;
     }
 
@@ -271,6 +507,18 @@ async function execute(pool: Pool, run: ClaimedRun): Promise<void> {
       { status: "done" },
       { text: completion.text, model: completion.model, provider: completion.provider },
     );
+    await completeWorkItem(
+      pool,
+      workItemId,
+      {
+        text: completion.text,
+        model: completion.model,
+        provider: completion.provider,
+        usage: completion.usage ?? null,
+        finishedAt: new Date().toISOString(),
+      },
+      completion.text,
+    );
     log("info", "runtime_run_done", { run_id: run.id, model: completion.model, duration_ms: durationMs });
   } catch (error) {
     const cancelled =
@@ -280,9 +528,11 @@ async function execute(pool: Pool, run: ClaimedRun): Promise<void> {
       await finish(pool, run.id, "cancelled", { status: "cancelled", reason: "user_cancelled" }).catch(
         () => undefined,
       );
+      await syncWorkItem(pool, workItemId, "cancelled");
     } else {
       log("warn", "runtime_run_failed", { run_id: run.id, error: errorMessage(error) });
       await finish(pool, run.id, "failed", { error: errorMessage(error) }).catch(() => undefined);
+      await syncWorkItem(pool, workItemId, "failed");
     }
   } finally {
     clearInterval(heartbeat);

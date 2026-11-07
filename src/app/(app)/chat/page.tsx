@@ -1,35 +1,55 @@
-import { headers } from "next/headers";
-
-import { headerRow, pageSubtitle, pageTitle, pageWrap } from "@/components/knowledge/tokens";
+import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { aiStatus } from "@/lib/ai/openai";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext } from "@/lib/db/user-context";
+import { isUuid } from "@/lib/knowledge/workspace";
+import { listThreads, loadThread } from "@/lib/runtime/threads";
 
 import { ChatClient } from "./ChatClient";
 
-export default async function ChatPage() {
+export const dynamic = "force-dynamic";
+
+export default async function ChatPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ thread?: string | string[] }>;
+}) {
   const session = await requireSession();
-  const requestId = (await headers()).get("x-request-id") ?? undefined;
-  const context = await resolveUserContext(session.userId, requestId);
+  const context = await resolveUserContext(session.userId);
   const status = aiStatus();
 
-  return (
-    <section className={pageWrap}>
-      <header className={headerRow}>
-        <div>
-          <h1 className={pageTitle}>AI 工作台</h1>
-          <p className={pageSubtitle}>
-            请求只负责受理并返回 run_id，长任务在 worker 中执行。页面按 seq 订阅事件流：
-            断线重连只补缺口，关闭页面不会中止执行。
-          </p>
-        </div>
-      </header>
+  const params = await searchParams;
+  const requestedThreadId = Array.isArray(params.thread) ? params.thread[0] : params.thread;
 
-      <ChatClient
-        departmentName={context.activeDepartmentName}
-        chatEnabled={status.chatEnabled}
-        modelName={status.chatModel}
-      />
-    </section>
+  let threads = [] as Awaited<ReturnType<typeof listThreads>>;
+  let thread = null as Awaited<ReturnType<typeof loadThread>>;
+  let accessDenied = false;
+
+  try {
+    threads = await listThreads(context);
+    if (requestedThreadId && isUuid(requestedThreadId)) {
+      thread = await loadThread(context, requestedThreadId);
+    }
+  } catch {
+    accessDenied = true;
+  }
+
+  if (accessDenied) {
+    return (
+      <section className="w-full py-2">
+        <InlineMessage tone="error">当前账号没有「使用 Skill」权限，无法进入 Agent。</InlineMessage>
+      </section>
+    );
+  }
+
+  return (
+    <ChatClient
+      key={thread?.id ?? "new"}
+      chatEnabled={status.chatEnabled}
+      modelName={status.chatModel}
+      fastModelName={status.fastModel}
+      initialThreads={threads}
+      initialThread={thread}
+    />
   );
 }

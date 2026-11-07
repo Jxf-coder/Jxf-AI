@@ -1,9 +1,9 @@
 type Tone = "ok" | "warn" | "bad";
 
 const toneRing: Record<Tone, string> = {
-  ok: "border-emerald-100",
-  warn: "border-amber-100",
-  bad: "border-rose-100",
+  ok: "border-emerald-300",
+  warn: "border-amber-300",
+  bad: "border-rose-300",
 };
 
 const toneValue: Record<Tone, string> = {
@@ -23,7 +23,7 @@ interface StatTileProps {
 export function StatTile({ label, value, hint, tone }: StatTileProps) {
   return (
     <div
-      className={`rounded-2xl border bg-white p-3 shadow-card ${tone ? toneRing[tone] : "border-hairline"}`}
+      className={`rounded-2xl border-[3px] bg-white p-3 shadow-card ${tone ? toneRing[tone] : "border-zinc-200"}`}
     >
       <p className="text-[11px] text-zinc-500">{label}</p>
       <p className={`mt-0.5 text-lg font-semibold tracking-tight ${tone ? toneValue[tone] : "text-zinc-900"}`}>

@@ -525,3 +525,163 @@ export async function chatCompletion(
   const result = await chatCompletionDetailed(messages, options);
   return result?.text ?? null;
 }
+
+/* -------------------------------------------------------------------------- */
+/* 工具调用（M4 切片 3）：非流式，供 worker 在任务里调用外部 MCP 工具            */
+/* -------------------------------------------------------------------------- */
+
+export interface ToolDefinition {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+export interface ToolCallRequest {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+export type ToolChatMessage =
+  | { role: "system" | "user"; content: string }
+  | {
+      role: "assistant";
+      content: string | null;
+      tool_calls?: Array<{
+        id: string;
+        type: "function";
+        function: { name: string; arguments: string };
+      }>;
+    }
+  | { role: "tool"; tool_call_id: string; content: string };
+
+export interface ChatWithToolsResult extends ChatCompletionResult {
+  toolCalls: ToolCallRequest[];
+  /** 原始 assistant 消息（含 tool_calls），供下一轮原样回传 */
+  assistantMessage: ToolChatMessage;
+}
+
+/**
+ * 带工具的单轮生成。
+ * 返回 null 表示 AI 未启用或全部节点失败；工具调用的执行由调用方负责。
+ */
+export async function chatCompletionWithTools(
+  messages: ToolChatMessage[],
+  tools: ToolDefinition[],
+  options: { temperature?: number; maxTokens?: number; tier?: ChatTier } = {},
+): Promise<ChatWithToolsResult | null> {
+  const ai = loadEnv().ai;
+  if (!ai.enabled) {
+    return null;
+  }
+
+  const tier: ChatTier = options.tier ?? "deep";
+  const providers = chatProviders(tier);
+
+  for (const [index, provider] of providers.entries()) {
+    try {
+      const payload = (await postJsonResilient(
+        `${provider.baseUrl}/chat/completions`,
+        provider.apiKey,
+        {
+          model: provider.model,
+          messages,
+          ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
+          temperature: options.temperature ?? 0.2,
+          max_tokens: options.maxTokens ?? ai.maxTokens,
+        },
+        ai.timeoutMs,
+        provider.name,
+      )) as {
+        choices?: Array<{
+          message?: {
+            content?: string | null;
+            tool_calls?: Array<{
+              id?: string;
+              type?: string;
+              function?: { name?: string; arguments?: string };
+            }>;
+          };
+          finish_reason?: string;
+        }>;
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          prompt_tokens_details?: { cached_tokens?: number };
+        };
+      };
+
+      const message = payload.choices?.[0]?.message;
+      const content = typeof message?.content === "string" ? message.content : "";
+      const rawCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+      const toolCalls: ToolCallRequest[] = rawCalls.flatMap((call, callIndex) => {
+        const name = call.function?.name ?? "";
+        if (!name) {
+          return [];
+        }
+        return [
+          {
+            id: call.id ?? `call_${callIndex}`,
+            name,
+            arguments: call.function?.arguments ?? "{}",
+          },
+        ];
+      });
+
+      if (content.trim().length === 0 && toolCalls.length === 0) {
+        log("warn", "ai_chat_empty", {
+          provider: provider.name,
+          model: provider.model,
+          tier,
+          finish: payload.choices?.[0]?.finish_reason ?? "unknown",
+        });
+        return null;
+      }
+
+      if (index > 0) {
+        log("info", "ai_chat_fallback_used", {
+          provider: provider.name,
+          model: provider.model,
+          tier,
+        });
+      }
+
+      const assistantMessage: ToolChatMessage = {
+        role: "assistant",
+        content: content.trim() || null,
+        ...(toolCalls.length > 0
+          ? {
+              tool_calls: toolCalls.map((call) => ({
+                id: call.id,
+                type: "function" as const,
+                function: { name: call.name, arguments: call.arguments },
+              })),
+            }
+          : {}),
+      };
+
+      return {
+        text: content.trim(),
+        model: provider.model,
+        provider: provider.name,
+        usage: toChatUsage(payload),
+        toolCalls,
+        assistantMessage,
+      };
+    } catch (error) {
+      log("warn", index === 0 ? "ai_chat_provider_failed" : "ai_chat_fallback_failed", {
+        provider: provider.name,
+        model: provider.model,
+        tier,
+        status: error instanceof AiRequestError ? error.status : null,
+        error: errorMessage(error),
+      });
+    }
+  }
+
+  log("warn", "ai_chat_failed", { model: providers[0].model, tier, tools: tools.length });
+  return null;
+}

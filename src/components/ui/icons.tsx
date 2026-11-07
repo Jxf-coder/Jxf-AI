@@ -4,8 +4,10 @@ import {
   BookOpen,
   Bot,
   Building2,
+  Check,
   ChevronDown,
   ChevronRight,
+  Copy,
   FileText,
   Folder,
   Inbox,
@@ -13,9 +15,20 @@ import {
   LogOut,
   Menu,
   MessageSquare,
+  Mic,
+  MicOff,
+  MoreHorizontal,
+  Paperclip,
+  Pencil,
+  Pin,
+  Plus,
+  Plug,
+  RefreshCw,
   Search,
   Settings,
+  Share2,
   ShieldCheck,
+  Trash2,
   User,
   X,
   type LucideIcon,
@@ -117,7 +130,67 @@ export function AiIcon(props: IconProps) {
   return <Icon icon={Bot} {...props} />;
 }
 
-/** AI 工作台（运行时会话） */
+/** MCP 连接器 */
+export function PlugIcon(props: IconProps) {
+  return <Icon icon={Plug} {...props} />;
+}
+
+/** Agent（运行时会话） */
 export function ChatIcon(props: IconProps) {
   return <Icon icon={MessageSquare} {...props} />;
+}
+
+/** 会话操作菜单 */
+export function MoreIcon(props: IconProps) {
+  return <Icon icon={MoreHorizontal} {...props} />;
+}
+
+export function PinIcon(props: IconProps) {
+  return <Icon icon={Pin} {...props} />;
+}
+
+export function ShareIcon(props: IconProps) {
+  return <Icon icon={Share2} {...props} />;
+}
+
+export function EditIcon(props: IconProps) {
+  return <Icon icon={Pencil} {...props} />;
+}
+
+export function TrashIcon(props: IconProps) {
+  return <Icon icon={Trash2} {...props} />;
+}
+
+export function PlusIcon(props: IconProps) {
+  return <Icon icon={Plus} {...props} />;
+}
+
+/** 附件上传 */
+export function AttachmentIcon(props: IconProps) {
+  return <Icon icon={Paperclip} {...props} />;
+}
+
+/** 语音输入 */
+export function MicIcon(props: IconProps) {
+  return <Icon icon={Mic} {...props} />;
+}
+
+/** 语音输入（录音中） */
+export function MicOffIcon(props: IconProps) {
+  return <Icon icon={MicOff} {...props} />;
+}
+
+/** 重做 / 重新生成 */
+export function RefreshIcon(props: IconProps) {
+  return <Icon icon={RefreshCw} {...props} />;
+}
+
+/** 复制 */
+export function CopyIcon(props: IconProps) {
+  return <Icon icon={Copy} {...props} />;
+}
+
+/** 复制成功 */
+export function CheckIcon(props: IconProps) {
+  return <Icon icon={Check} {...props} />;
 }

@@ -13,6 +13,8 @@ import {
 } from "@/lib/ai-employees";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext } from "@/lib/db/user-context";
+import { listMcpToolOptions } from "@/lib/mcp/connectors";
+import { canAssignWork, listWorkItems } from "@/lib/work-items";
 
 import { AiEmployeesClient } from "./AiEmployeesClient";
 
@@ -31,9 +33,11 @@ export default async function AiEmployeesPage({
   const requested = typeof params.ai === "string" ? params.ai : undefined;
   const selectedId = employees.some((item) => item.id === requested) ? requested : employees[0]?.id;
 
-  const [detail, candidates] = await Promise.all([
+  const [detail, candidates, workItems, mcpTools] = await Promise.all([
     selectedId ? loadAiEmployee(context, selectedId) : Promise.resolve(null),
     canManage ? listAiEmployeeGrantCandidates(context) : Promise.resolve(null),
+    selectedId ? listWorkItems(context, selectedId) : Promise.resolve([]),
+    canManage ? listMcpToolOptions(context) : Promise.resolve([]),
   ]);
 
   return (
@@ -42,8 +46,8 @@ export default async function AiEmployeesPage({
         <div>
           <h1 className={pageTitle}>AI 员工</h1>
           <p className={pageSubtitle}>
-            目录与使用授权。未授权账号看不到任何 AI 员工（含名称与描述）；AI
-            员工自身不携带数据权限，运行时能力在 M3 接入。
+            给 AI 员工安排工作、跟踪执行、验收交付物。未授权账号看不到任何 AI 员工（含名称与描述）；
+            AI 员工自身不携带数据权限，运行时继承派发者的部门上下文。
           </p>
         </div>
       </header>
@@ -53,7 +57,10 @@ export default async function AiEmployeesPage({
         employees={employees}
         detail={detail}
         candidates={candidates}
+        workItems={workItems}
+        mcpTools={mcpTools}
         canManage={canManage}
+        canAssign={canAssignWork(context)}
       />
     </section>
   );

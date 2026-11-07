@@ -116,3 +116,27 @@ export const runStatus = pgEnum("run_status", [
 
 /** 知识缺口状态 */
 export const gapStatus = pgEnum("gap_status", ["open", "answered", "closed"]);
+
+/* -------------------------------------------------------------------------- */
+/* M3.5 · AI 员工派活                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 工作项状态机：
+ * - queued：已派发，等待 worker
+ * - running：执行中
+ * - waiting_review：已产出，等待人工验收
+ * - done：验收通过
+ * - returned：验收退回（保留交付物，可重新派发）
+ * - failed / cancelled：执行失败 / 取消
+ */
+export const workItemStatus = pgEnum("work_item_status", [
+  "draft",
+  "queued",
+  "running",
+  "waiting_review",
+  "done",
+  "returned",
+  "failed",
+  "cancelled",
+]);

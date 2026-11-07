@@ -43,6 +43,13 @@ async function closeStale(
            values ($1, $2, $3, 'status', $4::jsonb)`,
           [row.id, Number(seqRow.last_seq), seqRow.department_id, JSON.stringify({ status: "interrupted", reason })],
         );
+        // 派活执行被中断：工作项不能停在 running，交回人工处理
+        await client.query(
+          `update work_items
+              set status = 'failed', updated_at = now()
+            where current_run_id = $1 and status = 'running'`,
+          [row.id],
+        );
         closed.push(row.id);
       }
       await client.query("commit");

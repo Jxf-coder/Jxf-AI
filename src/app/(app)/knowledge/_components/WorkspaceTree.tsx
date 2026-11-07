@@ -277,7 +277,7 @@ export function WorkspaceTree({ tree, selected, query, matches, tab, target }: W
   return (
     <aside
       aria-label="知识库目录"
-      className="min-w-0 max-h-[360px] overflow-y-auto rounded-2xl border border-hairline bg-[#f7f8fa] p-2 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)]"
+      className="min-w-0 max-h-[360px] overflow-y-auto rounded-2xl border border-hairline bg-transparent p-2 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)]"
     >
       <p className="px-2 pb-1 pt-1 text-[11px] font-medium text-zinc-500">知识库目录</p>
 
