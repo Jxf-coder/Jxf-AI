@@ -38,16 +38,29 @@ function parseArgs(argv) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const days = Number.parseInt(String(args.days ?? process.env.AUDIT_RETENTION_DAYS ?? "365"), 10);
-  if (!Number.isFinite(days) || days < 30) {
-    throw new Error("留存天数必须 ≥ 30");
-  }
-
-  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const client = new Client({ connectionString: OWNER_URL, application_name: "jxf-audit-prune" });
   await client.connect();
 
   try {
+    // 留存优先级：命令行 --days > 设置面保存的配置 > 环境变量 > 365 天
+    let dbDays = null;
+    try {
+      const stored = await client.query(
+        "select audit_retention_days as days from app_settings where id = 1",
+      );
+      dbDays = stored.rows[0]?.days ?? null;
+    } catch {
+      // 旧库尚未应用 0022 迁移时静默回退
+    }
+
+    const rawDays = args.days ?? dbDays ?? process.env.AUDIT_RETENTION_DAYS ?? 365;
+    const days = Number.parseInt(String(rawDays), 10);
+    if (!Number.isFinite(days) || days < 30) {
+      throw new Error("留存天数必须 ≥ 30");
+    }
+
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
     const before = await client.query(
       "select count(*)::int as n from audit_events where tenant_id = $1",
       [TENANT],

@@ -80,7 +80,7 @@ export function ProfileMenu({ email, name, accessLevel }: ProfileMenuProps) {
               个人资料
             </Link>
           ) : null}
-          <Link href="/health" role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
+          <Link href="/settings" role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
             <SettingsIcon className="menu-icon" />
             设置
           </Link>

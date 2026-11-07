@@ -224,6 +224,8 @@ services:
     volumes:
       # 知识库原件落盘目录：必须独立于容器可写层，否则重建容器即丢文件
       - uploads:/app/public/uploads
+      # 只读查看宿主机备份产物（M5 脚本写入 backups/），供设置面展示
+      - ${JXF_BACKUP_DIR:-../backups}:/app/backups:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1"]
       interval: 15s

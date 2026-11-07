@@ -1,7 +1,7 @@
 /**
  * M5 切片 2：一键验收清单。
  *
- *   npm run verify:delivery            # guards + typecheck + 冒烟 + 授权体检
+ *   npm run verify:delivery            # guards + typecheck + 冒烟 + 设置面 + 授权体检
  *   npm run verify:delivery -- --quick # 跳过 typecheck
  *
  * 不执行破坏性数据库测试（test:runtime 会清理测试租户数据），需要时单独运行。
@@ -17,6 +17,7 @@ const steps = [
   { name: "权限守卫覆盖", args: ["run", "verify:guards"] },
   ...(quick ? [] : [{ name: "TypeScript 类型检查", args: ["run", "typecheck"] }]),
   { name: "部署冒烟", args: ["run", "smoke"] },
+  { name: "设置面校验", args: ["run", "test:settings"] },
   { name: "授权收口体检", args: ["run", "audit:grants"] },
 ];
 

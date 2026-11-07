@@ -1,4 +1,5 @@
 import { BrandMark } from "@/components/brand/BrandMark";
+import { getPublicBranding } from "@/lib/settings/store";
 
 import { LoginForm } from "./LoginForm";
 
@@ -17,12 +18,13 @@ export default async function LoginPage({
   const params = await searchParams;
   const rawReason = Array.isArray(params.reason) ? params.reason[0] : params.reason;
   const notice = rawReason ? REASON_MESSAGES[rawReason] : null;
+  const branding = await getPublicBranding();
 
   return (
     <main className="login-page">
       <div className="login-card">
         <h1 className="login-title">
-          <BrandMark size="md" />
+          <BrandMark size="md" label={branding.siteName} />
         </h1>
         <p className="page-subtitle">使用组织账号登录</p>
 

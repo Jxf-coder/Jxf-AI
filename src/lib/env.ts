@@ -5,6 +5,8 @@
  * 该模块在 instrumentation.register() 中首次调用，健康检查与 DB 连接复用缓存结果。
  */
 
+import { getAiRuntimeOverride } from "@/lib/settings/runtime";
+
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
 /**
@@ -172,19 +174,24 @@ function readAiFallback(chatModel: string, fastModel: string): AiFallbackConfig 
 }
 
 function readAiConfig(): AiEnvConfig {
-  const apiKey = readOptional("JXF_AI_API_KEY", "");
+  // 设置面保存的模型配置优先于环境变量（仅 AI 段落，连接串等仍由环境决定）
+  const runtime = getAiRuntimeOverride();
+  const apiKey = runtime?.apiKey ?? readOptional("JXF_AI_API_KEY", "");
   // 对话服务不一定提供 embedding 接口（如 DeepSeek），因此不复用 chat key：
   // 未显式配置 JXF_EMBEDDING_API_KEY 时，向量通道保持关闭，页面如实显示「仅关键词」。
   const embeddingApiKey = readOptional("JXF_EMBEDDING_API_KEY", "");
 
   // 深度推理（pro）：问答、复杂检索生成；JXF_AI_CHAT_MODEL 为向后兼容旧名
-  const chatModel = readOptional("JXF_AI_MODEL_PRO", readOptional("JXF_AI_CHAT_MODEL", "deepseek-v4-pro"));
+  const chatModel =
+    runtime?.chatModel ?? readOptional("JXF_AI_MODEL_PRO", readOptional("JXF_AI_CHAT_MODEL", "deepseek-v4-pro"));
   // 高频轻量（flash）：巡读抽取、蒸馏建卡、摘要
-  const fastModel = readOptional("JXF_AI_MODEL_FLASH", "deepseek-flash");
+  const fastModel = runtime?.fastModel ?? readOptional("JXF_AI_MODEL_FLASH", "deepseek-flash");
+  const enabled =
+    runtime?.enabled ?? (readOptional("JXF_AI_ENABLED", "false") === "true");
 
   return {
-    enabled: readOptional("JXF_AI_ENABLED", "false") === "true" && apiKey !== "",
-    baseUrl: readOptional("JXF_AI_BASE_URL", "https://api.openai.com/v1").replace(/\/+$/, ""),
+    enabled: enabled && apiKey !== "",
+    baseUrl: (runtime?.baseUrl ?? readOptional("JXF_AI_BASE_URL", "https://api.openai.com/v1")).replace(/\/+$/, ""),
     apiKey,
     chatModel,
     fastModel,
@@ -262,4 +269,12 @@ export function loadEnv(): AppEnv {
   };
 
   return cached;
+}
+
+/**
+ * 设置面刷新模型配置后调用：清空缓存，下次读取重新合并运行时覆盖。
+ * 只影响 AI 段落，数据库 / S3 连接参数不会因此变化。
+ */
+export function resetEnvCache(): void {
+  cached = null;
 }

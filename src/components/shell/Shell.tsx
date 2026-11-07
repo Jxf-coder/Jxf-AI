@@ -14,6 +14,7 @@ import { ProfileMenu } from "@/components/shell/ProfileMenu";
 interface ShellProps {
   email: string;
   name: string;
+  siteName: string;
   accessLevel: string | null;
   activeDepartmentId: string | null;
   memberships: DepartmentOption[];
@@ -25,6 +26,7 @@ interface ShellProps {
 export function Shell({
   email,
   name,
+  siteName,
   accessLevel,
   activeDepartmentId,
   memberships,
@@ -144,7 +146,7 @@ export function Shell({
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-header">
-          <BrandMark size="md" />
+          <BrandMark size="md" label={siteName} />
         </div>
 
         {/* 主侧边栏只承载主业务（Agent / 知识库）；管理入口收敛到顶栏与个人菜单 */}
@@ -165,7 +167,7 @@ export function Shell({
         <header className="topbar">
           <div className="topbar-inner">
             <span className="topbar-logo">
-              <BrandMark size="sm" />
+              <BrandMark size="sm" label={siteName} />
             </span>
 
             <button
@@ -225,7 +227,7 @@ export function Shell({
           />
           <aside className="drawer" role="dialog" aria-modal="true" aria-label="导航">
             <div className="drawer-header">
-              <BrandMark size="sm" />
+              <BrandMark size="sm" label={siteName} />
               <button type="button" className="drawer-close" aria-label="关闭" onClick={() => setDrawerOpen(false)}>
                 <CloseIcon size={18} />
               </button>

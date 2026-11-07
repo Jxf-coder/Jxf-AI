@@ -7,11 +7,13 @@ import { resolveUserContext, withUserContext, type ActiveMembership } from "@/li
 import { errorMessage, log } from "@/lib/logger";
 import { resolveContextPermissions } from "@/lib/permissions/server";
 import { toPermissionSnapshot } from "@/lib/permissions/snapshot";
+import { getPublicBranding } from "@/lib/settings/store";
 import type { PermissionSnapshot } from "@/types/permission";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireSession();
   const requestId = (await headers()).get("x-request-id") ?? undefined;
+  const branding = await getPublicBranding();
 
   let accessLevel: string | null = null;
   let activeDepartmentId: string | null = null;
@@ -60,6 +62,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <Shell
         email={user.email}
         name={user.name}
+        siteName={branding.siteName}
         accessLevel={accessLevel}
         activeDepartmentId={activeDepartmentId}
         memberships={memberships.map((membership) => ({

@@ -25,6 +25,7 @@ import { isCancelRequested } from "@/lib/runtime/cancel";
 import { emitEvent, savePartialText } from "@/lib/runtime/emit";
 import { markInterruptedForOthers, sweepStaleHeartbeat } from "@/lib/runtime/recover";
 import { recordUsage } from "@/lib/runtime/usage";
+import { ensureRuntimeSettings } from "@/lib/settings/runtime-server";
 
 const WORKER_ID = `worker-${os.hostname()}-${process.pid}`;
 const IDLE_SLEEP_MS = 800;
@@ -555,6 +556,9 @@ async function main(): Promise<void> {
   });
 
   log("info", "runtime_worker_started", { worker: WORKER_ID });
+
+  // 应用设置面保存的模型配置（Worker 是独立进程，启动时加载一次）
+  await ensureRuntimeSettings();
 
   const interrupted = await markInterruptedForOthers(pool, WORKER_ID);
   if (interrupted.length > 0) {

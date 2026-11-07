@@ -22,6 +22,7 @@
     "test:knowledge": "node --env-file=.env --import tsx scripts/test-knowledge.mjs",
     "test:ai-employees": "node --env-file=.env --import tsx scripts/test-ai-employees.mjs",
     "test:runtime": "node --env-file=.env --import tsx scripts/test-runtime.mjs",
+    "test:settings": "node --env-file=.env --import tsx scripts/test-app-settings.mjs",
     "backup": "node --env-file=.env scripts/backup.mjs",
     "restore": "node --env-file=.env scripts/restore.mjs",
     "upgrade": "node --env-file=.env scripts/upgrade.mjs",
