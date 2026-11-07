@@ -10,6 +10,7 @@ import {
 import { listAiEmployees } from "@/lib/ai-employees";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
+import { PIPELINE_EVENT_LABELS, PIPELINE_EVENT_TYPES } from "@/lib/pipeline-events";
 import { listPipelineRuns, listPipelines } from "@/lib/pipelines";
 import { authorize } from "@/lib/permissions/authorize";
 import { resolveContextPermissions } from "@/lib/permissions/server";
@@ -77,6 +78,10 @@ export default async function PipelinesPage() {
             .filter((employee) => employee.status === "active")
             .map((employee) => ({ id: employee.id, name: employee.name }))}
           canManage={canManage}
+          eventOptions={PIPELINE_EVENT_TYPES.map((value) => ({
+            value,
+            label: PIPELINE_EVENT_LABELS[value],
+          }))}
         />
       </div>
     </section>

@@ -55,6 +55,11 @@ const base = "http://127.0.0.1:3000";
   await hit("pipelines", "/pipelines", { redirect: "manual" });
   await hit("metrics", "/api/metrics");
   await hit("metricsProm", "/api/metrics?format=prometheus");
+  await hit("webhook", "/api/webhooks/pipelines/00000000-0000-4000-8000-000000000000", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
   console.log(JSON.stringify(out));
 })();
 `;
@@ -168,6 +173,11 @@ function main() {
       ? "PASS"
       : "FAIL",
     `HTTP ${http.metricsProm?.status ?? "-"}`,
+  );
+  record(
+    "Webhook 未认证拒绝",
+    http.webhook?.status === 401 ? "PASS" : "FAIL",
+    `HTTP ${http.webhook?.status ?? "-"}`,
   );
 
   const version = dbVersion();

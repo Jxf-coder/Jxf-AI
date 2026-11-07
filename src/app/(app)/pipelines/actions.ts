@@ -8,6 +8,12 @@ import { errorMessage, log } from "@/lib/logger";
 import { PermissionDeniedError, toPermissionMessage } from "@/lib/permissions/guard";
 import { notifyPipelineFailure } from "@/lib/notifications/events";
 import {
+  isPipelineEventType,
+  setPipelineEventSubscription,
+  type PipelineEventType,
+} from "@/lib/pipeline-events";
+import { disableWebhook, rotateWebhookToken } from "@/lib/pipelines-webhook";
+import {
   PipelineInputError,
   createPipeline,
   runPipeline,
@@ -84,5 +90,58 @@ export async function togglePipelineAction(
     return { ok: true, message: enabled ? "产线已启用" : "产线已停用" };
   } catch (error) {
     return failure("toggle_pipeline", error);
+  }
+}
+
+export interface WebhookActionResult extends PipelineActionResult {
+  /** 仅在生成/重置成功时返回一次 */
+  token?: string;
+  webhookPath?: string;
+}
+
+export async function rotateWebhookAction(pipelineId: string): Promise<WebhookActionResult> {
+  try {
+    const result = await rotateWebhookToken(await contextOf(), pipelineId);
+    revalidatePath("/pipelines");
+    return {
+      ok: true,
+      message: `Webhook 已启用（令牌末 4 位 ${result.hint}），请立即保存：关闭后不再显示明文`,
+      token: result.token,
+      webhookPath: `/api/webhooks/pipelines/${pipelineId}`,
+    };
+  } catch (error) {
+    return failure("rotate_webhook", error);
+  }
+}
+
+export async function disableWebhookAction(pipelineId: string): Promise<PipelineActionResult> {
+  try {
+    await disableWebhook(await contextOf(), pipelineId);
+    revalidatePath("/pipelines");
+    return { ok: true, message: "Webhook 已停用，旧令牌立即失效" };
+  } catch (error) {
+    return failure("disable_webhook", error);
+  }
+}
+
+export async function setEventSubscriptionAction(
+  pipelineId: string,
+  eventType: string,
+  enabled: boolean,
+): Promise<PipelineActionResult> {
+  try {
+    if (!isPipelineEventType(eventType)) {
+      return { ok: false, message: "不支持的事件类型" };
+    }
+    await setPipelineEventSubscription(
+      await contextOf(),
+      pipelineId,
+      eventType as PipelineEventType,
+      enabled,
+    );
+    revalidatePath("/pipelines");
+    return { ok: true, message: enabled ? "已订阅事件" : "已取消订阅" };
+  } catch (error) {
+    return failure("set_event_subscription", error);
   }
 }

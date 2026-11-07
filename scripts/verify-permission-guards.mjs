@@ -72,6 +72,10 @@ const WHITELIST = new Map([
     "src/app/api/metrics/route.ts::GET",
     "只读聚合指标：SECURITY DEFINER 函数仅返回计数，无明细；配置 METRICS_TOKEN 时强制 Bearer 校验",
   ],
+  [
+    "src/app/api/webhooks/pipelines/[id]/route.ts::POST",
+    "外部 Webhook：每产线独立令牌（库内只存 SHA-256 哈希，恒定时间比较），以产线发起人上下文运行",
+  ],
 ]);
 
 const FUNCTION_PATTERN = /export\s+(?:async\s+)?function\s+([A-Za-z0-9_]+)/g;

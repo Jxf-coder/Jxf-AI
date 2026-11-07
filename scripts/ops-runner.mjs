@@ -29,6 +29,10 @@ import { checkConnectorsAsOwner, sendHealthWebhook } from "../src/lib/mcp/health
 import { resolveUserContext } from "../src/lib/db/user-context.ts";
 import { advancePipelineRuns, sweepScheduledPipelines } from "../src/lib/pipeline-runner.ts";
 import {
+  dispatchPipelineEvents,
+  publishPipelineEventSafe,
+} from "../src/lib/pipeline-events.ts";
+import {
   notifyHealthAlert,
   notifyOpsTaskFailure,
   notifyPipelineFailure,
@@ -162,16 +166,46 @@ async function runHealthSweep(client) {
       down,
       duration_ms: Date.now() - startedAt,
     });
+
+    // 状态迁移投递到内部事件总线，供产线订阅
+    for (const result of results) {
+      if (!result.transition) {
+        continue;
+      }
+      await publishPipelineEventSafe(client, {
+        tenantId: result.tenantId,
+        eventType: "mcp.connector_changed",
+        payload: {
+          connector_id: result.serverId,
+          name: result.name,
+          status: result.status,
+          transition: result.transition,
+          error: result.error,
+        },
+      });
+    }
   } catch (error) {
     log("连接器体检失败", { error: error instanceof Error ? error.message : String(error) });
   }
 }
 
-/** 产线推进：到点触发定时产线，并推动已完成的运行进入下一步 */
+/** 产线推进：派发内部事件、触发定时产线，并推动已完成运行进入下一步 */
 async function runPipelineTick(client) {
   const startedAt = Date.now();
   const hooks = { resolveContext: (userId) => resolveUserContext(userId) };
   try {
+    const events = await dispatchPipelineEvents(client, hooks);
+    for (const event of events) {
+      if (event.status !== "processed" || event.errors.length > 0) {
+        log("事件派发异常", {
+          event: event.eventType,
+          triggered: event.triggered,
+          status: event.status,
+          error: event.errors.join("; ").slice(0, 300),
+        });
+      }
+    }
+
     const scheduled = await sweepScheduledPipelines(client, hooks);
     const advanced = await advancePipelineRuns(client, hooks);
 
@@ -203,8 +237,9 @@ async function runPipelineTick(client) {
     }
 
     const moved = advanced.filter((item) => item.action !== "waiting").length;
-    if (scheduled.length > 0 || moved > 0) {
+    if (scheduled.length > 0 || moved > 0 || events.length > 0) {
       log("产线推进完成", {
+        events: events.length,
         scheduled: scheduled.length,
         advanced: moved,
         waiting: advanced.length - moved,
