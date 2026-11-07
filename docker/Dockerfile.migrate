@@ -11,7 +11,7 @@ ENV NODE_ENV=production
 # 可通过构建参数切换 registry（内网/镜像源），并加大重试以适配不稳定网络
 ARG NPM_REGISTRY=https://registry.npmjs.org
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci --omit=dev --ignore-scripts --registry="${NPM_REGISTRY}" \
       --fetch-retries=5 \
       --fetch-retry-mintimeout=20000 \

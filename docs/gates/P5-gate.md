@@ -92,3 +92,21 @@ migrate 容器：applied_migrations=25 / applied_policies=28 / extensions ok
 
 > Tag：`gate/p5-passed` @ `3638db9`
 > 自动化门禁 6/6 + 数据库回归全集全绿；人工验收步骤保留在本文件，后续改动如触及 P5 范围需重新走一遍。
+
+## 依赖安全基线（2026-11-07 复核）
+
+`npm audit` 由 11 项告警（6 high）降为 6 项（1 high）：
+
+| 处理 | 依赖 | 说明 |
+|---|---|---|
+| 已升级 | `nodemailer` 7.0.13 → 10.3.1 | 修复地址解析 / SMTP 命令注入 / DNS 缓存等公告；本项目未使用 next-auth Email Provider |
+| 已升级 | `drizzle-orm` 0.44.7 → 0.45.4 | 修复 SQL 标识符转义注入（GHSA-gpj5-g38j-94v9） |
+| 已升级 | `@types/nodemailer` → 8.0.2 | 与 nodemailer 10 匹配 |
+| 说明 | `.npmrc` → `legacy-peer-deps=true` | next-auth 5 beta 的 peerOptional `nodemailer ^7 \|\| ^8` 与直连 nodemailer 10 冲突；不使用其邮件 Provider，放宽 peer 安全 |
+
+仍存在的告警与处置：
+
+- `postcss`（high，经 `next@15.5.x` 传递）：官方修复要求升级 Next 16（major）。本项目不处理用户提交的 CSS，风险面为构建期，暂缓 major 升级；升级 Next 16 需单独回归。
+- `drizzle-kit` / `esbuild`（moderate，devDependency）：仅用于本地 schema 工具，不进运行时镜像；等待上游更新。
+
+复核命令：`npm audit --omit=dev`（运行时）与 `npm audit`（含开发依赖）。
