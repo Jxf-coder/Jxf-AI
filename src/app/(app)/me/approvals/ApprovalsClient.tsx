@@ -129,6 +129,12 @@ export function ApprovalsClient({
               <div className="settings-row">
                 <span className="settings-label">操作</span>
                 <div className="settings-value approval-actions">
+                  <a
+                    className="button button-ghost"
+                    href={`/api/handover/export?membershipId=${item.membershipId}`}
+                  >
+                    导出交接包
+                  </a>
                   <button
                     type="button"
                     className="button button-ghost"

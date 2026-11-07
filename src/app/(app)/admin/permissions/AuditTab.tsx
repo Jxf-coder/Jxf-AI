@@ -266,7 +266,25 @@ export async function AuditTab({
     <div>
       <div className="audit-toolbar">
         <p className="hint">当前可见范围：{scopeText}</p>
-        <AuditTypeFilter type={logType} order={order} />
+        <div className="approval-actions">
+          {data.canReadAudit ? (
+            <>
+              <a
+                className="button button-ghost"
+                href={`/api/audit/export?type=${logType}&format=csv`}
+              >
+                导出 CSV
+              </a>
+              <a
+                className="button button-ghost"
+                href={`/api/audit/export?type=${logType}&format=jsonl`}
+              >
+                导出 JSONL
+              </a>
+            </>
+          ) : null}
+          <AuditTypeFilter type={logType} order={order} />
+        </div>
       </div>
 
       {!data.canReadAudit ? (
@@ -301,7 +319,8 @@ export async function AuditTab({
           </ul>
         )}
         <p className="hint">
-          按时间{order === "asc" ? "正序" : "倒序"}展示最近 200 条；更早记录可后续按筛选条件查询。
+          按时间{order === "asc" ? "正序" : "倒序"}展示最近 200 条；更早记录可用上方导出按范围获取。
+          审计只追加，留存默认 365 天，由运维执行 <code>npm run audit:prune</code> 清理。
         </p>
       </div>
     </div>
