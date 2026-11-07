@@ -179,7 +179,9 @@ docker compose (单机)
 
 > **切片 3（已落地）**：连接器批量心跳与降级。`mcp_servers` 新增 `health_status`（unknown / healthy / degraded / down）、`health_checked_at`、`health_latency_ms`、`health_consecutive_failures`、`health_last_error`；`src/lib/mcp/health.ts` 统一探测链路（复用 `listTools`），连续失败 1–2 次降级、≥3 次熔断，状态迁移写 `mcp.connector_unhealthy` / `mcp.connector_recovered` 审计；worker 构建工具计划时排除 `down` 连接器（失败降级）；设置页 `/settings/mcp` 支持「批量体检」与异常横幅；宿主机 `ops:runner` 每 5 分钟自动体检（`MCP_HEALTH_INTERVAL_MS`），可选 `MCP_ALERT_WEBHOOK` 推送告警。
 
-> **后续切片**：连接器告警渠道模板（飞书/企微卡片）与恢复后的自动复检策略。
+> **切片 4（已落地）：自动化产线（最小可用）**：`pipelines` + `pipeline_runs`；产线 = 有序派活步骤（最多 10 步），运行一次按顺序为每步创建 `work_item` + `kind='task'` 的 run，复用现有队列与人工验收；某步失败即停并记录失败步骤，已派出的工作保留；`/pipelines` 提供定义、运行与进度聚合，左侧导航「自动化」正式启用。
+
+> **后续切片**：产线定时/事件触发、条件分支与跨步骤产物传递；连接器告警渠道模板（飞书/企微卡片）。
 
 ---
 
@@ -283,8 +285,9 @@ UI 不做独立阶段，而是**在每个 Phase 内先行**，顺序固定为：
 |---|---|---|
 | 工作台 | 通用 Agent 对话、run 历史、执行事件、中止与重连 | P3 |
 | 知识库 | 文档、卡片（待确认 / 已确认）、缺口、回归 | P2 |
-| 组织与岗位 | 部门树、成员名片（等级 + 姓名 · 业务岗位）、部门包、产线 / 自动化 | P1 |
+| 组织与岗位 | 部门树、成员名片（等级 + 姓名 · 业务岗位）、部门包 | P1 |
 | AI 员工 | 目录、使用授权（岗位/人）、派活、执行跟踪与人工验收 | P2 Schema / P3 运行态 / M3.5 派活 |
+| 自动化 | 产线定义（有序派活步骤）、批量运行与进度聚合 | P5 |
 | MCP 连接 | 对外令牌、外部连接器、调用审计与限流（左侧导航位于 Agent 下方） | M4 |
 | 技能 | 原子能力目录、工具包、MCP 工具可见性 | P4 |
 | 设置 | 品牌、模型 Key、审计、备份 | P5 |
