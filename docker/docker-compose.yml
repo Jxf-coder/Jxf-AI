@@ -217,6 +217,8 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
       NOTIFICATION_EMAIL_TO: ${NOTIFICATION_EMAIL_TO:-}
+      # 指标端点保护（可选）：非空时 /api/metrics 要求 Bearer 令牌
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy

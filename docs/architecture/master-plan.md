@@ -185,6 +185,8 @@ docker compose (单机)
 
 > **切片 6（已落地）：邮件通知**：新增 SMTP 配置（设置面优先，`SMTP_*` / `NOTIFICATION_EMAIL_TO` 环境变量兜底），口令与模型 Key 一样 AES-256-GCM 加密入库；`src/lib/notifications/mailer.ts` 基于 nodemailer 统一发送，未配置时安静跳过、发送失败只落日志；连接器 degraded / down 熔断与恢复、运维任务失败、产线失败自动发出含错误详情的邮件。设置页新增「邮件通知」区块与测试发送。
 
+> **切片 7（已落地）：安装向导与可观测性**：`npm run setup` 从 `.env.example` 生成 `.env`（随机密钥/口令、占位值检查、覆盖前自动备份、Node/docker 前置检查）；`GET /api/metrics` 返回聚合指标（JSON / Prometheus 文本，可选 `METRICS_TOKEN`），数据来自 SECURITY DEFINER 的 `app.metrics_snapshot()`，只含计数不含明细；`docs/operations/observability.md` 给出探针、抓取与告警规则。
+
 > **后续切片**：产线事件触发（外部 webhook / 系统事件）；通知渠道扩展（飞书/企微卡片）。
 
 ---

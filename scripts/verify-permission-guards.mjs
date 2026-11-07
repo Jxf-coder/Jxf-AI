@@ -68,6 +68,10 @@ const WHITELIST = new Map([
     "src/app/api/mcp/route.ts::DELETE",
     "无状态 MCP 端点不维护会话，固定返回 405，不读写数据",
   ],
+  [
+    "src/app/api/metrics/route.ts::GET",
+    "只读聚合指标：SECURITY DEFINER 函数仅返回计数，无明细；配置 METRICS_TOKEN 时强制 Bearer 校验",
+  ],
 ]);
 
 const FUNCTION_PATTERN = /export\s+(?:async\s+)?function\s+([A-Za-z0-9_]+)/g;
