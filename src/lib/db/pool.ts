@@ -21,7 +21,10 @@ export function getPool(): Pool {
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 3_000,
-    query_timeout: 3_000,
+    // 服务端 15s 主动中止语句，客户端 30s 兜底。知识库入库与证据回归属于秒级到十几秒的
+    // 重查询，原 3s 上限会在慢盘上误杀；两层超时可避免单条语句长期占住连接。
+    query_timeout: 30_000,
+    options: "-c statement_timeout=15000",
   });
 
   pool.on("error", (error) => {
