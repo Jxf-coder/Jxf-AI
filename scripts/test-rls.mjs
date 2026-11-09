@@ -241,6 +241,44 @@ async function main() {
   });
   check("未注入身份读取", anon.rowCount === 0, `rowCount=${anon.rowCount}`);
 
+  // 8.1 users 行级安全：匿名清空、L3 只见本部门、L3 不能改他人
+  const anonUsers = await withClient(APP_URL, async (client) => {
+    await client.query("begin");
+    const result = await client.query("select count(*)::int as n from users");
+    await client.query("commit");
+    return result.rows[0].n;
+  });
+  check("未注入身份读取 users", anonUsers === 0, `n=${anonUsers}`);
+
+  const l3Users = await runAs(seatAUser, (client) =>
+    client.query("select email from users where email like '%@rls.test'"),
+  );
+  check("L3 只看到本部门成员", l3Users.rowCount === 2, `rowCount=${l3Users.rowCount}`);
+
+  const l1Users = await runAs(ownerUser, (client) =>
+    client.query("select email from users where email like '%@rls.test'"),
+  );
+  check("L1 看到全部人员", l1Users.rowCount === 5, `rowCount=${l1Users.rowCount}`);
+
+  const l3UpdateOther = await runAs(seatAUser, (client) =>
+    client.query("update users set name = name where email = $1", ["u2@rls.test"]),
+  );
+  check("L3 不能改他人资料", l3UpdateOther.rowCount === 0, `rowCount=${l3UpdateOther.rowCount}`);
+
+  const l3UpdateSelf = await runAs(seatAUser, (client) =>
+    client.query("update users set name = name where email = $1", ["u1@rls.test"]),
+  );
+  check("L3 可改本人资料", l3UpdateSelf.rowCount === 1, `rowCount=${l3UpdateSelf.rowCount}`);
+
+  const statusProbe = await withClient(APP_URL, (client) =>
+    client.query("select app.user_status($1) as status", [fixtures.userIds["u1@rls.test"]]),
+  );
+  check(
+    "无上下文可查账号状态",
+    statusProbe.rows[0]?.status === "active",
+    `status=${statusProbe.rows[0]?.status ?? "-"}`,
+  );
+
   // 9. L3 越权写入 → RLS 拒绝（42501）
   const deniedWrite = await expectError(
     () =>

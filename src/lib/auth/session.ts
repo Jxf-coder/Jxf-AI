@@ -12,8 +12,9 @@ export interface SessionUser {
 
 /** 同一请求内复用账号状态查询，避免 layout / page / action 重复打库。 */
 const loadAccountStatus = cache(async (userId: string): Promise<string> => {
-  const { rows } = await getPool().query<{ status: string }>(
-    "select status from users where id = $1",
+  // 此时还没建立用户上下文，users 的 RLS 会把直查清空，只能走 SECURITY DEFINER 函数
+  const { rows } = await getPool().query<{ status: string | null }>(
+    "select app.user_status($1) as status",
     [userId],
   );
   return rows[0]?.status ?? "disabled";
