@@ -620,7 +620,7 @@ experience.ts[RR7T]: F:worker 侧经验消费者，领取一个 job、执行提�
 main.ts[RR9L]: F:worker 进程入口，循环领取运行时 run 并执行流式模型调用、工具调用、事件与用量记账 | R:code:src/lib/runtime/claim.ts,code:src/lib/runtime/emit.ts,code:src/lib/runtime/recover.ts,code:src/lib/mcp/worker-tools.ts,code:src/lib/settings/runtime-server.ts | A:worker 运行 | S:只消费队列不承担 HTTP，使用 WORKER_DATABASE_URL 的 app_worker 受限角色；启动时把不属于本进程的 running 收口为 interrupted；心跳 30s、巡检 60s、空闲 800ms；连接池 max 4，query_timeout 与服务端 statement_timeout 均为 60s，任务续跑靠租约而非超时；经验沉淀后台单并发，不阻塞前台 run 领取
 
 ===E:/JXF-AI/docs/audit/===
-2026-11-09-全面审计报告.md[SQ5M]: F:工作台项目静态全面审计报告，按六条线分级列出安全、认知、可靠性与交付问题，附真实库复核、处置记录与修复路线图 | R:code:src/auth.ts,code:src/lib/db/pool.ts,code:docker/postgres/00-init.sh | A:审计交付 | S:结论绑定 2026-11-09 的索引与库内只读目录查询，未读取业务行；SEC-01 修复必须先拆 Auth.js 专用角色再对 jxf_app 收权，顺序颠倒会导致登录不可用；CI 只覆盖无 DB 的 7 项检查，集成测试走部署机 verify:delivery；SEC-02 已拆出专用数据加密密钥，v1 密文仍可解密并在下次保存时升级为 v2
+2026-11-09-全面审计报告.md[SQ5M]: F:工作台项目静态全面审计报告，按六条线分级列出安全、认知、可靠性与交付问题，附真实库复核、处置记录与修复路线图 | R:code:src/auth.ts,code:src/lib/db/pool.ts,code:docker/postgres/00-init.sh | A:审计交付 | S:结论绑定 2026-11-09 的索引与库内只读目录查询，未读取业务行；SEC-01 必须先拆 jxf_auth 再对 jxf_app 收权，顺序颠倒会让登录不可用；CI 只跑无 DB 的 7 项，集成测试走 verify:delivery；SEC-02 专用加密密钥支持 v1 密文平滑升级；IDX-04 抽查 25 条 S:- 未发现失效断言；.npmrc 不在托管范围需改 scope 策略
 
 ===E:/JXF-AI/db/ops/===
 auth-role-cutover.sql[OS8T]: F:jxf_auth 角色的人工切换脚本：超级用户建角色、部署后验证登录，再由 owner 对 jxf_app 收权 | R:code:db/policies/034_auth_role.sql,code:docker/postgres/00-init.sh | A:角色切换运维 | S:migrate 只读 db/policies，不会执行本文件；收权必须在 AUTH_DATABASE_URL 生效并验证登录之后，顺序颠倒会直接锁死登录；users 只收回 password_hash 列，其余展示列继续授予 jxf_app
