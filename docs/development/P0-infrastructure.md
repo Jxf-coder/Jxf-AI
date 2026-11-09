@@ -220,6 +220,7 @@ P0 基线迁移 `0000_p0_baseline.sql` 不建业务表，只断言三个扩展�
 | `JXF_SITE_ADDRESS` | 否 | `:80` | Caddy 站点地址 |
 | `JXF_HTTP_PORT` / `JXF_HTTPS_PORT` | 否 | `80` / `443` | 宿主机映射端口 |
 | `JXF_AUTH_SECRET` | **是** | — | ≥32 字符，弱值黑名单拒绝启动 |
+| `JXF_DATA_ENCRYPTION_KEY` | 否 | — | 设置面密文专用密钥；留空回退到 `JXF_AUTH_SECRET` 派生（`v1` 密文），配置后新密文为 `v2` |
 | `POSTGRES_DB` | **是** | — | 库名 |
 | `POSTGRES_USER` | **是** | — | 超级用户（仅 initdb/运维） |
 | `POSTGRES_PASSWORD` | **是** | — | 超级用户口令 |

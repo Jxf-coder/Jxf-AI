@@ -1,43 +1,79 @@
 /**
  * 设置面密钥加密（AES-256-GCM）。
  *
- * 数据库只保存密文，解密材料来自进程环境变量 JXF_AUTH_SECRET，
- * 因此数据库备份 / 误导出不会泄露模型 Key 明文。
- * 轮换 JXF_AUTH_SECRET 后旧密文无法解密，运行时回退到环境变量配置。
+ * 数据库只保存密文，解密材料来自进程环境变量：
+ * - `v2`：专用数据加密密钥 `JXF_DATA_ENCRYPTION_KEY`（推荐，轮换会话密钥不影响已存密文）
+ * - `v1`：回退到 `JXF_AUTH_SECRET`（旧部署兼容，无需迁移）
+ *
+ * 读取按密文版本选密钥，因此配置专用密钥后旧 `v1` 密文仍可解密，下次保存自动升级为 `v2`。
+ * 数据库备份 / 误导出不会泄露模型 Key 明文。
  */
 
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
 
-const VERSION = "v1";
+const VERSION_LEGACY = "v1";
+const VERSION_DEDICATED = "v2";
 const SALT = "jxf-app-settings";
-let cachedKey: Buffer | null = null;
 
-function encryptionKey(): Buffer {
-  if (cachedKey) {
-    return cachedKey;
+const keyCache = new Map<string, Buffer>();
+
+function deriveKey(secret: string): Buffer {
+  const cached = keyCache.get(secret);
+  if (cached) {
+    return cached;
   }
-  const secret = process.env.JXF_AUTH_SECRET ?? "";
-  cachedKey = scryptSync(secret, SALT, 32);
-  return cachedKey;
+  const key = scryptSync(secret, SALT, 32);
+  keyCache.set(secret, key);
+  return key;
 }
 
-/** 返回 `v1.<iv>.<tag>.<ciphertext>`（base64url 分段） */
+function dedicatedSecret(): string {
+  return process.env.JXF_DATA_ENCRYPTION_KEY?.trim() ?? "";
+}
+
+/** 新密文优先用专用密钥；未配置时保持旧口径，已有部署不需要迁移 */
+function writeKey(): { version: string; key: Buffer } {
+  const dedicated = dedicatedSecret();
+  if (dedicated) {
+    return { version: VERSION_DEDICATED, key: deriveKey(dedicated) };
+  }
+  return { version: VERSION_LEGACY, key: deriveKey(process.env.JXF_AUTH_SECRET ?? "") };
+}
+
+/** 按密文版本取密钥；专用密钥未配置时 `v2` 密文无法解密，返回 null */
+function keyForVersion(version: string): Buffer | null {
+  if (version === VERSION_LEGACY) {
+    return deriveKey(process.env.JXF_AUTH_SECRET ?? "");
+  }
+  if (version === VERSION_DEDICATED) {
+    const dedicated = dedicatedSecret();
+    return dedicated ? deriveKey(dedicated) : null;
+  }
+  return null;
+}
+
+/** 返回 `v1|v2.<iv>.<tag>.<ciphertext>`（base64url 分段） */
 export function encryptSecret(plain: string): string {
+  const { version, key } = writeKey();
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return [VERSION, iv.toString("base64url"), tag.toString("base64url"), encrypted.toString("base64url")].join(".");
+  return [version, iv.toString("base64url"), tag.toString("base64url"), encrypted.toString("base64url")].join(".");
 }
 
-/** 解密失败（密钥轮换 / 数据损坏）返回 null，由调用方回退到环境变量 */
+/** 解密失败（密钥缺失 / 轮换 / 数据损坏）返回 null，由调用方回退到环境变量 */
 export function decryptSecret(payload: string): string | null {
   try {
     const [version, ivPart, tagPart, dataPart] = payload.split(".");
-    if (version !== VERSION || !ivPart || !tagPart || !dataPart) {
+    if (!version || !ivPart || !tagPart || !dataPart) {
       return null;
     }
-    const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(ivPart, "base64url"));
+    const key = keyForVersion(version);
+    if (!key) {
+      return null;
+    }
+    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivPart, "base64url"));
     decipher.setAuthTag(Buffer.from(tagPart, "base64url"));
     const decrypted = Buffer.concat([
       decipher.update(Buffer.from(dataPart, "base64url")),
