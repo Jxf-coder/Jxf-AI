@@ -4,7 +4,7 @@
 .dockerignore[FV5T]: F:定义镜像构建上下文排除项：依赖、构建产物、Git、文档脚本、环境变量与上传件不进镜像，仅白名单放行学习知识库 Markdown | R:code:docker/Dockerfile.web,code:docker/Dockerfile.worker,code:docker/Dockerfile.migrate | A:Docker 构建 | S:content/skills/learning-knowledge/*.md 的例外必须保留，否则学习知识库不会进入镜像；*.md 先全局排除再白名单放行
 .env.example[FC8S]: F:环境变量模板，覆盖通用、安全、PostgreSQL（含 Auth.js 专用角色）、MinIO、AI、Embedding、OCR、MCP、产线与邮件通知，默认关闭外部 AI 与 OCR | R:code:scripts/install.mjs,code:docker/docker-compose.yml,code:src/lib/env.ts | A:安装向导与部署 | S:JXF_AUTH_SECRET 缺失或少于 32 字符会拒绝启动；数据库与 MinIO 口令只能使用字母数字，因为会直接拼进连接串；JXF_AUTH_PASSWORD 用于创建 jxf_auth，容器内 AUTH_DATABASE_URL 由 compose 构造；METRICS_TOKEN 留空会让生产环境直接关闭 /api/metrics，安装向导会生成随机值；配置 JXF_DATA_ENCRYPTION_KEY 后设置面密文写为 v2，留空则回退 JXF_AUTH_SECRET 派生的 v1；.env 禁止入库
 .gitattributes[CG3T]: F:统一文本检出为 LF，并把 png/jpg/jpeg/gif/webp/ico 标记为二进制 | R:- | A:Git 检出 | S:CRLF 会改变文本字节与哈希，导致跨平台构建和 AOCI 基线漂移
-.gitignore[CG5T]: F:忽略依赖、构建产物、上传件、环境变量、运行数据与本地 AOCI MCP 配置，同时保留 .env.example | R:code:.env.example,code:docker/docker-compose.yml | A:Git 边界 | S:.trae/mcp.json 含本机二进制绝对路径与数据库连接串，必须保持本地；AOCI 认知资产不能被忽略，否则 scan 会静默跳过
+.gitignore[CG5T]: F:忽略依赖、构建产物、上传件、环境变量、运行数据、本地 AOCI MCP 配置与 5 份本地评审资料，同时保留 .env.example | R:code:.env.example,code:docker/docker-compose.yml | A:Git 边界 | S:.trae/mcp.json 含本机二进制绝对路径与数据库连接串，必须保持本地；AOCI 认知资产不能被忽略，否则 scan 会静默跳过；docs/architecture 下 5 份评审报告只保留在工作区，已在 Managed Scope 排除，勿手工取消忽略
 AGENTS.md[SG8S]: F:定义 Agent 在本仓库的 AOCI 认知建立、复用、维护与收尾合同，并声明静态文档不能覆盖机器事实 | R:code:aoci.txt,code:aoci.meta.txt | A:AOCI 会话 | S:aoci 区块由 AOCI 管理，手工改写会脱离 init/scan 的一致性；Live Guide、工具 Schema、Spec 与 Validator 始终优先于本文件
 drizzle.config.ts[XD4T]: F:drizzle-kit 配置，从 db/schema 生成迁移到 db/migrations | R:code:db/schema/index.ts | A:开发工具 | S:不参与 Next.js 构建；连接串来自 MIGRATION_DATABASE_URL；本仓库 0017 起为手写迁移，不自动生成
 next-env.d.ts[XV2T]: F:Next.js 自动生成的 TypeScript 类型引用 | R:code:next.config.ts | A:构建配置 | S:文件不应手工编辑，由 Next 生成
@@ -189,19 +189,14 @@ entrypoint.mjs[OV8M]: F:迁移容器入口：连接 jxf_owner，执行 drizzle �
 healthcheck.sh[OR6T]: F:PostgreSQL 容器健康检查，连接可用且三个扩展齐全才返回成功 | R:code:docker/Dockerfile.postgres | A:数据库初始化 | S:扩展计数不是 3 时返回非零，避免中文检索能力缺失被标记为 healthy
 
 ===E:/JXF-AI/docs/architecture/===
-MCP工具能力梳理报告.md[SN7M]: F:MCP 工具能力盘点：已注册 4 个工具、可扩展 50 多个后端能力与首批 18 个落地建议 | R:code:src/lib/mcp/tools.ts,code:docs/architecture/master-plan.md | A:架构文档 | S:只列代码中真实存在的函数与路由；需要新开发的能力单独标注
 Milestone1-岗位与授权数据模型.md[SI7M]: F:M1 组织与授权数据模型设计，定义租户、隔离粒度、岗位与 RLS 骨架的最小闭环 | R:code:db/migrations/0001_p1_org_departments.sql,code:docs/architecture/master-plan.md | A:架构文档 | S:实际实现已拆为部门树、memberships.title 与 access_level；DDL 以 0001 迁移与 policies 为准
-Milestone2-知识库数据模型.md[SB8L]: F:M2 知识库数据模型设计：证据链、确认门槛、批次血缘与回归评测四类资产 | R:code:db/migrations/0008_knowledge_base.sql,code:db/schema/knowledge.ts | A:架构文档 | S:明确不做文件系统当库、全量读 cards.json、TF-IDF 字面检索与两套卡库并存
+Milestone2-知识库数据模型.md[SB8L]: F:M2 知识库数据模型设计：证据链、确认门槛、批次血缘与回归评测四类资产 | R:code:db/migrations/0008_knowledge_base.sql,code:db/schema/knowledge.ts,code:src/lib/knowledge/cards.ts | A:架构文档 | S:明确不做文件系统当库、全量读 cards.json、TF-IDF 字面检索与两套卡库并存；手写卡 origin=manual 且 human_edited=true，可免逐字证据直接确认，AI 蒸馏与经验通道仍强制至少一条逐字证据
 Milestone3-运行态数据模型.md[SW8L]: F:M3 AI 运行时数据模型设计：threads、runs、steps、events、tool_calls、token_usages | R:code:db/migrations/0016_runtime_tables.sql,code:db/schema/runtime.ts,code:src/lib/runtime/claim.ts,code:src/lib/runtime/recover.ts,code:src/lib/runtime/resume.ts | A:架构文档 | S:threads 是会话、runs 是单次执行、ingest_runs 是入库批次，三者不合并；不做 DAG 与事件重放；attempts 只在领取时递增，仅 queued 与租约过期的 running 会被重新派发，interrupted 必须由用户显式「继续」才回队；执行器 catch 到的异常直接 failed、不消耗 attempts，累计派发 3 次后由巡检置 failed（max attempts reached）
-WorkBuddy连接器清单.md[SN7L]: F:WorkBuddy 连接器盘点，共 619 个工具包、530 个含 MCP 服务，并给出接入字段映射 | R:code:src/lib/mcp/connectors.ts,code:db/schema/mcp-servers.ts | A:架构文档 | S:清单来自本机插件目录扫描；streamable-http 需映射为 http；接入前需按 SSRF 与命令白名单校验
 master-plan.md[SG9L]: F:工程架构与落地路线图，冻结 Docker 单机交付、Next.js 全栈、PostgreSQL 与 RLS 等选型 | R:code:docs/architecture/Milestone1-岗位与授权数据模型.md,code:docs/architecture/Milestone2-知识库数据模型.md | A:架构文档 | S:本文件是唯一实施基准；与对话记录冲突时以本文件为准；Python 仅作离线工具且不持数据库凭据
 permission-model.md[SI9M]: F:权限模型语义冻结稿，定义 L1–L3、PermissionNode、Scope 与本轮纳入范围 | R:code:docs/architecture/权限系统与UI落地实施计划.md,code:src/lib/permissions/catalog.ts | A:架构文档 | S:代码以本文件为唯一语义依据；财务、教学、市场投放本轮不纳入，仅保留扩展接口
-原项目技能盘点报告.md[SE7L]: F:原项目 Skill 四层资产盘点：技能包、可执行技能、外部扩展与内置目录 | R:code:src/lib/skills.ts,code:db/migrations/0030_skills.sql | A:架构文档 | S:仅只读盘点，未搬迁代码或修改接口；老项目 Skill 不是单一概念，迁移需按四层分别评估
 原项目权限体系分析报告.md[SI8L]: F:原项目权限体系只读分析，梳理权限模型、全量权限点、绑定模式与前端拦截机制 | R:code:docs/architecture/permission-model.md,code:docs/architecture/权限系统与UI落地实施计划.md | A:架构文档 | S:只读分析，未修改被扫描项目；迁移目标是角色加权限点多选勾选架构
 权限系统与UI落地实施计划.md[SI8L]: F:权限系统落地实施计划，覆盖 L1–L3 防越权、细粒度 PermissionNode、Scope 与离职交接审批流 | R:code:docs/architecture/permission-model.md,code:src/lib/permissions/authorize.ts | A:架构文档 | S:按评审做减法，本轮仅保留扩展接口；阶段与迁移清单以本计划为准
-知识库UI移植与重构可行性评估与实施流程.md[SB7M]: F:知识库纯 UI 无损重构方案，锁定六个 Tab 与统计条的信息架构和数据来源 | R:code:src/app/(app)/knowledge/page.tsx,code:docs/architecture/知识库十目录与蒸馏对标报告.md | A:架构文档 | S:约束为零数据库迁移、零后台任务；视觉统一走全站苹果令牌
-知识库十目录与蒸馏对标报告.md[SB7M]: F:新旧项目 10 个业务目录、经验蒸馏流转与检索落点的逐项对标 | R:code:src/lib/knowledge/folders.ts,code:docs/architecture/知识库经验沉淀融合方案.md | A:架构文档 | S:新项目实际只有 01-original 与 02-cards 有写入方；老项目同时存在 Markdown 与 JSON 两套卡库，不可照搬
-知识库经验沉淀融合方案.md[SW8L]: F:知识库与经验沉淀融合方案：单一卡库、多通道采集、目录语义路由与确认门槛，Phase 0–2 已落地 | R:code:src/lib/knowledge/experience/capture.ts,code:src/lib/knowledge/experience/process.ts,code:db/schema/experience.ts | A:架构文档 | S:所有 AI 卡必须 pending 且至少一条逐字证据；05 经验不进事实问答；来源文本去敏截断后 90 天清理
+知识库UI移植与重构可行性评估与实施流程.md[SB7M]: F:知识库纯 UI 无损重构方案，锁定六个 Tab 与统计条的信息架构和数据来源 | R:code:src/app/(app)/knowledge/page.tsx | A:架构文档 | S:约束为零数据库迁移、零后台任务；视觉统一走全站苹果令牌
 
 ===E:/JXF-AI/docs/development/===
 P0-infrastructure.md[SV7L]: F:P0 环境底座开发记录：容器编排、自建 PG 镜像、反向代理与健康检查 | R:code:docs/gates/P0-gate.md,code:docker/docker-compose.yml | A:开发文档 | S:自建 PG 镜像锁定扩展版本；迁移容器为一次性任务，退出码即结果；JXF_DATA_ENCRYPTION_KEY 为可选专用加密密钥，留空回退 JXF_AUTH_SECRET
@@ -214,7 +209,7 @@ P0-gate.md[SG7T]: F:P0 环境底座人工闸门，列出 docker、db、health �
 P1-gate.md[SI8T]: F:P1 组织治理与权限体系人工闸门，覆盖部门、身份、HR 档案、权限表与审计 | R:code:docs/development/P1-auth-rls.md | A:验收文档 | S:验收主体为用户本人；旧路径已改为兼容跳转，不应再作为验收入口
 P2-gate.md[SB8T]: F:P2 知识库人工闸门，覆盖入库解析、双通道检索、知识卡确认门槛、问答证据、共享与回收站 | R:code:docs/architecture/Milestone2-知识库数据模型.md | A:验收文档 | S:15 步验收必须用户本人完成；全部通过后打 tag gate/p2-passed
 P3-gate.md[SW8T]: F:P3 AI 运行时与对话人工闸门，覆盖运行态表、队列状态机、事件流、对话页与 AI 员工派活 | R:code:docs/architecture/Milestone3-运行态数据模型.md | A:验收文档 | S:验收主体为用户本人；超时收口为 interrupted 而不是 failed
-P4-gate.md[SN8T]: F:P4 MCP Hub 人工闸门，覆盖对外令牌、MCP 端点、内置工具、六维 scope、逐工具审批与外部连接器 | R:code:docs/architecture/MCP工具能力梳理报告.md,code:db/schema/mcp.ts | A:验收文档 | S:令牌只存哈希并绑定任用；写类工具命中审批维时先落单不执行；连接器需 SSRF 与命令白名单
+P4-gate.md[SN8T]: F:P4 MCP Hub 人工闸门，覆盖对外令牌、MCP 端点、内置工具、六维 scope、逐工具审批与外部连接器 | R:code:db/schema/mcp.ts | A:验收文档 | S:令牌只存哈希并绑定任用；写类工具命中审批维时先落单不执行；连接器需 SSRF 与命令白名单
 P5-gate.md[SO8S]: F:P5 治理面与交付人工闸门，覆盖版本表、备份恢复、审计导出、设置面、运维任务与连接器心跳 | R:code:docs/operations/ops-runner.md,code:db/policies/028_ops_tasks_rls.sql | A:验收文档 | S:业务角色只能落单，任务状态只能由 owner runner 回写；设置面密钥只存密文与末 4 位
 
 ===E:/JXF-AI/docs/operations/===
@@ -314,7 +309,7 @@ GapsTab.tsx[EB5T]: F:知识缺口页签服务端取数，按状态读取缺口�
 GraphView.tsx[EB6S]: F:知识关系图谱，左列卡片右列文档，按证据链与冲突关系绘制边 | R:code:src/lib/knowledge/workspace.ts | A:知识库界面 | S:边颜色区分证据、未验证与冲突三种；无节点时展示空状态而不是空画布
 MetaRow.tsx[EB6S]: F:知识卡四字段补全行，可编辑来源、版本、负责人与有效期并保存 | R:code:src/app/(app)/knowledge/actions.ts,code:src/lib/knowledge/cards.ts | A:知识库界面 | S:四字段全部落在卡片的 extra jsonb，不新增结构化列
 MetaTab.tsx[EB5T]: F:条目四字段页签，读取知识卡并支持只看缺失四字段的条目 | R:code:src/lib/knowledge/cards.ts,code:src/app/(app)/knowledge/_components/MetaRow.tsx | A:知识库界面 | S:最多读取 200 张卡；来源、版本、负责人、有效期任一为空即视为缺失
-NewCardPanel.tsx[EB6S]: F:手写知识卡折叠面板，填写类型、标题、正文与来源等字段后提交 | R:code:src/app/(app)/knowledge/cards/actions.ts,code:src/lib/knowledge/cards.ts | A:知识库界面 | S:新建卡片一律进入待确认状态，不直接生效
+NewCardPanel.tsx[EB6S]: F:手写知识卡折叠面板，填写类型、标题、正文与来源等字段后提交 | R:code:src/app/(app)/knowledge/cards/actions.ts,code:src/lib/knowledge/cards.ts | A:知识库界面 | S:新建卡片一律进入待确认状态，不直接生效；手写卡写入 origin=manual 与 human_edited=true，可免逐字证据直接确认，需要可追溯依据时必须另补证据
 QaTab.tsx[EA6T]: F:知识问答页签，渲染问答面板并回放最近 50 条问答来源 | R:code:src/lib/knowledge/qa.ts,code:src/app/(app)/knowledge/QaPanel.tsx | A:知识库界面 | S:问答回放记录引用卡片、越界编号与数字校验结果；最多展示 50 条
 RegressionQuestions.tsx[EQ5S]: F:回归题集维护，支持手写加题、删题与查看基线命中卡数量 | R:code:src/app/(app)/knowledge/actions.ts,code:src/lib/knowledge/regression.ts | A:知识库界面 | S:加题时基线自动取前 3 张命中卡；写操作受 canWrite 控制
 RegressionTab.tsx[EQ6T]: F:回归题页签，汇总基线题集、运行门禁与最近一次逐题结果 | R:code:src/lib/knowledge/regression.ts,code:src/app/(app)/knowledge/RegressionPanel.tsx | A:知识库界面 | S:只有 canWrite 才渲染回归运行面板；题集最多读取 50 道
@@ -621,7 +616,7 @@ experience.ts[RR7T]: F:worker 侧经验消费者，领取一个 job、执行提�
 main.ts[RR9L]: F:worker 进程入口，循环领取运行时 run 并执行流式模型调用、工具调用、事件与用量记账 | R:code:src/lib/runtime/claim.ts,code:src/lib/runtime/emit.ts,code:src/lib/runtime/recover.ts,code:src/lib/mcp/worker-tools.ts,code:src/lib/settings/runtime-server.ts | A:worker 运行 | S:只消费队列不承担 HTTP，使用 WORKER_DATABASE_URL 的 app_worker 受限角色；启动时把不属于本进程的 running 收口为 interrupted；心跳 30s、巡检 60s、空闲 800ms；连接池 max 4，query_timeout 与服务端 statement_timeout 均为 60s，任务续跑靠租约而非超时；经验沉淀后台单并发，不阻塞前台 run 领取
 
 ===E:/JXF-AI/docs/audit/===
-2026-11-09-全面审计报告.md[SQ5M]: F:工作台项目静态全面审计报告，按六条线分级列出安全、认知、可靠性与交付问题，附真实库复核、处置记录与修复路线图 | R:code:src/auth.ts,code:src/lib/db/pool.ts,code:docker/postgres/00-init.sh,code:docs/architecture/Milestone3-运行态数据模型.md,code:docs/operations/ops-runner.md | A:审计交付 | S:结论绑定 2026-11-09 的索引与只读目录查询，未读取业务行；SEC-01 已闭环：先拆 jxf_auth 再收权，users 行级策略加三个 SECURITY DEFINER 入口；CI 只跑无 DB 的 7 项，集成测试走 verify:delivery；SEC-02 支持 v1 密文平滑升级；IDX-02 已为 75 条同名 Entry 补路径；REL-02 重试语义见架构与运维文档
+2026-11-09-全面审计报告.md[SQ5M]: F:工作台项目静态全面审计报告，按六条线分级列出安全、认知、可靠性与交付问题，附真实库复核、处置记录与修复路线图 | R:code:src/auth.ts,code:src/lib/db/pool.ts,code:docker/postgres/00-init.sh,code:docs/architecture/Milestone3-运行态数据模型.md,code:docs/operations/ops-runner.md | A:审计交付 | S:结论绑定 2026-11-09 的只读目录查询，未读取业务行；SEC-01 闭环：拆 jxf_auth + users 行级策略与 DEFINER 入口；CI 只跑无 DB 的 7 项；SEC-02 支持 v1 平滑升级；REL-02 重试语义入架构与运维文档；5 份本地资料走 gitignore + AOCI exclude
 
 ===E:/JXF-AI/db/ops/===
 auth-role-cutover.sql[OS8T]: F:jxf_auth 角色的人工切换脚本：超级用户建角色、部署后验证登录，再由 owner 对 jxf_app 收权 | R:code:db/policies/034_auth_role.sql,code:docker/postgres/00-init.sh | A:角色切换运维 | S:migrate 只读 db/policies，不会执行本文件；收权必须在 AUTH_DATABASE_URL 生效并验证登录之后，顺序颠倒会直接锁死登录；users 只收回 password_hash 列，其余展示列继续授予 jxf_app

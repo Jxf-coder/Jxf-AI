@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-08T16:11:12Z",
-  "updated_at": "2026-11-09T12:28:34Z",
+  "updated_at": "2026-11-09T13:13:58Z",
   "files": {
     ".dockerignore": {
       "role": "index",
@@ -29,9 +29,9 @@
     },
     ".gitignore": {
       "role": "index",
-      "sha256": "1805e50c57f0a065ffdf7b61860b6e2d10e011c7c670bd1426fe63b60242b736",
-      "size": 562,
-      "normalized_sha256": "1805e50c57f0a065ffdf7b61860b6e2d10e011c7c670bd1426fe63b60242b736"
+      "sha256": "1d6432c6d7aa0d6273b879c82b6c387792f29446ccdd3cd6f2e5f85061e7fcf4",
+      "size": 889,
+      "normalized_sha256": "1d6432c6d7aa0d6273b879c82b6c387792f29446ccdd3cd6f2e5f85061e7fcf4"
     },
     "AGENTS.md": {
       "role": "index",
@@ -41,9 +41,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "366e07c1417fb2644d164c8d435b046c265a2c3886a73fa44fdf0b2b571f11b7",
-      "size": 167228,
-      "normalized_sha256": "366e07c1417fb2644d164c8d435b046c265a2c3886a73fa44fdf0b2b571f11b7"
+      "sha256": "a79cdc99cf939e279becbbb62e3252e870b5ef108f2494f8e1e9b5978521dcfa",
+      "size": 165640,
+      "normalized_sha256": "a79cdc99cf939e279becbbb62e3252e870b5ef108f2494f8e1e9b5978521dcfa"
     },
     "aoci.database.txt": {
       "role": "index",
@@ -981,12 +981,6 @@
       "size": 485,
       "normalized_sha256": "8b39d3caf437fc248e1ffe8585e9fa253966a4e19bda703d9e26f67367a1c60e"
     },
-    "docs/architecture/MCP工具能力梳理报告.md": {
-      "role": "index",
-      "sha256": "d86d6db28892e37f172a6d115867a1322d72595ba8088a9b04b60aad10aad975",
-      "size": 21555,
-      "normalized_sha256": "d86d6db28892e37f172a6d115867a1322d72595ba8088a9b04b60aad10aad975"
-    },
     "docs/architecture/Milestone1-岗位与授权数据模型.md": {
       "role": "index",
       "sha256": "51df61304854ca3fc6b9429166d0a3d9631173263be0a76012a555d9dc98619c",
@@ -995,21 +989,15 @@
     },
     "docs/architecture/Milestone2-知识库数据模型.md": {
       "role": "index",
-      "sha256": "ddca5773e76d167a2bef667546ade661293c9e098c3f7090eeb9d05e94a0b0c7",
-      "size": 21125,
-      "normalized_sha256": "16eef4c5c0962ab2f20bc253432dd8b6a79c453d9573506efb6a68bd00902232"
+      "sha256": "32304514e4c6ddd9d212f2b32ab3df51417b129064f67ba50a74a16cc5cbd977",
+      "size": 21662,
+      "normalized_sha256": "a7fb629d8e2972578beec4e4fcbf7fa3891d94d511eec5d47f1d585ea22ed586"
     },
     "docs/architecture/Milestone3-运行态数据模型.md": {
       "role": "index",
       "sha256": "9cf93bc3c05f9cfbffb9198c064d3c7f982be26a589eda499cf4d3fb7602c694",
       "size": 17807,
       "normalized_sha256": "9cf93bc3c05f9cfbffb9198c064d3c7f982be26a589eda499cf4d3fb7602c694"
-    },
-    "docs/architecture/WorkBuddy连接器清单.md": {
-      "role": "index",
-      "sha256": "0f5601bc5a3a2449b76b43e309a619a248e8577e1a2fc674ae8507901fe7a8ed",
-      "size": 181194,
-      "normalized_sha256": "0f5601bc5a3a2449b76b43e309a619a248e8577e1a2fc674ae8507901fe7a8ed"
     },
     "docs/architecture/master-plan.md": {
       "role": "index",
@@ -1022,12 +1010,6 @@
       "sha256": "f9c4d50db3997c9083aca68a6685bfabb9aed3ef40bdd1910c4f46c44af506c8",
       "size": 11138,
       "normalized_sha256": "f9c4d50db3997c9083aca68a6685bfabb9aed3ef40bdd1910c4f46c44af506c8"
-    },
-    "docs/architecture/原项目技能盘点报告.md": {
-      "role": "index",
-      "sha256": "f99a73d37b072b1ac158536d40871493c97e1d8325cb1de7dec6673246858515",
-      "size": 105456,
-      "normalized_sha256": "f99a73d37b072b1ac158536d40871493c97e1d8325cb1de7dec6673246858515"
     },
     "docs/architecture/原项目权限体系分析报告.md": {
       "role": "index",
@@ -1047,23 +1029,11 @@
       "size": 9055,
       "normalized_sha256": "2dd8b9d5db091ff58d7c911758d30126f9c7a8527f6b6d0a33b1311418bc59fd"
     },
-    "docs/architecture/知识库十目录与蒸馏对标报告.md": {
-      "role": "index",
-      "sha256": "2a1bcdb3ab39b15880d09ddcf68f4f309e06258b1179e2e7c644db84d86be79c",
-      "size": 19475,
-      "normalized_sha256": "2a1bcdb3ab39b15880d09ddcf68f4f309e06258b1179e2e7c644db84d86be79c"
-    },
-    "docs/architecture/知识库经验沉淀融合方案.md": {
-      "role": "index",
-      "sha256": "e0a5028f7a0e4927ec6b95160a7cbb1121312b8f5ffe58e07fd77e9413a1e274",
-      "size": 74007,
-      "normalized_sha256": "3367827a67edea7146b8517e422fe4d63505ec97d90ba68e8bd9f9b11c214458"
-    },
     "docs/audit/2026-11-09-全面审计报告.md": {
       "role": "index",
-      "sha256": "b4ee045d57c6f5cb292819bc0dd880f4d2b419cd2dadc52c873b5dfa3341459a",
-      "size": 28230,
-      "normalized_sha256": "b4ee045d57c6f5cb292819bc0dd880f4d2b419cd2dadc52c873b5dfa3341459a"
+      "sha256": "154b0a62470d8fd36d0be247c60d25479f9dbc98662bd3ae5fa885a86255f908",
+      "size": 29224,
+      "normalized_sha256": "154b0a62470d8fd36d0be247c60d25479f9dbc98662bd3ae5fa885a86255f908"
     },
     "docs/development/P0-infrastructure.md": {
       "role": "index",
@@ -1601,9 +1571,9 @@
     },
     "src/app/(app)/knowledge/_components/NewCardPanel.tsx": {
       "role": "index",
-      "sha256": "81e8b833d752f8136ff0c7955ec7947bc9a509986489f9ee0b028fdc35846490",
-      "size": 4468,
-      "normalized_sha256": "81e8b833d752f8136ff0c7955ec7947bc9a509986489f9ee0b028fdc35846490"
+      "sha256": "dc437e4dfc2b6d843a0fd22eced7ecee814aca64190b35fb2f04b48a04c9e614",
+      "size": 4662,
+      "normalized_sha256": "dc437e4dfc2b6d843a0fd22eced7ecee814aca64190b35fb2f04b48a04c9e614"
     },
     "src/app/(app)/knowledge/_components/QaTab.tsx": {
       "role": "index",
@@ -2808,7 +2778,7 @@
   },
   "managed_scope": {
     "version": "managed-scope-baseline/v1",
-    "policy_identity": "3b029307ca9a998f7863146b9aae29089dbd7d695d8e543a5334a9ba32f41394",
+    "policy_identity": "b2c1024b66c540576210201dec5f4ca5308cf4f2eae4af7ad586ce7ca56a78f9",
     "observe_change_policy": "review_required",
     "budget_policy_identity": "15e9b37a6c57e9bf03c9df3d0d049eb5b9a7f5540f9d34960408114e2538a32d",
     "budget_policy": {

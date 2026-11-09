@@ -129,6 +129,61 @@
         "created_by": "aoci-init",
         "order": 106,
         "enabled": true
+      },
+      {
+        "rule_id": "local-only-mcp-capability-report",
+        "action": "exclude",
+        "pattern": "docs/architecture/MCP工具能力梳理报告.md",
+        "pattern_kind": "file",
+        "reason": "本地评审资料，只保留在工作区，不进入版本库与共享认知",
+        "source": "user",
+        "created_by": "Jxf-AI",
+        "order": 200,
+        "enabled": true
+      },
+      {
+        "rule_id": "local-only-workbuddy-connectors",
+        "action": "exclude",
+        "pattern": "docs/architecture/WorkBuddy连接器清单.md",
+        "pattern_kind": "file",
+        "reason": "本地评审资料，只保留在工作区，不进入版本库与共享认知",
+        "source": "user",
+        "created_by": "Jxf-AI",
+        "order": 201,
+        "enabled": true
+      },
+      {
+        "rule_id": "local-only-legacy-skill-audit",
+        "action": "exclude",
+        "pattern": "docs/architecture/原项目技能盘点报告.md",
+        "pattern_kind": "file",
+        "reason": "本地评审资料，只保留在工作区，不进入版本库与共享认知",
+        "source": "user",
+        "created_by": "Jxf-AI",
+        "order": 202,
+        "enabled": true
+      },
+      {
+        "rule_id": "local-only-kb-ten-folders",
+        "action": "exclude",
+        "pattern": "docs/architecture/知识库十目录与蒸馏对标报告.md",
+        "pattern_kind": "file",
+        "reason": "本地评审资料，只保留在工作区，不进入版本库与共享认知",
+        "source": "user",
+        "created_by": "Jxf-AI",
+        "order": 203,
+        "enabled": true
+      },
+      {
+        "rule_id": "local-only-kb-experience-plan",
+        "action": "exclude",
+        "pattern": "docs/architecture/知识库经验沉淀融合方案.md",
+        "pattern_kind": "file",
+        "reason": "本地评审资料，只保留在工作区，不进入版本库与共享认知",
+        "source": "user",
+        "created_by": "Jxf-AI",
+        "order": 204,
+        "enabled": true
       }
     ]
   },

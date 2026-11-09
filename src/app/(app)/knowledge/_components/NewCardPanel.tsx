@@ -133,6 +133,10 @@ export function NewCardPanel() {
         </button>
       </div>
 
+      <p className="mt-2 text-[12px] text-zinc-500">
+        手写卡按已人工核对处理，可直接确认；要保留可追溯依据，请在保存后为它补一条证据。
+      </p>
+
       {message ? (
         <InlineMessage tone={failed ? "error" : "info"} className="mt-3 mb-0">
           {message}
