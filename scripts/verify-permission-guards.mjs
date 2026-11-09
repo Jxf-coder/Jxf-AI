@@ -1,5 +1,5 @@
 /**
- * P4 守卫覆盖检查：扫描所有 Server Action 与 Route Handler。
+ * P4 守卫覆盖检查：扫描所有 Server Action、Route Handler 与导出的 MCP 工具。
  *
  * 规则：每个导出入口都必须调用 requireContextPermission() / requirePermission()，
  * 或调用「已受守卫的本地 / 跨文件助手」。跨文件追踪只沿本地导入（@/ 与相对路径），
@@ -14,6 +14,13 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 
 const ROOT = resolve(process.cwd(), "src", "app");
 const SRC_ROOT = resolve(process.cwd(), "src");
+
+/**
+ * Server Action / Route Handler 之外的导出能力入口。
+ * MCP 工具不在 src/app 下，但每个 run 都直接读写业务数据，必须同样过守卫。
+ */
+const CAPABILITY_FILES = [resolve(process.cwd(), "src", "lib", "mcp", "tools.ts")];
+const CAPABILITY_PATTERN = /const\s+([A-Za-z0-9_]+)\s*:\s*McpToolDefinition\s*=/g;
 
 /**
  * 允许不接权限守卫的入口。
@@ -70,7 +77,7 @@ const WHITELIST = new Map([
   ],
   [
     "src/app/api/metrics/route.ts::GET",
-    "只读聚合指标：SECURITY DEFINER 函数仅返回计数，无明细；配置 METRICS_TOKEN 时强制 Bearer 校验",
+    "只读聚合指标：SECURITY DEFINER 函数仅返回计数，无明细；配置 METRICS_TOKEN 后强制 Bearer 校验，生产环境缺少令牌时 fail-closed 返回 503",
   ],
   [
     "src/app/api/webhooks/pipelines/[id]/route.ts::POST",
@@ -234,10 +241,10 @@ function toKey(file, name) {
   return `${rel}::${name}`;
 }
 
-function collectEntries(source) {
+function collectEntries(source, patterns = [FUNCTION_PATTERN, EXPORT_ARROW_PATTERN]) {
   const entries = [];
 
-  for (const pattern of [FUNCTION_PATTERN, EXPORT_ARROW_PATTERN]) {
+  for (const pattern of patterns) {
     for (const match of source.matchAll(pattern)) {
       const name = match[1];
       const start = match.index ?? 0;
@@ -262,15 +269,20 @@ const files = walk(ROOT).filter(
   (file) => file.endsWith("actions.ts") || file.endsWith("route.ts"),
 );
 
+const scans = [
+  ...files.map((file) => ({ file, patterns: undefined })),
+  ...CAPABILITY_FILES.filter(isFile).map((file) => ({ file, patterns: [CAPABILITY_PATTERN] })),
+];
+
 let total = 0;
 let covered = 0;
 const whitelisted = [];
 const uncovered = [];
 
-for (const file of files) {
+for (const { file, patterns } of scans) {
   const source = readFileSync(file, "utf8");
   const module = loadModule(file);
-  for (const entry of collectEntries(source)) {
+  for (const entry of collectEntries(source, patterns)) {
     total += 1;
     const guarded = isGuarded(entry.body, module);
 
@@ -298,11 +310,11 @@ if (uncovered.length > 0) {
     console.error(`[FAIL] ${key} 未接入权限守卫`);
   }
   console.error(
-    `\n[guards] files=${files.length} entries=${total} covered=${covered} whitelisted=${whitelisted.length} uncovered=${uncovered.length}`,
+    `\n[guards] files=${scans.length} entries=${total} covered=${covered} whitelisted=${whitelisted.length} uncovered=${uncovered.length}`,
   );
   process.exitCode = 1;
 } else {
   console.log(
-    `\n[guards] files=${files.length} entries=${total} covered=${covered} whitelisted=${whitelisted.length} uncovered=0`,
+    `\n[guards] files=${scans.length} entries=${total} covered=${covered} whitelisted=${whitelisted.length} uncovered=0`,
   );
 }
