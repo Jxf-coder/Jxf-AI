@@ -16,7 +16,7 @@
         "identifier_case": "preserve_quoted_fold_unquoted_lower"
       },
       "evidence_version": "database-evidence/v1",
-      "source_snapshot_sha256": "4b89f8a09d7ccb88480ec629d756a4933fb479ec6dbf2a68b0d248f4e61fe7e1",
+      "source_snapshot_sha256": "b0251bf7510b707b5d5260cd864985562cd327044d5bd51fd7738efc3e7bf529",
       "tables": [
         {
           "object_ref": "database://primary/public/accounts",
@@ -132,6 +132,19 @@
             "foreign_keys": "ff23f4d45d65044729e240eebbe0f0c31e4303918ecc5ab2bd732d46cca63394",
             "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
             "indexes": "4008f55e931d71370624fffbc52206055d09d0c24afb193921ce68062222dfa0",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/department_closure",
+          "table_evidence_sha256": "3f0fdd5e04af3d5ba5b310e9d059ab4a7499b751ad2bf92855632f845199d162",
+          "component_hashes": {
+            "columns": "12f71a263a3a2b91f82a09d438024df32f44eaa4370b5fa8eef339be2d188eb1",
+            "primary_key": "dd092ca11809ee044c68559dd04088e4c60c86cce951a61843ffd8bbe4895211",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "e0579420ed19b0fcb82c34266cdb4174cb2e66ae317d17375d749f451f4368a3",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "03788e244f46c8d21dde5e8a92bcbc212460b61f52c0e66722785d6bd373ce18",
             "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
           }
         },
