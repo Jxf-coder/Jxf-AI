@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-08T16:11:12Z",
-  "updated_at": "2026-11-09T10:50:58Z",
+  "updated_at": "2026-11-09T11:32:35Z",
   "files": {
     ".dockerignore": {
       "role": "index",
@@ -41,9 +41,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "d3735ab403478b0d6f705bb0a2fbbb967a2a2c949f55d3e3f3624220bafeff8b",
-      "size": 162028,
-      "normalized_sha256": "d3735ab403478b0d6f705bb0a2fbbb967a2a2c949f55d3e3f3624220bafeff8b"
+      "sha256": "6164d03a9482322b022773972331c19284dab9928be5d191ca72dd986ec98328",
+      "size": 163068,
+      "normalized_sha256": "6164d03a9482322b022773972331c19284dab9928be5d191ca72dd986ec98328"
     },
     "aoci.database.txt": {
       "role": "index",
@@ -771,6 +771,12 @@
       "size": 2051,
       "normalized_sha256": "5e823533cf4579315b194c240b61ecc1ed2b512b81fb25f9f755e8fe4e21d637"
     },
+    "db/policies/035_users_rls.sql": {
+      "role": "index",
+      "sha256": "8cc8fa3c4ebb55607f2bf00135ba38597395e4ace22332281a4c79c922977624",
+      "size": 5179,
+      "normalized_sha256": "8cc8fa3c4ebb55607f2bf00135ba38597395e4ace22332281a4c79c922977624"
+    },
     "db/schema/ai-employees.ts": {
       "role": "index",
       "sha256": "c43c25b332ee6b385fd80689e7b9d86e7b5ecfb3174a1737609e8df5b9e7791c",
@@ -1055,9 +1061,9 @@
     },
     "docs/audit/2026-11-09-全面审计报告.md": {
       "role": "index",
-      "sha256": "e2f796c66d425e828ff75e07481b33f9017e5eac9fe2fb65ed26322ac3e719b0",
-      "size": 26127,
-      "normalized_sha256": "e2f796c66d425e828ff75e07481b33f9017e5eac9fe2fb65ed26322ac3e719b0"
+      "sha256": "05878c9099da9e0976a36844371c3cc14c14ce60b1b5e8fd490ff6ecca548227",
+      "size": 26890,
+      "normalized_sha256": "05878c9099da9e0976a36844371c3cc14c14ce60b1b5e8fd490ff6ecca548227"
     },
     "docs/development/P0-infrastructure.md": {
       "role": "index",
@@ -1337,9 +1343,9 @@
     },
     "scripts/test-rls.mjs": {
       "role": "index",
-      "sha256": "f09d989a27e797577463d1f03aa566570f2a1de893af77061a0add71d1c7ca65",
-      "size": 19246,
-      "normalized_sha256": "f09d989a27e797577463d1f03aa566570f2a1de893af77061a0add71d1c7ca65"
+      "sha256": "ecd5076a2409b1bf85910f9dec1ed7e84a8b23e461406d6734d6b54e9696a2c4",
+      "size": 20919,
+      "normalized_sha256": "ecd5076a2409b1bf85910f9dec1ed7e84a8b23e461406d6734d6b54e9696a2c4"
     },
     "scripts/test-runtime.mjs": {
       "role": "index",
@@ -1409,9 +1415,9 @@
     },
     "src/app/(app)/admin/organization/actions.ts": {
       "role": "index",
-      "sha256": "eb4f7d0d6bd9e404980fbc2b27b33664b46d5611cb695e00a1165adcb77ef6a9",
-      "size": 42897,
-      "normalized_sha256": "eb4f7d0d6bd9e404980fbc2b27b33664b46d5611cb695e00a1165adcb77ef6a9"
+      "sha256": "6b93a056a89e7423edeac3b191a9ae3cf0a344568b397b771a4f9945e41e07ba",
+      "size": 42636,
+      "normalized_sha256": "6b93a056a89e7423edeac3b191a9ae3cf0a344568b397b771a4f9945e41e07ba"
     },
     "src/app/(app)/admin/organization/page.tsx": {
       "role": "index",
@@ -1727,9 +1733,9 @@
     },
     "src/app/(app)/me/profile/actions.ts": {
       "role": "index",
-      "sha256": "09e5408a62ce7c91a62b3b19f2c8f9f83628411f3e8db8c7ce671916def506a7",
-      "size": 22185,
-      "normalized_sha256": "09e5408a62ce7c91a62b3b19f2c8f9f83628411f3e8db8c7ce671916def506a7"
+      "sha256": "42adc3299dac4a0693695eeef63063759af3ff6724db699f7c28670f254d6b5b",
+      "size": 22320,
+      "normalized_sha256": "42adc3299dac4a0693695eeef63063759af3ff6724db699f7c28670f254d6b5b"
     },
     "src/app/(app)/me/profile/page.tsx": {
       "role": "index",
@@ -2207,9 +2213,9 @@
     },
     "src/lib/auth/session.ts": {
       "role": "index",
-      "sha256": "c009bfcb55caa8c6a20e5335971c9d240435586c0caa64523863cbd0ad83c505",
-      "size": 1116,
-      "normalized_sha256": "c009bfcb55caa8c6a20e5335971c9d240435586c0caa64523863cbd0ad83c505"
+      "sha256": "fb553c66f85712e644ea30cabbd1caf12311d7a1ade82d28e94f89f24758d689",
+      "size": 1231,
+      "normalized_sha256": "fb553c66f85712e644ea30cabbd1caf12311d7a1ade82d28e94f89f24758d689"
     },
     "src/lib/db/auth-pool.ts": {
       "role": "index",
