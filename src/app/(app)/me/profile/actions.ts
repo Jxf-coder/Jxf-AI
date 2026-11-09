@@ -161,8 +161,9 @@ export async function updateCoreProfile(formData: FormData): Promise<ActionResul
         throw new Error("无权修改该成员资料");
       }
 
+      // 口令哈希不再直接授予业务角色：仅本人的上下文可通过 SECURITY DEFINER 函数读取
       const targetResult = await client.query<TargetUserRow>(
-        "select id, name, phone, password_hash from users where id = $1",
+        "select id, name, phone, app.current_password_hash(id) as password_hash from users where id = $1",
         [targetUserId],
       );
       const target = targetResult.rows[0];

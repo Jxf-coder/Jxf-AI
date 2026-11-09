@@ -6,7 +6,7 @@ import Credentials from "next-auth/providers/credentials";
 import { accounts, sessions, users, verificationTokens } from "@db/schema";
 import { auditStandalone } from "@/lib/audit";
 import { verifyPassword } from "@/lib/auth/password";
-import { getDb } from "@/lib/db/drizzle";
+import { getAuthDb } from "@/lib/db/drizzle";
 import { errorMessage, log } from "@/lib/logger";
 
 /**
@@ -15,7 +15,7 @@ import { errorMessage, log } from "@/lib/logger";
  * 因此离岗后下一次请求立即 0 行，不依赖 token 过期。
  */
 function buildAuthConfig(): NextAuthConfig {
-  const db = getDb();
+  const db = getAuthDb();
 
   return {
     adapter: DrizzleAdapter(db, {
