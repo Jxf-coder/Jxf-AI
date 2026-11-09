@@ -211,6 +211,69 @@
       "when": 1794096000000,
       "tag": "0029_pipeline_events",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1794099600000,
+      "tag": "0030_skills",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794103200000,
+      "tag": "0031_mcp_connector_nodes",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794106800000,
+      "tag": "0032_mcp_transport_sse",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794110400000,
+      "tag": "0033_mcp_token_client",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794114000000,
+      "tag": "0034_mcp_token_deleted",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794117600000,
+      "tag": "0035_mcp_scope_version",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794121200000,
+      "tag": "0036_experience_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1794124800000,
+      "tag": "0037_knowledge_cards_route",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794128400000,
+      "tag": "0038_card_evidence_sources",
+      "breakpoints": true
     }
   ]
 }

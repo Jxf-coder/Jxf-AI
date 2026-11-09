@@ -5,6 +5,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -15,6 +16,7 @@ import {
 import { departments } from "./departments";
 import { docChunks, documents } from "./documents";
 import { cardKind, cardOrigin, cardStatus, gapStatus, shareStatus as shareStatusEnum } from "./enums";
+import { experienceJobs } from "./experience";
 import { ingestRuns } from "./ingest";
 import { runs } from "./runtime";
 import { users } from "./auth";
@@ -67,6 +69,20 @@ export const knowledgeCards = pgTable(
      * 配合下方部分唯一索引做幂等：同一文档反复保存只更新这一张草稿，不重复新增。
      */
     sourceDocumentId: uuid("source_document_id").references(() => documents.id, { onDelete: "set null" }),
+    /** 来源通道：document / skill / pipeline / review / retro / connector / manual */
+    sourceChannel: text("source_channel"),
+    /** 来源对象：{ skillRunId?, pipelineRunId?, workItemId?, runId?, documentId?, eventId? } */
+    sourceRef: jsonb("source_ref").$type<Record<string, unknown>>(),
+    routeReason: text("route_reason"),
+    routeConfidence: numeric("route_confidence", { precision: 3, scale: 2 }),
+    /** 路由器给出的建议目录；人工改目录后仍保留，供纠偏统计 */
+    suggestedFolder: text("suggested_folder"),
+    /** 低置信度/规则冲突：置 true 后必须人工选定目录才能确认 */
+    routePending: boolean("route_pending").notNull().default(false),
+    /** 多卡去重键：doc:<id> / distill:<id>:<titleKey>:<numSig> / run:<...> */
+    dedupeKey: text("dedupe_key"),
+    /** 关联采集 job，用于来源追溯与 source_text 清理判断 */
+    sourceJobId: uuid("source_job_id").references(() => experienceJobs.id, { onDelete: "set null" }),
     extra: jsonb("extra").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -81,6 +97,10 @@ export const knowledgeCards = pgTable(
     uniqueIndex("knowledge_cards_source_document_unique")
       .on(table.tenantId, table.sourceDocumentId)
       .where(sql`"source_document_id" is not null`),
+    uniqueIndex("knowledge_cards_dedupe_key_unique")
+      .on(table.tenantId, table.dedupeKey)
+      .where(sql`"dedupe_key" is not null`),
+    index("knowledge_cards_source_job_idx").on(table.sourceJobId),
   ],
 );
 
@@ -128,6 +148,16 @@ export const cardEvidence = pgTable(
     quote: text("quote").notNull(),
     charStart: integer("char_start"),
     charEnd: integer("char_end"),
+    /** chunk（文档切片）/ run（运行产物）/ manual（人工粘贴） */
+    sourceKind: text("source_kind"),
+    /** 非文档证据的来源：{ runId } / { pipelineRunId, stepId } / { workItemId } */
+    sourceRef: jsonb("source_ref").$type<Record<string, unknown>>(),
+    /** 来源文本 sha256，可空（历史切片可后补） */
+    sourceHash: text("source_hash"),
+    /** 引文规范化后的 sha256，用于唯一约束 */
+    quoteHash: text("quote_hash"),
+    /** 引文前后各 200 字上下文，来源文本清理后仍可复核 */
+    contextExcerpt: text("context_excerpt"),
     verified: boolean("verified").notNull().default(false),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
   },
@@ -139,6 +169,9 @@ export const cardEvidence = pgTable(
       table.charStart,
       table.charEnd,
     ),
+    uniqueIndex("card_evidence_source_quote_unique")
+      .on(table.cardId, table.sourceKind, table.sourceHash, table.quoteHash)
+      .where(sql`"source_hash" is not null`),
   ],
 );
 

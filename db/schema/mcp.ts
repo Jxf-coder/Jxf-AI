@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { users } from "./auth";
 import { departments } from "./departments";
@@ -36,6 +36,8 @@ export const mcpTokens = pgTable(
       .references(() => departments.id, { onDelete: "cascade" }),
     /** { skills, pipelines, tools, allowWrite, approvalTools, channels } */
     scope: jsonb("scope").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    /** 工具集版本：存量令牌为 v1；新签发写入 MCP_SCOPE_VERSION（v2） */
+    scopeVersion: integer("scope_version").notNull().default(1),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),

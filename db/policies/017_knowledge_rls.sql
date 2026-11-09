@@ -466,6 +466,7 @@ as
 select c.*
   from knowledge_cards c
  where c.status = 'pending'
+   and c.route_pending = false
    and c.conflict_with = '{}'::uuid[]
    and (c.valid_until is null or c.valid_until >= current_date)
    and (
@@ -587,11 +588,17 @@ grant execute on function app.hybrid_search(text, vector, integer, integer) to j
 --   关键词通道：卡片 title/body（pg_bigm）
 --   向量通道：切片 → card_evidence → 卡片，取该卡最相近切片
 -- ============================================================================
+-- 目录白名单：为空表示不过滤；事实问答传 {02-cards,03-standards,04-cases,06-templates,07-training}，
+-- 经验通道传 {05-distill}（可选追加 08-retro）。
+-- 旧 4 参签名必须先 drop，否则会留下一个无过滤的重载被调用方命中。
+drop function if exists app.hybrid_search_cards(text, vector, integer, integer);
+
 create or replace function app.hybrid_search_cards(
   p_query text,
   p_embedding vector(1024) default null,
   p_limit integer default 6,
-  p_rrf_k integer default 60
+  p_rrf_k integer default 60,
+  p_folders text[] default null
 )
 returns table (
   card_id uuid,
@@ -621,6 +628,7 @@ as $fn$
       cross join scope s
      where k.status = 'confirmed'
        and k.department_id = any (s.ids)
+       and (p_folders is null or k.folder_key = any (p_folders))
        and (k.title like any (p.pats) or k.body like any (p.pats))
   ),
   keyword_ranked as (
@@ -650,6 +658,7 @@ as $fn$
       from vector_chunks v
       join card_evidence ce on ce.chunk_id = v.id
       join knowledge_cards k on k.id = ce.card_id and k.status = 'confirmed'
+        and (p_folders is null or k.folder_key = any (p_folders))
      group by ce.card_id
   ),
   vector_ranked as (
@@ -679,9 +688,10 @@ as $fn$
     from fused f
     join knowledge_cards k on k.id = f.cid
    where k.status = 'confirmed'
+     and (p_folders is null or k.folder_key = any (p_folders))
    order by f.rrf desc, k.id
    limit p_limit
 $fn$;
 
-revoke all on function app.hybrid_search_cards(text, vector, integer, integer) from public;
-grant execute on function app.hybrid_search_cards(text, vector, integer, integer) to jxf_app;
+revoke all on function app.hybrid_search_cards(text, vector, integer, integer, text[]) from public;
+grant execute on function app.hybrid_search_cards(text, vector, integer, integer, text[]) to jxf_app;
