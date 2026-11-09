@@ -101,11 +101,31 @@ async function main() {
 
   const plain = "sk-test-1234567890abcd";
   const encrypted = encryptSecret(plain);
+  const dedicated = process.env.JXF_DATA_ENCRYPTION_KEY?.trim() ?? "";
   check("密钥加密后可解密", decryptSecret(encrypted) === plain);
   check("密文不含明文", !encrypted.includes(plain));
-  check("密文格式为 v1", encrypted.startsWith("v1."));
+  check(
+    `密文格式为 ${dedicated ? "v2" : "v1"}`,
+    encrypted.startsWith(dedicated ? "v2." : "v1."),
+  );
   check("脱敏只保留末 4 位", secretHint(plain) === "••••abcd");
   check("篡改密文解密失败", decryptSecret(`${encrypted.slice(0, -4)}AAAA`) === null);
+
+  if (dedicated) {
+    // 双密钥过渡：旧部署留下的 v1 密文在配置专用密钥后仍要能解
+    delete process.env.JXF_DATA_ENCRYPTION_KEY;
+    const legacy = encryptSecret(plain);
+    process.env.JXF_DATA_ENCRYPTION_KEY = dedicated;
+    check(
+      "配置专用密钥后仍可解旧 v1 密文",
+      legacy.startsWith("v1.") && decryptSecret(legacy) === plain,
+    );
+    // 反方向：专用密钥丢失时 v2 密文必须解不开，由调用方回退环境变量
+    const modern = encryptSecret(plain);
+    delete process.env.JXF_DATA_ENCRYPTION_KEY;
+    check("移除专用密钥后 v2 密文不再可解", decryptSecret(modern) === null);
+    process.env.JXF_DATA_ENCRYPTION_KEY = dedicated;
+  }
 
   // 无上下文：只能走 SECURITY DEFINER 函数，不能直接读表
   await withClient(APP_URL, async (app) => {
