@@ -141,27 +141,27 @@ _journal.json[XV5M]: F:Drizzle 迁移日志，按顺序登记迁移标签、时�
 035_users_rls.sql[PI9S]: F:为 users 启用行级安全，定义本人/L1/可读部门三级的读写策略，并配套 Auth.js 放行策略与跨范围 SECURITY DEFINER 函数 | R:code:src/lib/auth/session.ts,code:src/app/(app)/admin/organization/actions.ts,code:db/policies/001_app_functions.sql | A:策略重放 | S:策略必须分别 to jxf_app 与 to jxf_auth，RLS 启用后无适用策略的角色默认 0 行，漏掉 jxf_auth 会让 Auth.js 登录直接失效；不建 DELETE 策略并收回 delete 授权，人员只做离岗；无上下文查询必须走 app.user_status 等 SECURITY DEFINER 入口
 
 ===E:/JXF-AI/db/schema/===
-ai-employees.ts[PB8T]: F:AI 员工定义与授权 schema，含人格、系统提示、技能包、工具范围、模型参数与部门或个人二选一授权 | R:code:db/schema/auth.ts,code:db/schema/departments.ts,code:db/policies/020_ai_employee_visibility.sql | A:数据库 schema | S:AI 员工不携带数据权限，运行时继承调用者上下文；部门与个人授权互斥；同员工同部门与同用户各唯一
-approvals.ts[PI7T]: F:离职交接审批与资产明细 schema，审批单保存类型、主体、状态与决定人 | R:code:db/schema/auth.ts,code:db/policies/011_handover_approval.sql | A:数据库 schema | S:审批状态五值；asset_id 用 text 兼容非 uuid 资产；交接双方外键为 restrict
+ai-employees.ts[PB8T]: F:AI 员工定义与授权 schema，含人格、系统提示、技能包、工具范围、模型参数与部门或个人二选一授权（路径：db/schema/ai-employees.ts） | R:code:db/schema/auth.ts,code:db/schema/departments.ts,code:db/policies/020_ai_employee_visibility.sql | A:数据库 schema | S:AI 员工不携带数据权限，运行时继承调用者上下文；部门与个人授权互斥；同员工同部门与同用户各唯一
+approvals.ts[PI7T]: F:离职交接审批与资产明细 schema，审批单保存类型、主体、状态与决定人（路径：db/schema/approvals.ts） | R:code:db/schema/auth.ts,code:db/policies/011_handover_approval.sql | A:数据库 schema | S:审批状态五值；asset_id 用 text 兼容非 uuid 资产；交接双方外键为 restrict
 assets.ts[PB7T]: F:MinIO 对象存储引用 schema，按部门与 sha256 去重，记录展示名、类型、大小与归属人 | R:code:db/schema/departments.ts,code:db/schema/auth.ts | A:数据库 schema | S:同租户同部门同 sha256 唯一；created_by 删除 restrict；离职交接需要改派归属人
 audit-events.ts[PO7T]: F:审计事件 schema，append-only，记录租户、操作者、部门、动作、目标与载荷 | R:code:db/schema/auth.ts,code:db/policies/009_audit_scope.sql | A:数据库 schema | S:只有 insert 策略，无 update/delete；department_id 无外键；时间戳为毫秒精度
-auth.ts[PI9S]: F:Auth.js 用户、账号、会话、验证令牌与邮箱身份 schema，手机号为主账号、邮箱为选填 | R:code:db/schema/enums.ts,code:db/policies/016_self_birthday.sql | A:数据库 schema | S:身份基础表不启用 RLS；手机号全局唯一；主邮箱按 userId 部分唯一；pending_handover 期间拒绝登录
+auth.ts[PI9S]: F:Auth.js 用户、账号、会话、验证令牌与邮箱身份 schema，手机号为主账号、邮箱为选填（路径：db/schema/auth.ts） | R:code:db/schema/enums.ts,code:db/policies/016_self_birthday.sql | A:数据库 schema | S:手机号全局唯一；主邮箱按 userId 部分唯一；users 已启用行级策略（035），accounts、sessions、verification_tokens 因业务角色无任何表权限而不开 RLS；pending_handover 期间拒绝登录
 department-packs.ts[PI6T]: F:部门能力包 schema，记录部门可用的技能与产线 id 列表 | R:code:db/schema/departments.ts,code:db/policies/002_rls_policies.sql | A:数据库 schema | S:能力包是数据不是代码，改权限不需要发版；技能与产线数组建 GIN 索引
 departments.ts[PI9T]: F:部门树与部门闭包 schema，提供层级组织容器与子树读权限基础 | R:code:db/policies/003_department_closure.sql,code:db/policies/001_app_functions.sql | A:数据库 schema | S:同级 slug 按租户与父部门唯一；父部门删除 restrict；闭包表避免策略内递归
 documents.ts[PB8S]: F:文档与切片 schema，含目录、共享审批、软删与 1024 维向量切片 | R:code:db/schema/assets.ts,code:db/schema/ingest.ts,code:db/policies/017_knowledge_rls.sql | A:数据库 schema | S:扫描件落 needs_ocr 且不生成切片；软删行必须从常规目录与检索排除；embedding 维度固定 1024；切片冗余 department_id 供 RLS
 enums.ts[PG8S]: F:全局 PostgreSQL 枚举：访问等级、任用与账号状态、入库与文档状态、卡片类型与状态、共享审批与回归等 | R:code:db/schema/auth.ts,code:db/schema/memberships.ts,code:db/schema/knowledge.ts | A:数据库 schema | S:新库首次迁移时新增枚举值需用 ::text 比较，直接使用新值会触发 unsafe use of new value
-experience.ts[PW8S]: F:经验采集队列与目录路由纠偏 schema，含指纹、冷却桶、租约、结果卡与来源文本 | R:code:db/policies/032_knowledge_experience_rls.sql,code:src/lib/knowledge/experience/capture.ts | A:数据库 schema | S:source_id 非空；指纹加小时桶唯一；来源文本只存去敏截断文本，上限 12000 字符
+experience.ts[PW8S]: F:经验采集队列与目录路由纠偏 schema，含指纹、冷却桶、租约、结果卡与来源文本（路径：db/schema/experience.ts） | R:code:db/policies/032_knowledge_experience_rls.sql,code:src/lib/knowledge/experience/capture.ts | A:数据库 schema | S:source_id 非空；指纹加小时桶唯一；来源文本只存去敏截断文本，上限 12000 字符
 index.ts[CG3T]: F:Drizzle schema 汇总出口，按模块重导出全部表定义 | R:- | A:数据库 schema | S:-
-ingest.ts[PB7T]: F:入库批次与文件处置 schema，关联运行、资产与解析后的文档 | R:code:db/schema/assets.ts,code:db/schema/documents.ts,code:db/schema/runtime.ts | A:数据库 schema | S:撤回只影响本批未确认产出；ingest_files.document_id 不建外键以避免循环依赖；ocr_model 区分自动 OCR 与待人工
+ingest.ts[PB7T]: F:入库批次与文件处置 schema，关联运行、资产与解析后的文档（路径：db/schema/ingest.ts） | R:code:db/schema/assets.ts,code:db/schema/documents.ts,code:db/schema/runtime.ts | A:数据库 schema | S:撤回只影响本批未确认产出；ingest_files.document_id 不建外键以避免循环依赖；ocr_model 区分自动 OCR 与待人工
 knowledge.ts[PB9M]: F:知识卡、卡片版本、证据链、知识缺口与问答审计 schema，含目录路由、来源通道与去重键 | R:code:db/schema/documents.ts,code:db/policies/017_knowledge_rls.sql,code:src/lib/knowledge/cards.ts | A:数据库 schema | S:确认门槛由视图表达；证据位置与来源哈希均建唯一索引；dedupe_key 部分唯一；卡片版本按 card_id 加 rev 唯一
 mcp-approvals.ts[PS7T]: F:逐工具审批单 schema，保存已脱敏参数、审批状态、决定人与结果预览 | R:code:db/schema/mcp.ts,code:db/policies/026_mcp_approvals_rls.sql | A:数据库 schema | S:参数写入前必须脱敏；批准后按令牌绑定的任用身份执行，不扩大数据范围；状态仅 pending/approved/rejected/failed
 mcp-servers.ts[PN7T]: F:外部 MCP 连接器与调用账本 schema，记录传输、工具白名单、超时、限流与健康状态 | R:code:db/schema/mcp.ts,code:src/lib/mcp/connectors.ts | A:数据库 schema | S:http 地址必须过 SSRF 校验，内网需白名单；stdio 只允许白名单命令且不经 shell；allowed_tools 为空表示全部已发现工具
 mcp.ts[PI8T]: F:MCP 访问令牌 schema，令牌绑定任用、部门与六维 scope，并记录工具集版本 | R:code:db/schema/memberships.ts,code:db/policies/024_mcp_tokens_rls.sql,code:src/lib/mcp/tokens.ts | A:数据库 schema | S:只存 sha256 与明文前缀；任用非 active 立即失效；scope 空数组表示不额外限制；数据权限仍走 RLS
 memberships.ts[PI9T]: F:成员任用 schema，记录所属部门、权限等级、状态与工号、入职日期、岗位等 HR 档案 | R:code:db/schema/departments.ts,code:db/schema/enums.ts,code:db/policies/008_profile_membership_update.sql | A:数据库 schema | S:仅 active 的行受同用户同部门唯一约束；状态形状用 ::text 比较；工号按租户唯一且仅对非空工号生效
 permission-grants.ts[PI9S]: F:角色模板、模板授权、用户授权与权限修订版本 schema | R:code:db/schema/enums.ts,code:db/policies/010_permission_grants.sql,code:src/lib/permissions/grant.ts | A:数据库 schema | S:权限目录在代码中，表里只存授予关系；写类动作不允许 DEPT_TREE；scope 与 scope_id 有组合约束；deny 优先于 allow
-regression.ts[PQ7T]: F:回归题集、回归运行与单题结果 schema，用基线保留率做检索/切分策略门禁 | R:code:src/lib/knowledge/regression.ts,code:db/schema/knowledge.ts | A:数据库 schema | S:保留率低于 0.9 或未全部通过即判定失败；build_tag 用于标识基线版本
-runtime.ts[PW9M]: F:AI 运行时 schema：线程、运行队列、步骤、事件、工具调用与 token 用量 | R:code:db/policies/022_runtime_rls.sql,code:src/lib/runtime/claim.ts | A:数据库 schema | S:runs 自身就是队列，状态、租约与尝试次数都在同一表；事件按 seq 递增且只追加，delta 不落库；全部表按部门走 can_read/can_write
-work-items.ts[PW8T]: F:工作项 schema，记录派发、交付物、验收结论与当前执行指针 | R:code:db/schema/runtime.ts,code:db/policies/023_work_items_rls.sql,code:src/lib/work-items.ts | A:数据库 schema | S:重跑只替换 current_run_id 指针，历史 run 保留；无 DELETE 策略以保证审计
+regression.ts[PQ7T]: F:回归题集、回归运行与单题结果 schema，用基线保留率做检索/切分策略门禁（路径：db/schema/regression.ts） | R:code:src/lib/knowledge/regression.ts,code:db/schema/knowledge.ts | A:数据库 schema | S:保留率低于 0.9 或未全部通过即判定失败；build_tag 用于标识基线版本
+runtime.ts[PW9M]: F:AI 运行时 schema：线程、运行队列、步骤、事件、工具调用与 token 用量（路径：db/schema/runtime.ts） | R:code:db/policies/022_runtime_rls.sql,code:src/lib/runtime/claim.ts | A:数据库 schema | S:runs 自身就是队列，状态、租约与尝试次数都在同一表；事件按 seq 递增且只追加，delta 不落库；全部表按部门走 can_read/can_write
+work-items.ts[PW8T]: F:工作项 schema，记录派发、交付物、验收结论与当前执行指针（路径：db/schema/work-items.ts） | R:code:db/schema/runtime.ts,code:db/policies/023_work_items_rls.sql,code:src/lib/work-items.ts | A:数据库 schema | S:重跑只替换 current_run_id 指针，历史 run 保留；无 DELETE 策略以保证审计
 
 ===E:/JXF-AI/db/seed/===
 dev.ts[XI5S]: F:开发种子脚本，冷启动老板根节点与演示账号，仅用于本地或演示环境 | R:code:db/migrations/0001_p1_org_departments.sql,code:src/lib/auth/password.ts | A:开发种子 | S:SEED_PASSWORD 至少 12 位；缺少租户或数据库环境变量直接抛错；生产环境禁止执行
@@ -265,14 +265,14 @@ delivery.mjs[OR8M]: F:备份/恢复/升级/回滚共用工具，统一封装 doc
 setup.mjs[OC6T]: F:安装向导纯函数模块，定义必须随机化的口令与令牌字段（含 jxf_auth、指标令牌与数据加密密钥），生成 .env 内容并检测 CHANGE_ME 占位 | R:code:scripts/install.mjs,code:.env.example | A:安装部署 | S:口令会直接拼进数据库连接串，只能用字母数字；新增的 JXF_AUTH_PASSWORD、METRICS_TOKEN、JXF_DATA_ENCRYPTION_KEY 必须同时加入 PASSWORD_KEYS，否则安装向导会残留 CHANGE_ME 占位值；纯函数不写文件、不启动容器
 
 ===E:/JXF-AI/src/app/(app)/===
-actions.ts[EI6T]: F:切换当前部门上下文的 Server Action，只允许切到自己有效任用内的部门并写入 httpOnly Cookie | R:code:src/lib/db/user-context.ts,code:src/lib/auth/session.ts | A:部门上下文 | S:Cookie 必须 httpOnly，客户端无法伪造到其他部门；切换后 revalidatePath("/", "layout") 刷新全站上下文
-layout.tsx[EI8T]: F:应用外壳布局，解析当前上下文与权限快照，装配导航、待办角标与品牌信息 | R:code:src/lib/db/user-context.ts,code:src/lib/permissions/snapshot.ts,code:src/components/shell/Shell.tsx | A:应用外壳 | S:权限或上下文解析失败必须降级为无权限外壳而不是白屏；work_items 表缺失时待验收数降级为 0
+actions.ts[EI6T]: F:切换当前部门上下文的 Server Action，只允许切到自己有效任用内的部门并写入 httpOnly Cookie（路径：src/app/(app)/actions.ts） | R:code:src/lib/db/user-context.ts,code:src/lib/auth/session.ts | A:部门上下文 | S:Cookie 必须 httpOnly，客户端无法伪造到其他部门；切换后 revalidatePath("/", "layout") 刷新全站上下文
+layout.tsx[EI8T]: F:应用外壳布局，解析当前上下文与权限快照，装配导航、待办角标与品牌信息（路径：src/app/(app)/layout.tsx） | R:code:src/lib/db/user-context.ts,code:src/lib/permissions/snapshot.ts,code:src/components/shell/Shell.tsx | A:应用外壳 | S:权限或上下文解析失败必须降级为无权限外壳而不是白屏；work_items 表缺失时待验收数降级为 0
 
 ===E:/JXF-AI/src/app/(app)/admin/organization/===
 MembersTab.tsx[EI7L]: F:组织管理成员页签，展示成员列表并提供新增、移除、恢复与基础信息编辑 | R:code:src/app/(app)/admin/organization/actions.ts,code:src/components/ui/confirm-dialog.tsx | A:组织管理界面 | S:司龄由入职日期动态计算不落库；移除与恢复等危险操作必须经确认对话框
 OrgTree.tsx[EI7L]: F:组织架构树，支持部门与成员拖拽排序、迁移成员、删除部门与移除成员预检 | R:code:src/app/(app)/admin/organization/actions.ts,code:src/components/permissions/usePermission.ts | A:组织管理界面 | S:拖拽与移除前必须调用 checkMemberBlockers 预检；前端权限只控制显隐，真正拦截在服务端守卫
-actions.ts[AI8L]: F:组织管理 Server Actions，处理部门增改、删除、排序与成员新增、迁移、移除、恢复及离职交接 | R:code:src/lib/permissions/server.ts,code:src/lib/db/user-context.ts,code:src/lib/handover/registry.ts,code:src/lib/org/slug.ts | A:组织管理 | S:每个导出入口必须经 requireContextPermission；移除成员前必须检查未完成工作与资产，存在阻塞时转离职交接流程；新增成员必须先写 memberships 再绑定邮箱，user_email_identities 的 RLS 依赖目标用户已有在岗任用；users 启用 RLS 后按手机号复用人员必须走 app.ensure_user，跨部门人员在写入任用前对当前角色不可见
-page.tsx[EI7M]: F:组织管理页面，汇总部门树与成员列表并按权限裁剪可见页签 | R:code:src/app/(app)/admin/organization/OrgTree.tsx,code:src/app/(app)/admin/organization/MembersTab.tsx | A:组织管理界面 | S:force-dynamic，每次请求都按当前上下文实时鉴权；数据读取走 withUserContext 以应用 RLS
+actions.ts[AI8L]: F:组织管理 Server Actions，处理部门增改、删除、排序与成员新增、迁移、移除、恢复及离职交接（路径：src/app/(app)/admin/organization/actions.ts） | R:code:src/lib/permissions/server.ts,code:src/lib/db/user-context.ts,code:src/lib/handover/registry.ts,code:src/lib/org/slug.ts | A:组织管理 | S:每个导出入口必须经 requireContextPermission；移除成员前必须检查未完成工作与资产，存在阻塞时转离职交接流程；新增成员必须先写 memberships 再绑定邮箱，user_email_identities 的 RLS 依赖目标用户已有在岗任用；users 启用 RLS 后按手机号复用人员必须走 app.ensure_user，跨部门人员在写入任用前对当前角色不可见
+page.tsx[EI7M]: F:组织管理页面，汇总部门树与成员列表并按权限裁剪可见页签（路径：src/app/(app)/admin/organization/page.tsx） | R:code:src/app/(app)/admin/organization/OrgTree.tsx,code:src/app/(app)/admin/organization/MembersTab.tsx | A:组织管理界面 | S:force-dynamic，每次请求都按当前上下文实时鉴权；数据读取走 withUserContext 以应用 RLS
 
 ===E:/JXF-AI/src/app/(app)/admin/permissions/===
 AuditTab.tsx[EO7M]: F:权限审计日志页签，展示审计事件、操作者与部门，并支持类型筛选与时间排序 | R:code:src/app/(app)/admin/permissions/AuditTypeFilter.tsx,code:src/lib/audit.ts | A:审计界面 | S:展示时间默认截断到秒，title 保留完整 ISO 时间戳便于高频排查
@@ -283,27 +283,27 @@ MineTab.tsx[EI6S]: F:我的权限页签，展示当前任用的有效权限、�
 PermissionAdminClient.tsx[EI7L]: F:权限管理客户端容器，维护模板与成员授权草稿、脏标记、确认对话框与保存动作 | R:code:src/app/(app)/admin/permissions/MemberPanel.tsx,code:src/app/(app)/admin/permissions/TemplatePanel.tsx,code:src/app/(app)/admin/permissions/actions.ts | A:权限管理界面 | S:保存前必须二次确认；模板与成员草稿各自维护，切换目标时未保存改动会丢失
 RolesTab.tsx[EI7T]: F:角色管理页签，加载 L1/L2/L3 等级模板并渲染只读或可编辑的模板面板 | R:code:src/app/(app)/admin/permissions/TemplatePanel.tsx,code:src/app/(app)/admin/permissions/admin-data.ts | A:权限管理界面 | S:仅 L1 可编辑模板，其余等级只读；等级上限来自 LEVEL_CEILING
 TemplatePanel.tsx[EI6S]: F:等级模板编辑面板，按模块树勾选权限节点并设置 Scope | R:code:src/app/(app)/admin/permissions/PermissionAdminClient.tsx,code:src/lib/permissions/catalog.ts | A:权限管理界面 | S:只允许选择等级上限内的节点；停用模块不展示
-actions.ts[AI8M]: F:权限管理 Server Actions，保存与重置等级模板和成员授权，并写审计与递增版本号 | R:code:src/lib/permissions/grant.ts,code:src/lib/permissions/guard.ts,code:src/lib/audit.ts | A:权限管理 | S:必须经 requireProtectedCapability 校验；越权节点与 Scope 由 canGrant 再次拦截；每次写入递增授权版本号并落审计
+actions.ts[AI8M]: F:权限管理 Server Actions，保存与重置等级模板和成员授权，并写审计与递增版本号（路径：src/app/(app)/admin/permissions/actions.ts） | R:code:src/lib/permissions/grant.ts,code:src/lib/permissions/guard.ts,code:src/lib/audit.ts | A:权限管理 | S:必须经 requireProtectedCapability 校验；越权节点与 Scope 由 canGrant 再次拦截；每次写入递增授权版本号并落审计
 admin-data.ts[AI6S]: F:权限管理数据装配，从权限目录与授权表构建模块树、等级模板与成员授权映射 | R:code:src/lib/permissions/catalog.ts,code:src/lib/permissions/scope.ts | A:权限管理数据 | S:无效节点与 Scope 在装配时丢弃，避免脏授权渲染到界面
-page.tsx[EI7S]: F:权限管理页面，按 tab 参数渲染我的权限、角色管理、成员授权与审计日志 | R:code:src/app/(app)/admin/permissions/MineTab.tsx,code:src/app/(app)/admin/permissions/AuditTab.tsx | A:权限管理界面 | S:force-dynamic；tab 参数非法时回落到默认页签
+page.tsx[EI7S]: F:权限管理页面，按 tab 参数渲染我的权限、角色管理、成员授权与审计日志（路径：src/app/(app)/admin/permissions/page.tsx） | R:code:src/app/(app)/admin/permissions/MineTab.tsx,code:src/app/(app)/admin/permissions/AuditTab.tsx | A:权限管理界面 | S:force-dynamic；tab 参数非法时回落到默认页签
 parts.tsx[EI4T]: F:权限管理共享展示部件，提供风险徒章、默认作用域推导与作用域选择器 | R:code:src/lib/permissions/scope.ts,code:src/app/(app)/admin/permissions/MemberPanel.tsx | A:权限管理界面 | S:默认作用域取节点 allowedScopes 的第一项，目录需保持从宽到窄排序
 
 ===E:/JXF-AI/src/app/(app)/ai-employees/===
 AiEmployeesClient.tsx[EB8L]: F:AI 员工工作台客户端，管理员工创建与编辑、部门/个人授权、状态切换及工作项派发与验收 | R:code:src/app/(app)/ai-employees/actions.ts,code:src/lib/ai-employees.ts,code:src/lib/work-items.ts | A:AI 员工界面 | S:派发与验收只在服务端校验权限，前端可见性不能当作安全边界
-actions.ts[AB8S]: F:AI 员工 Server Actions，封装创建、更新、授权与撑销、状态切换及工作项派发、重跑、验收 | R:code:src/lib/ai-employees.ts,code:src/lib/work-items.ts,code:src/lib/permissions/guard.ts | A:AI 员工编排 | S:错误统一经 toPermissionMessage 转可读文案；成功后 revalidatePath("/ai-employees")
-page.tsx[EB7T]: F:AI 员工页面，按上下文加载员工列表、详情、授权候选、工作项与 MCP/技能选项 | R:code:src/app/(app)/ai-employees/AiEmployeesClient.tsx,code:src/lib/ai-employees.ts | A:AI 员工界面 | S:只有 L1 加载授权候选；选中 id 不在可见列表内时回落到第一个员工
+actions.ts[AB8S]: F:AI 员工 Server Actions，封装创建、更新、授权与撒销、状态切换及工作项派发、重跑、验收（路径：src/app/(app)/ai-employees/actions.ts） | R:code:src/lib/ai-employees.ts,code:src/lib/work-items.ts,code:src/lib/permissions/guard.ts | A:AI 员工编排 | S:错误统一经 toPermissionMessage 转可读文案；成功后 revalidatePath("/ai-employees")
+page.tsx[EB7T]: F:AI 员工页面，按上下文加载员工列表、详情、授权候选、工作项与 MCP/技能选项（路径：src/app/(app)/ai-employees/page.tsx） | R:code:src/app/(app)/ai-employees/AiEmployeesClient.tsx,code:src/lib/ai-employees.ts | A:AI 员工界面 | S:只有 L1 加载授权候选；选中 id 不在可见列表内时回落到第一个员工
 
 ===E:/JXF-AI/src/app/(app)/chat/===
 ChatClient.tsx[EU8L]: F:Agent 对话客户端，处理流式消息、步骤进度、用量成本与会话重命名、置顶、删除和转知识库 | R:code:src/app/(app)/chat/actions.ts,code:src/lib/runtime/threads.ts | A:对话界面 | S:会话增删改都走 ./actions 的 Server Actions，客户端不直接访问数据库；用量与成本按模型返回的 token 展示
-actions.ts[AU6T]: F:会话管理 Server Actions，处理重命名、置顶、归档删除与把会话内容转成知识库文档 | R:code:src/lib/runtime/threads.ts,code:src/lib/knowledge/workspace.ts | A:会话编排 | S:所有入口先 requireSession 并解析当前上下文；threadId 必须通过 isUuid 校验后才访问数据库
-page.tsx[EU7T]: F:Agent 对话页面，加载会话列表与当前会话详情，无 Skill 权限时展示拒绝提示 | R:code:src/app/(app)/chat/ChatClient.tsx,code:src/lib/runtime/threads.ts | A:对话界面 | S:force-dynamic；列表或详情加载失败按无权限处理，不把异常抛成 500
+actions.ts[AU6T]: F:会话管理 Server Actions，处理重命名、置顶、归档删除与把会话内容转成知识库文档（路径：src/app/(app)/chat/actions.ts） | R:code:src/lib/runtime/threads.ts,code:src/lib/knowledge/workspace.ts | A:会话编排 | S:所有入口先 requireSession 并解析当前上下文；threadId 必须通过 isUuid 校验后才访问数据库
+page.tsx[EU7T]: F:Agent 对话页面，加载会话列表与当前会话详情，无 Skill 权限时展示拒绝提示（路径：src/app/(app)/chat/page.tsx） | R:code:src/app/(app)/chat/ChatClient.tsx,code:src/lib/runtime/threads.ts | A:对话界面 | S:force-dynamic；列表或详情加载失败按无权限处理，不把异常抛成 500
 
 ===E:/JXF-AI/src/app/(app)/knowledge/===
 DistillButton.tsx[EA5T]: F:文档蒸馏按钮，调用 AI 生成待确认知识卡并就地反馈结果 | R:code:src/app/(app)/knowledge/cards/actions.ts | A:知识库界面 | S:未配置 AI 时按钮禁用并提示；蒸馏产物一律先进入待确认，不直接生效
 QaPanel.tsx[EA6S]: F:知识问答面板，提交问题并展示答案、引用与逐条证据校验结果 | R:code:src/app/(app)/knowledge/actions.ts,code:src/lib/knowledge/qa.ts | A:知识库界面 | S:未启用 AI 时只返回检索到的已确认知识卡；问题长度上限 500 字
 RegressionPanel.tsx[EQ6T]: F:检索回归门禁面板，录入构建标记并发起基线题回归运行 | R:code:src/app/(app)/knowledge/actions.ts,code:src/lib/knowledge/regression.ts | A:知识库界面 | S:保留率低于 90% 或任一道未通过即判失败；构建标记最多 40 字
-actions.ts[AB8L]: F:知识库 Server Actions，处理问答、文档回收站与恢复、OCR 补录、共享审核、缺口与回归题维护 | R:code:src/lib/knowledge/qa.ts,code:src/lib/knowledge/trash.ts,code:src/lib/knowledge/ocr.ts,code:src/lib/knowledge/share.ts,code:src/lib/knowledge/regression.ts | A:知识库编排 | S:所有入口先 requireSession 并解析上下文；id 参数必须通过 isUuid 校验；错误统一经 toPermissionMessage 转可读文案
-page.tsx[EB8M]: F:知识库主页，汇总统计、目录树、页签视图与工作区编辑器，并按权限裁剪写操作 | R:code:src/lib/knowledge/workspace.ts,code:src/lib/knowledge/stats.ts,code:src/app/(app)/knowledge/_components/TabNav.tsx | A:知识库界面 | S:force-dynamic；所有读取走 withUserContext 以应用 RLS；非法 tab 或选中项不存在时回落默认视图
+actions.ts[AB8L]: F:知识库 Server Actions，处理问答、文档回收站与恢复、OCR 补录、共享审核、缺口与回归题维护（路径：src/app/(app)/knowledge/actions.ts） | R:code:src/lib/knowledge/qa.ts,code:src/lib/knowledge/trash.ts,code:src/lib/knowledge/ocr.ts,code:src/lib/knowledge/share.ts,code:src/lib/knowledge/regression.ts | A:知识库编排 | S:所有入口先 requireSession 并解析上下文；id 参数必须通过 isUuid 校验；错误统一经 toPermissionMessage 转可读文案
+page.tsx[EB8M]: F:知识库主页，汇总统计、目录树、页签视图与工作区编辑器，并按权限裁剪写操作（路径：src/app/(app)/knowledge/page.tsx） | R:code:src/lib/knowledge/workspace.ts,code:src/lib/knowledge/stats.ts,code:src/app/(app)/knowledge/_components/TabNav.tsx | A:知识库界面 | S:force-dynamic；所有读取走 withUserContext 以应用 RLS；非法 tab 或选中项不存在时回落默认视图
 
 ===E:/JXF-AI/src/app/(app)/knowledge/_components/===
 CardItem.tsx[EB7M]: F:单张知识卡条目，展示状态与证据，并支持编辑、确认、丢弃与调整归档目录 | R:code:src/app/(app)/knowledge/cards/actions.ts,code:src/lib/knowledge/cards.ts,code:src/lib/knowledge/folders.ts | A:知识库界面 | S:确认与丢弃受 canConfirm 控制，编辑受 canWrite 控制；状态只允许 pending、confirmed、dropped 三态
@@ -327,37 +327,37 @@ card-labels.ts[CB4T]: F:知识卡中文标签常量，覆盖卡片类型、状�
 file-drop.ts[CG4T]: F:拖拽与目录选择工具，把 DataTransfer 或 input 文件递归摊平成带相对路径的列表 | R:code:src/app/(app)/knowledge/_components/ScoutTab.tsx | A:知识库上传 | S:递归目录按 limit 截断，超出部分直接丢弃而不是报错
 
 ===E:/JXF-AI/src/app/(app)/knowledge/cards/===
-actions.ts[AB8M]: F:知识卡 Server Actions，处理手工建卡、编辑、确认、丢弃、批量决策、换目录与证据增删、蒸馏 | R:code:src/lib/knowledge/cards.ts,code:src/lib/knowledge/card-evidence.ts,code:src/lib/knowledge/distill.ts | A:知识库编排 | S:保存冲突由 CardConflictError 转成可展示结果并回带库中最新版本；乐观锁冲突不得静默覆盖
-page.tsx[EB3T]: F:旧知识卡入口，兼容跳转到 /knowledge?tab=cards 并透传状态参数 | R:code:src/app/(app)/knowledge/page.tsx | A:知识库界面 | S:force-dynamic；只做重定向，不渲染任何内容
+actions.ts[AB8M]: F:知识卡 Server Actions，处理手工建卡、编辑、确认、丢弃、批量决策、换目录与证据增删、蒸馏（路径：src/app/(app)/knowledge/cards/actions.ts） | R:code:src/lib/knowledge/cards.ts,code:src/lib/knowledge/card-evidence.ts,code:src/lib/knowledge/distill.ts | A:知识库编排 | S:保存冲突由 CardConflictError 转成可展示结果并回带库中最新版本；乐观锁冲突不得静默覆盖
+page.tsx[EB3T]: F:旧知识卡入口，兼容跳转到 /knowledge?tab=cards 并透传状态参数（路径：src/app/(app)/knowledge/cards/page.tsx） | R:code:src/app/(app)/knowledge/page.tsx | A:知识库界面 | S:force-dynamic；只做重定向，不渲染任何内容
 
 ===E:/JXF-AI/src/app/(app)/me/approvals/===
 ApprovalsClient.tsx[EW6M]: F:我的审批客户端，列出待处理与已决离职交接单并执行通过、驳回、撤回 | R:code:src/app/(app)/me/approvals/actions.ts,code:src/components/ui/confirm-dialog.tsx | A:审批界面 | S:通过与驳回必须二次确认；已决记录只读
-actions.ts[AW8S]: F:离职交接审批 Server Actions，审批通过时按交接登记表迁移资产并写审计 | R:code:src/lib/handover/registry.ts,code:src/lib/permissions/server.ts,code:src/lib/audit.ts | A:审批编排 | S:错误码必须映射为可读文案：42501 无权限、P0002 已处理、23505 重复申请、23514 不能移出最后一位 L1
-page.tsx[EW6S]: F:我的审批页面，加载待处理与已决交接单及其资产明细 | R:code:src/app/(app)/me/approvals/ApprovalsClient.tsx,code:src/lib/handover/registry.ts | A:审批界面 | S:force-dynamic；时间统一按 Asia/Shanghai 展示
+actions.ts[AW8S]: F:离职交接审批 Server Actions，审批通过时按交接登记表迁移资产并写审计（路径：src/app/(app)/me/approvals/actions.ts） | R:code:src/lib/handover/registry.ts,code:src/lib/permissions/server.ts,code:src/lib/audit.ts | A:审批编排 | S:错误码必须映射为可读文案：42501 无权限、P0002 已处理、23505 重复申请、23514 不能移出最后一位 L1
+page.tsx[EW6S]: F:我的审批页面，加载待处理与已决交接单及其资产明细（路径：src/app/(app)/me/approvals/page.tsx） | R:code:src/app/(app)/me/approvals/ApprovalsClient.tsx,code:src/lib/handover/registry.ts | A:审批界面 | S:force-dynamic；时间统一按 Asia/Shanghai 展示
 
 ===E:/JXF-AI/src/app/(app)/me/audit/===
-page.tsx[EO3T]: F:旧审计入口，兼容跳转到 /admin/permissions?tab=audit | R:code:src/app/(app)/admin/permissions/page.tsx | A:审计界面 | S:只做重定向，不鉴权也不渲染
+page.tsx[EO3T]: F:旧审计入口，兼容跳转到 /admin/permissions?tab=audit（路径：src/app/(app)/me/audit/page.tsx） | R:code:src/app/(app)/admin/permissions/page.tsx | A:审计界面 | S:只做重定向，不鉴权也不渲染
 
 ===E:/JXF-AI/src/app/(app)/me/permissions/===
-page.tsx[EI3T]: F:旧权限入口，兼容跳转到 /admin/permissions | R:code:src/app/(app)/admin/permissions/page.tsx | A:权限管理界面 | S:只做重定向，不鉴权也不渲染
+page.tsx[EI3T]: F:旧权限入口，兼容跳转到 /admin/permissions（路径：src/app/(app)/me/permissions/page.tsx） | R:code:src/app/(app)/admin/permissions/page.tsx | A:权限管理界面 | S:只做重定向，不鉴权也不渲染
 
 ===E:/JXF-AI/src/app/(app)/me/profile/===
 ProfileClient.tsx[EU7L]: F:个人资料客户端，编辑姓名、头像、生日与身份邮箱，并管理任用的部门与职级 | R:code:src/app/(app)/me/profile/actions.ts,code:src/types/profile.ts | A:个人资料界面 | S:头像只接受 png/jpeg/webp 的 base64 且不超过 400000 字符；司龄按入职日期动态计算不落库
-actions.ts[AI8L]: F:个人资料 Server Actions，处理核心资料、生日、邮箱身份与任职部门、职级的更新，敏感变更需二次校验 | R:code:src/lib/profile/access.ts,code:src/lib/auth/password.ts,code:src/lib/permissions/server.ts,code:src/lib/audit.ts | A:个人资料编排 | S:手机号去空格与连字符后必须匹配 6 到 20 位数字；头像只接受 png/jpeg/webp base64 且不超过 400000 字符；敏感字段变更需校验密码，口令哈希只能经 app.current_password_hash 读取；邮箱占用探测必须走 app.user_id_by_email，否则跨部门目标被 RLS 隐藏后会撞唯一索引
-page.tsx[EU6S]: F:个人资料页面，加载用户资料、邮箱身份、部门选项与可编辑权限后交给客户端 | R:code:src/app/(app)/me/profile/ProfileClient.tsx,code:src/lib/profile/access.ts | A:个人资料界面 | S:force-dynamic；目标用户不存在时返回 404；日期统一规范为 YYYY-MM-DD
+actions.ts[AI8L]: F:个人资料 Server Actions，处理核心资料、生日、邮箱身份与任职部门、职级的更新，敏感变更需二次校验（路径：src/app/(app)/me/profile/actions.ts） | R:code:src/lib/profile/access.ts,code:src/lib/auth/password.ts,code:src/lib/permissions/server.ts,code:src/lib/audit.ts | A:个人资料编排 | S:手机号去空格与连字符后必须匹配 6 到 20 位数字；头像只接受 png/jpeg/webp base64 且不超过 400000 字符；敏感字段变更需校验密码，口令哈希只能经 app.current_password_hash 读取；邮箱占用探测必须走 app.user_id_by_email，否则跨部门目标被 RLS 隐藏后会撞唯一索引
+page.tsx[EU6S]: F:个人资料页面，加载用户资料、邮箱身份、部门选项与可编辑权限后交给客户端（路径：src/app/(app)/me/profile/page.tsx） | R:code:src/app/(app)/me/profile/ProfileClient.tsx,code:src/lib/profile/access.ts | A:个人资料界面 | S:force-dynamic；目标用户不存在时返回 404；日期统一规范为 YYYY-MM-DD
 
 ===E:/JXF-AI/src/app/(app)/org/positions/===
-page.tsx[EI3T]: F:旧组织架构入口，兼容跳转到 /admin/organization | R:code:src/app/(app)/admin/organization/page.tsx | A:组织管理界面 | S:只做重定向，不鉴权也不渲染
+page.tsx[EI3T]: F:旧组织架构入口，兼容跳转到 /admin/organization（路径：src/app/(app)/org/positions/page.tsx） | R:code:src/app/(app)/admin/organization/page.tsx | A:组织管理界面 | S:只做重定向，不鉴权也不渲染
 
 ===E:/JXF-AI/src/app/(app)/pipelines/===
 PipelinesClient.tsx[EW8L]: F:自动化产线客户端，创建与启用产线、编辑步骤、手工运行、轮换或停用 Webhook 并配置事件订阅 | R:code:src/app/(app)/pipelines/actions.ts,code:src/lib/pipelines.ts | A:产线界面 | S:步骤可标记为可选；Webhook 轮换后旧地址立即失效，停用后不再接收事件
-actions.ts[AW8S]: F:产线 Server Actions，封装创建、启停、手工运行、Webhook 轮换与停用、事件订阅与失败通知 | R:code:src/lib/pipelines.ts,code:src/lib/pipelines-webhook.ts,code:src/lib/pipeline-events.ts | A:产线编排 | S:PipelineInputError 原样返回输入错误；权限拒绝统一经 toPermissionMessage；运行失败会触发通知
-page.tsx[EW6T]: F:自动化产线页面，按权限加载产线与运行记录、AI 员工选项和可订阅事件后交给客户端 | R:code:src/lib/pipelines.ts,code:src/lib/pipeline-events.ts,code:src/app/(app)/pipelines/PipelinesClient.tsx | A:产线界面 | S:force-dynamic；无有效任用时直接展示提示而不渲染产线
+actions.ts[AW8S]: F:产线 Server Actions，封装创建、启停、手工运行、Webhook 轮换与停用、事件订阅与失败通知（路径：src/app/(app)/pipelines/actions.ts） | R:code:src/lib/pipelines.ts,code:src/lib/pipelines-webhook.ts,code:src/lib/pipeline-events.ts | A:产线编排 | S:PipelineInputError 原样返回输入错误；权限拒绝统一经 toPermissionMessage；运行失败会触发通知
+page.tsx[EW6T]: F:自动化产线页面，按权限加载产线与运行记录、AI 员工选项和可订阅事件后交给客户端（路径：src/app/(app)/pipelines/page.tsx） | R:code:src/lib/pipelines.ts,code:src/lib/pipeline-events.ts,code:src/app/(app)/pipelines/PipelinesClient.tsx | A:产线界面 | S:force-dynamic；无有效任用时直接展示提示而不渲染产线
 
 ===E:/JXF-AI/src/app/(app)/settings/===
 SettingsClient.tsx[EC8L]: F:平台设置客户端，编辑品牌、AI 模型 Key、邮件通知与审计留存，并触发连接测试与运维任务 | R:code:src/app/(app)/settings/actions.ts,code:src/lib/settings/types.ts,code:src/lib/ops/types.ts | A:平台设置界面 | S:空 API Key 表示保留已保存值，与 CLEAR_API_KEY 一致时清除；只有 L1 可见可改
-actions.ts[AC8M]: F:平台设置 Server Actions，保存品牌、AI、通知与审计留存配置，并测试连接、创建运维任务 | R:code:src/lib/settings/store.ts,code:src/lib/settings/ai.ts,code:src/lib/ops/tasks.ts,code:src/lib/notifications/mailer.ts | A:平台设置编排 | S:写入前必须 requireContextPermission；保存后刷新运行时设置缓存；密钥不回传明文
-page.tsx[EC7T]: F:平台设置页面，加载平台配置、生效 AI 摘要、交付状态与运维任务 | R:code:src/app/(app)/settings/SettingsClient.tsx,code:src/lib/settings/store.ts | A:平台设置界面 | S:force-dynamic；非 L1 只看到提示，不加载可编辑设置
+actions.ts[AC8M]: F:平台设置 Server Actions，保存品牌、AI、通知与审计留存配置，并测试连接、创建运维任务（路径：src/app/(app)/settings/actions.ts） | R:code:src/lib/settings/store.ts,code:src/lib/settings/ai.ts,code:src/lib/ops/tasks.ts,code:src/lib/notifications/mailer.ts | A:平台设置编排 | S:写入前必须 requireContextPermission；保存后刷新运行时设置缓存；密钥不回传明文
+page.tsx[EC7T]: F:平台设置页面，加载平台配置、生效 AI 摘要、交付状态与运维任务（路径：src/app/(app)/settings/page.tsx） | R:code:src/app/(app)/settings/SettingsClient.tsx,code:src/lib/settings/store.ts | A:平台设置界面 | S:force-dynamic；非 L1 只看到提示，不加载可编辑设置
 
 ===E:/JXF-AI/src/app/(app)/settings/mcp/===
 ConnectorSection.tsx[EI7L]: F:MCP 连接器区块，管理服务注册、工具刷新、健康体检与工具调用 | R:code:src/app/(app)/settings/mcp/actions.ts,code:src/lib/mcp/connectors.ts | A:MCP 设置界面 | S:健康状态区分未体检、健康、降级与熔断；工具调用走服务端，不在浏览器直连
@@ -366,84 +366,84 @@ McpDrawer.tsx[CU3T]: F:通用抽屉容器，提供遮罩点击关闭与对话框
 OutboundPanel.tsx[EI6S]: F:MCP 出站配置面板，生成 WorkBuddy、Cursor、豆包、千问、Codex、Grok 等客户端的接入配置 | R:code:src/lib/mcp/clients.ts,code:src/lib/mcp/tokens.ts | A:MCP 设置界面 | S:服务名固定 jxf-workbench；配置中的令牌是占位符，必须由用户粘贴签发令牌
 TokenManager.tsx[EI7M]: F:MCP 令牌管理，列出、续期、吊销、删除令牌并清理无效令牌 | R:code:src/app/(app)/settings/mcp/actions.ts,code:src/lib/mcp/tokens.ts | A:MCP 设置界面 | S:令牌状态分为生效中、已关闭与已过期；列表每页 10 条
 TokenRevealModal.tsx[ES7S]: F:新令牌明文弹窗，强制确认已复制后才允许关闭 | R:code:src/app/(app)/settings/mcp/TokenManager.tsx | A:MCP 设置界面 | S:未点击复制时任何关闭入口都要二次确认；剪贴板受限时退回选区复制
-actions.ts[AI8M]: F:MCP 设置 Server Actions，处理服务注册与启停、工具刷新与调用、健康体检、令牌签发与吊销、审批决策 | R:code:src/lib/mcp/connectors.ts,code:src/lib/mcp/tokens.ts,code:src/lib/mcp/approvals.ts,code:src/lib/mcp/health.ts | A:MCP 设置编排 | S:明文令牌只在签发结果中返回一次；健康体检失败要触发告警通知
-page.tsx[EI7T]: F:MCP 设置页面，加载服务、工具、调用记录、令牌、审批与事件桥接，并推导接入端点 | R:code:src/app/(app)/settings/mcp/McpClient.tsx,code:src/lib/mcp/connectors.ts | A:MCP 设置界面 | S:本地开发端点固定 127.0.0.1 与 PORT，避免随 Host 头或代理变化
+actions.ts[AI8M]: F:MCP 设置 Server Actions，处理服务注册与启停、工具刷新与调用、健康体检、令牌签发与吊销、审批决策（路径：src/app/(app)/settings/mcp/actions.ts） | R:code:src/lib/mcp/connectors.ts,code:src/lib/mcp/tokens.ts,code:src/lib/mcp/approvals.ts,code:src/lib/mcp/health.ts | A:MCP 设置编排 | S:明文令牌只在签发结果中返回一次；健康体检失败要触发告警通知
+page.tsx[EI7T]: F:MCP 设置页面，加载服务、工具、调用记录、令牌、审批与事件桥接，并推导接入端点（路径：src/app/(app)/settings/mcp/page.tsx） | R:code:src/app/(app)/settings/mcp/McpClient.tsx,code:src/lib/mcp/connectors.ts | A:MCP 设置界面 | S:本地开发端点固定 127.0.0.1 与 PORT，避免随 Host 头或代理变化
 
 ===E:/JXF-AI/src/app/(app)/settings/permissions/===
-page.tsx[EI3T]: F:旧角色设置入口，兼容跳转到 /admin/permissions?tab=roles | R:code:src/app/(app)/admin/permissions/page.tsx | A:权限管理界面 | S:只做重定向，不鉴权也不渲染
+page.tsx[EI3T]: F:旧角色设置入口，兼容跳转到 /admin/permissions?tab=roles（路径：src/app/(app)/settings/permissions/page.tsx） | R:code:src/app/(app)/admin/permissions/page.tsx | A:权限管理界面 | S:只做重定向，不鉴权也不渲染
 
 ===E:/JXF-AI/src/app/(app)/skills/===
 SkillsClient.tsx[EE7L]: F:技能台客户端，按分类浏览技能、创建编辑与启停，并展示最近运行 | R:code:src/app/(app)/skills/actions.ts,code:src/lib/skills.ts | A:技能界面 | S:分类固定为创作、共用制作、专家、视频、知识库等枚举；无编辑权限时只读
-actions.ts[AE8M]: F:技能台 Server Actions，处理技能增删改与启停、运行、分发账号与任务、Meta 广告同步 | R:code:src/lib/skills.ts,code:src/lib/skills/distribute.ts,code:src/lib/skills/meta-ads.ts | A:技能编排 | S:SkillInputError 原样返回输入错误；权限拒绝统一经 toPermissionMessage；运行失败写日志
-page.tsx[EE6T]: F:技能台页面，按 skill:use 与 skill:edit 权限裁剪技能列表与编辑入口 | R:code:src/app/(app)/skills/SkillsClient.tsx,code:src/lib/skills.ts | A:技能界面 | S:force-dynamic；无有效任用或缺少 skill:use 时展示拒绝提示
+actions.ts[AE8M]: F:技能台 Server Actions，处理技能增删改与启停、运行、分发账号与任务、Meta 广告同步（路径：src/app/(app)/skills/actions.ts） | R:code:src/lib/skills.ts,code:src/lib/skills/distribute.ts,code:src/lib/skills/meta-ads.ts | A:技能编排 | S:SkillInputError 原样返回输入错误；权限拒绝统一经 toPermissionMessage；运行失败写日志
+page.tsx[EE6T]: F:技能台页面，按 skill:use 与 skill:edit 权限裁剪技能列表与编辑入口（路径：src/app/(app)/skills/page.tsx） | R:code:src/app/(app)/skills/SkillsClient.tsx,code:src/lib/skills.ts | A:技能界面 | S:force-dynamic；无有效任用或缺少 skill:use 时展示拒绝提示
 
 ===E:/JXF-AI/src/app/(app)/skills/[key]/===
 DistributePanel.tsx[EE7L]: F:技能分发面板，维护平台账号与分组、创建分发任务、重试失败任务并轮换 runner 令牌 | R:code:src/app/(app)/skills/actions.ts,code:src/lib/skills/distribute.ts | A:技能界面 | S:平台固定为抖音、视频号、小红书等九项；runner 令牌轮换后旧令牌立即失效
 MetaPanel.tsx[EE7M]: F:Meta 广告技能面板，配置连接、同步草稿并确认、撑销或忽略草稿 | R:code:src/app/(app)/skills/actions.ts,code:src/lib/skills/meta-ads.ts | A:技能界面 | S:草稿状态分为待确认、执行中、已执行、失败与不做；执行前必须人工确认
 PromptPanel.tsx[EE7M]: F:提示词技能运行面板，填写业务素材后运行技能并展示最近输出 | R:code:src/app/(app)/skills/actions.ts,code:src/lib/skills.ts | A:技能界面 | S:输出默认优先展示最近一次成功运行的文本；表单字段为空时不提交
-page.tsx[EE7M]: F:技能详情页，按技能类型装配提示词、分发或 Meta 面板并加载运行记录 | R:code:src/lib/skills.ts,code:src/lib/skills/distribute.ts,code:src/lib/skills/meta-ads.ts | A:技能界面 | S:force-dynamic；技能不存在时返回 404
+page.tsx[EE7M]: F:技能详情页，按技能类型装配提示词、分发或 Meta 面板并加载运行记录（路径：src/app/(app)/skills/[key]/page.tsx） | R:code:src/lib/skills.ts,code:src/lib/skills/distribute.ts,code:src/lib/skills/meta-ads.ts | A:技能界面 | S:force-dynamic；技能不存在时返回 404
 
 ===E:/JXF-AI/src/app/api/audit/export/===
-route.ts[EO7S]: F:审计导出接口，按类型与时间范围输出 JSONL 或 CSV，并做 CSV 公式注入防护 | R:code:src/lib/audit-export.ts,code:src/auth.ts | A:审计导出 | S:未登录返回 401；以 = + - @ 开头的单元格前置单引号；权限与可见范围由 exportAuditEvents 内校验
+route.ts[EO7S]: F:审计导出接口，按类型与时间范围输出 JSONL 或 CSV，并做 CSV 公式注入防护（路径：src/app/api/audit/export/route.ts） | R:code:src/lib/audit-export.ts,code:src/auth.ts | A:审计导出 | S:未登录返回 401；以 = + - @ 开头的单元格前置单引号；权限与可见范围由 exportAuditEvents 内校验
 
 ===E:/JXF-AI/src/app/api/auth/[...nextauth]/===
-route.ts[EI7T]: F:NextAuth 路由入口，把 auth 配置的 GET 与 POST 处理器挂到 App Router | R:code:src/auth.ts | A:认证入口 | S:只做处理器再导出，不在此处写业务逻辑
+route.ts[EI7T]: F:NextAuth 路由入口，把 auth 配置的 GET 与 POST 处理器挂到 App Router（路径：src/app/api/auth/[...nextauth]/route.ts） | R:code:src/auth.ts | A:认证入口 | S:只做处理器再导出，不在此处写业务逻辑
 
 ===E:/JXF-AI/src/app/api/chat/attachments/===
-route.ts[EB6S]: F:Agent 附件解析接口，接收 multipart 文件并返回可拼进提示词的纯文本，不落盘不入库 | R:code:src/lib/knowledge/parse.ts,code:src/lib/permissions/server.ts | A:附件解析 | S:单文件上限 10MB，单附件文本截断到 12000 字符并如实告知；附件属于本轮对话上下文，随 run 的 input 一起快照
+route.ts[EB6S]: F:Agent 附件解析接口，接收 multipart 文件并返回可拼进提示词的纯文本，不落盘不入库（路径：src/app/api/chat/attachments/route.ts） | R:code:src/lib/knowledge/parse.ts,code:src/lib/permissions/server.ts | A:附件解析 | S:单文件上限 10MB，单附件文本截断到 12000 字符并如实告知；附件属于本轮对话上下文，随 run 的 input 一起快照
 
 ===E:/JXF-AI/src/app/api/handover/export/===
-route.ts[EW5T]: F:交接包导出接口，按 membershipId 返回可离线归档的 JSON 附件 | R:code:src/lib/handover/export.ts | A:交接导出 | S:membershipId 必须是 UUID；权限与数据范围都在 buildHandoverBundle 内按当前身份校验
+route.ts[EW5T]: F:交接包导出接口，按 membershipId 返回可离线归档的 JSON 附件（路径：src/app/api/handover/export/route.ts） | R:code:src/lib/handover/export.ts | A:交接导出 | S:membershipId 必须是 UUID；权限与数据范围都在 buildHandoverBundle 内按当前身份校验
 
 ===E:/JXF-AI/src/app/api/health/live/===
-route.ts[OO6T]: F:存活探针，只证明进程可响应，不依赖数据库与对象存储 | R:code:src/app/api/health/route.ts | A:健康检查 | S:返回 no-store 并回写 x-request-id；就绪探针在 /api/health
+route.ts[OO6T]: F:存活探针，只证明进程可响应，不依赖数据库与对象存储（路径：src/app/api/health/live/route.ts） | R:code:src/app/api/health/route.ts | A:健康检查 | S:返回 no-store 并回写 x-request-id；就绪探针在 /api/health
 
 ===E:/JXF-AI/src/app/api/health/===
-route.ts[OO7T]: F:就绪探针，执行数据库与依赖检查并按结果返回 200 或 503 | R:code:src/lib/health.ts | A:健康检查 | S:失败检查项会写 warn 日志；异常时返回 503 而不是抛出 500
+route.ts[OO7T]: F:就绪探针，执行数据库与依赖检查并按结果返回 200 或 503（路径：src/app/api/health/route.ts） | R:code:src/lib/health.ts | A:健康检查 | S:失败检查项会写 warn 日志；异常时返回 503 而不是抛出 500
 
 ===E:/JXF-AI/src/app/api/knowledge/documents/[id]/===
-route.ts[EB6T]: F:原始文件下载接口，服务端转发对象存储并经过 RLS 与部门可见性校验 | R:code:src/lib/storage/local.ts,code:src/lib/db/user-context.ts | A:知识库下载 | S:越权与不存在统一返回 404，避免泄露文档存在性
+route.ts[EB6T]: F:原始文件下载接口，服务端转发对象存储并经过 RLS 与部门可见性校验（路径：src/app/api/knowledge/documents/[id]/route.ts） | R:code:src/lib/storage/local.ts,code:src/lib/db/user-context.ts | A:知识库下载 | S:越权与不存在统一返回 404，避免泄露文档存在性
 
 ===E:/JXF-AI/src/app/api/knowledge/upload/file/===
-route.ts[EB7T]: F:逐文件入库接口，接收 multipart 文件并同步解析、分块、向量化后落库 | R:code:src/lib/knowledge/ingest.ts,code:src/lib/knowledge/folders.ts | A:知识库上传 | S:带 runId 追加到同一批次，不带则新建；单文件上限取 ingest 的 MAX_FILE_BYTES（20MB）；目录 key 必须通过 isFolderKey
+route.ts[EB7T]: F:逐文件入库接口，接收 multipart 文件并同步解析、分块、向量化后落库（路径：src/app/api/knowledge/upload/file/route.ts） | R:code:src/lib/knowledge/ingest.ts,code:src/lib/knowledge/folders.ts | A:知识库上传 | S:带 runId 追加到同一批次，不带则新建；单文件上限取 ingest 的 MAX_FILE_BYTES（20MB）；目录 key 必须通过 isFolderKey
 
 ===E:/JXF-AI/src/app/api/knowledge/upload/===
-route.ts[EB6T]: F:批量文档入库接口，接收 files[] 与目标说明并返回每个文件的处置结论 | R:code:src/lib/knowledge/ingest.ts | A:知识库上传 | S:没有有效文件返回 400；权限拒绝统一转可读错误
+route.ts[EB6T]: F:批量文档入库接口，接收 files[] 与目标说明并返回每个文件的处置结论（路径：src/app/api/knowledge/upload/route.ts） | R:code:src/lib/knowledge/ingest.ts | A:知识库上传 | S:没有有效文件返回 400；权限拒绝统一转可读错误
 
 ===E:/JXF-AI/src/app/api/mcp/===
-route.ts[EE8M]: F:MCP Hub 入口，以 Bearer 令牌认证并处理 tools/list 与 tools/call，每次调用都写审计 | R:code:src/lib/mcp/tokens.ts,code:src/lib/mcp/tools.ts,code:src/lib/mcp/approvals.ts,code:src/lib/audit.ts | A:MCP 服务 | S:令牌绑定任用，离岗即失效；tools/list 只返回 scope 内工具，tools/call 再校验一次；无状态不维护 Mcp-Session-Id
+route.ts[EE8M]: F:MCP Hub 入口，以 Bearer 令牌认证并处理 tools/list 与 tools/call，每次调用都写审计（路径：src/app/api/mcp/route.ts） | R:code:src/lib/mcp/tokens.ts,code:src/lib/mcp/tools.ts,code:src/lib/mcp/approvals.ts,code:src/lib/audit.ts | A:MCP 服务 | S:令牌绑定任用，离岗即失效；tools/list 只返回 scope 内工具，tools/call 再校验一次；无状态不维护 Mcp-Session-Id
 
 ===E:/JXF-AI/src/app/api/metrics/===
-route.ts[OO7S]: F:聚合指标端点，输出 JSON 或 Prometheus 文本形式的运行、工作项、运维、连接器与产线计数 | R:code:src/lib/db/pool.ts,code:db/migrations/0028_metrics.sql | A:可观测性 | S:只返回聚合计数不含明细；数据来自 SECURITY DEFINER 的 app.metrics_snapshot()，不受应用角色 RLS 部门范围影响；JXF_ENV=production 且 METRICS_TOKEN 为空时返回 503（fail-closed），只有非生产环境才允许匿名读取
+route.ts[OO7S]: F:聚合指标端点，输出 JSON 或 Prometheus 文本形式的运行、工作项、运维、连接器与产线计数（路径：src/app/api/metrics/route.ts） | R:code:src/lib/db/pool.ts,code:db/migrations/0028_metrics.sql | A:可观测性 | S:只返回聚合计数不含明细；数据来自 SECURITY DEFINER 的 app.metrics_snapshot()，不受应用角色 RLS 部门范围影响；JXF_ENV=production 且 METRICS_TOKEN 为空时返回 503（fail-closed），只有非生产环境才允许匿名读取
 
 ===E:/JXF-AI/src/app/api/runs/[id]/cancel/===
-route.ts[ER7T]: F:运行中止接口，写入 cancel_requested_at 由 worker 感知并停止上游流 | R:code:src/lib/runtime/cancel.ts | A:运行时取消 | S:只接受同源请求，跨站返回 403；SSE 断开不触发中止，语义与关闭页面区分
+route.ts[ER7T]: F:运行中止接口，写入 cancel_requested_at 由 worker 感知并停止上游流（路径：src/app/api/runs/[id]/cancel/route.ts） | R:code:src/lib/runtime/cancel.ts | A:运行时取消 | S:只接受同源请求，跨站返回 403；SSE 断开不触发中止，语义与关闭页面区分
 
 ===E:/JXF-AI/src/app/api/runs/[id]/events/===
-route.ts[ER8M]: F:运行事件流接口，先用 SSE 推送 runs 快照，再按 after=seq 补发事件并持续推送增量 | R:code:src/lib/runtime/stream.ts,code:src/lib/permissions/server.ts | A:运行时事件流 | S:断线重连带 Last-Event-ID 即可续上；delta 不落事件表，只来自 worker 对 partial_text 的节流快照
+route.ts[ER8M]: F:运行事件流接口，先用 SSE 推送 runs 快照，再按 after=seq 补发事件并持续推送增量（路径：src/app/api/runs/[id]/events/route.ts） | R:code:src/lib/runtime/stream.ts,code:src/lib/permissions/server.ts | A:运行时事件流 | S:断线重连带 Last-Event-ID 即可续上；delta 不落事件表，只来自 worker 对 partial_text 的节流快照
 
 ===E:/JXF-AI/src/app/api/runs/===
-route.ts[ER8S]: F:运行受理接口，校验同源、问题长度与附件后调用 acceptRun 创建运行 | R:code:src/lib/runtime/accept.ts,code:src/lib/permissions/server.ts | A:运行时受理 | S:问题上限 4000 字，附件最多 5 个、单个 12000 字、合计 30000 字；同源校验缺失 Origin 时交给会话 Cookie 兜底
+route.ts[ER8S]: F:运行受理接口，校验同源、问题长度与附件后调用 acceptRun 创建运行（路径：src/app/api/runs/route.ts） | R:code:src/lib/runtime/accept.ts,code:src/lib/permissions/server.ts | A:运行时受理 | S:问题上限 4000 字，附件最多 5 个、单个 12000 字、合计 30000 字；同源校验缺失 Origin 时交给会话 Cookie 兜底
 
 ===E:/JXF-AI/src/app/api/webhooks/pipelines/[id]/===
-route.ts[EW8S]: F:产线外部 Webhook 触发入口，用每产线独立令牌鉴权后以发起人上下文运行产线 | R:code:src/lib/pipelines.ts,code:src/lib/pipelines-webhook.ts | A:产线 Webhook | S:库内只存令牌 SHA-256 并用恒定时间比较；请求体上限 64000 字节；令牌错误 401、产线不存在或未启用 404、停用或无发起人 409
+route.ts[EW8S]: F:产线外部 Webhook 触发入口，用每产线独立令牌鉴权后以发起人上下文运行产线（路径：src/app/api/webhooks/pipelines/[id]/route.ts） | R:code:src/lib/pipelines.ts,code:src/lib/pipelines-webhook.ts | A:产线 Webhook | S:库内只存令牌 SHA-256 并用恒定时间比较；请求体上限 64000 字节；令牌错误 401、产线不存在或未启用 404、停用或无发起人 409
 
 ===E:/JXF-AI/src/app/===
 error.tsx[EO5T]: F:路由级错误边界，记录错误摘要并提供重试入口 | R:code:src/app/global-error.tsx | A:错误处理 | S:必须记录 digest 便于与服务器日志关联；不向用户暴露内部错误细节
 global-error.tsx[EO5T]: F:全局错误页，替换 root layout 渲染并自带 html 与 body | R:code:src/app/error.tsx | A:错误处理 | S:不依赖外部样式，全部内联，避免样式加载失败时页面不可读
 globals.css[CU7L]: F:全站样式基础，引入 Tailwind 并把旧项目变量与组件类别名映射到 Apple 风格设计令牌 | R:code:tailwind.config.ts,code:src/app/layout.tsx | A:全局样式 | S:品牌色由 root layout 注入 --brand-* 覆盖；旧 lx-* 类别只做兼容映射，新组件应使用设计令牌类
-layout.tsx[EC7T]: F:根布局，按数据库品牌生成元数据并把品牌色注入 CSS 变量 | R:code:src/lib/settings/store.ts,code:src/lib/settings/runtime-server.ts,code:src/app/globals.css | A:应用外壳 | S:force-dynamic；首个页面请求前要 ensureRuntimeSettings；品牌色已在服务端校验为 #RRGGBB 才可内联
-page.tsx[EU3T]: F:站点根路径，按登录状态跳转到 /chat 或 /login | R:code:src/auth.ts | A:入口跳转 | S:force-dynamic；只做重定向
+layout.tsx[EC7T]: F:根布局，按数据库品牌生成元数据并把品牌色注入 CSS 变量（路径：src/app/layout.tsx） | R:code:src/lib/settings/store.ts,code:src/lib/settings/runtime-server.ts,code:src/app/globals.css | A:应用外壳 | S:force-dynamic；首个页面请求前要 ensureRuntimeSettings；品牌色已在服务端校验为 #RRGGBB 才可内联
+page.tsx[EU3T]: F:站点根路径，按登录状态跳转到 /chat 或 /login（路径：src/app/page.tsx） | R:code:src/auth.ts | A:入口跳转 | S:force-dynamic；只做重定向
 
 ===E:/JXF-AI/src/app/health/===
-page.tsx[EO5T]: F:健康状态页面，调用就绪检查并展示实例信息与逐项结果 | R:code:src/lib/health.ts,code:src/app/api/health/route.ts | A:健康检查界面 | S:force-dynamic；检查抛错时展示 FAILED 而不是 500
+page.tsx[EO5T]: F:健康状态页面，调用就绪检查并展示实例信息与逐项结果（路径：src/app/health/page.tsx） | R:code:src/lib/health.ts,code:src/app/api/health/route.ts | A:健康检查界面 | S:force-dynamic；检查抛错时展示 FAILED 而不是 500
 
 ===E:/JXF-AI/src/app/login/===
 LoginForm.tsx[EI6T]: F:登录表单，提交账号密码并区分凭证错误与其他失败 | R:code:src/app/login/page.tsx,code:src/auth.ts | A:登录界面 | S:使用 signIn 的 redirect:false 形式；登录成功后跳转 /chat
-page.tsx[EI6T]: F:登录页面，按 reason 参数展示离职交接或停用提示并渲染登录表单 | R:code:src/app/login/LoginForm.tsx,code:src/lib/settings/store.ts | A:登录界面 | S:force-dynamic；reason 只识别 pending_handover 与 disabled 两个值
+page.tsx[EI6T]: F:登录页面，按 reason 参数展示离职交接或停用提示并渲染登录表单（路径：src/app/login/page.tsx） | R:code:src/app/login/LoginForm.tsx,code:src/lib/settings/store.ts | A:登录界面 | S:force-dynamic；reason 只识别 pending_handover 与 disabled 两个值
 
 ===E:/JXF-AI/src/===
-auth.ts[RI9S]: F:Auth.js 配置，使用 Drizzle Adapter 与账号密码凭证登录，通过独立认证连接池在每次请求重新解析任用 | R:code:db/schema/index.ts,code:src/lib/auth/password.ts,code:src/lib/db/drizzle.ts,code:src/lib/audit.ts | A:认证 | S:会话策略为 JWT 且有效期 8 小时；离岗后下一次请求立即 0 行，不依赖 token 过期；适配器连接池取 AUTH_DATABASE_URL，缺失时回退 APP_DATABASE_URL；secret 取 JXF_AUTH_SECRET
+auth.ts[RI9S]: F:Auth.js 配置，使用 Drizzle Adapter 与账号密码凭证登录，通过独立认证连接池在每次请求重新解析任用（路径：src/auth.ts） | R:code:db/schema/index.ts,code:src/lib/auth/password.ts,code:src/lib/db/drizzle.ts,code:src/lib/audit.ts | A:认证 | S:会话策略为 JWT 且有效期 8 小时；离岗后下一次请求立即 0 行，不依赖 token 过期；适配器连接池取 AUTH_DATABASE_URL，缺失时回退 APP_DATABASE_URL；secret 取 JXF_AUTH_SECRET
 instrumentation.ts[RO7T]: F:进程启动校验，非 Node 运行时跳过，环境变量不合法直接退出 | R:code:src/lib/env.ts,code:src/lib/logger.ts | A:进程启动 | S:Next 会吞掉 instrumentation 异常并继续监听端口，因此必须显式 process.exit(1) 保证 fail-closed
 middleware.ts[MO6T]: F:全局中间件，为每个请求生成或透传 x-request-id 并记录访问日志 | R:code:src/lib/logger.ts | A:可观测性 | S:跳过 _next/static、_next/image 与 favicon.ico；请求头与响应头都回写 request id
 
@@ -458,7 +458,7 @@ InlineMessage.tsx[CU4T]: F:操作回执提示条，按信息或错误语义渲�
 Pill.tsx[CU3T]: F:胶囊标签，状态徒章与选中态共用 | R:code:src/components/knowledge/tokens.ts | A:知识库界面 | S:active 优先于 tone，选中态固定蓝色
 SectionCard.tsx[CU4T]: F:通用卡片容器，提供标题行、计数徒章与说明 | R:code:src/components/knowledge/tokens.ts | A:知识库界面 | S:传入 right 时忽略 count
 StatTile.tsx[CU4T]: F:统计条单格，展示标签、数值与阈值提示，色调只影响描边和数值颜色 | R:code:src/app/(app)/knowledge/_components/StatBar.tsx | A:知识库界面 | S:无 tone 时使用中性灰描边
-tokens.ts[CU7T]: F:知识库 UI 设计令牌，集中导出 Tailwind 工具类字符串与色调映射 | R:code:src/components/knowledge/SectionCard.tsx,code:src/app/globals.css | A:设计令牌 | S:只含样式常量不含业务逻辑；input 自带 w-full，需要自定义宽度时必须改用 inputInline，否则 w-auto 会被覆盖
+tokens.ts[CU7T]: F:知识库 UI 设计令牌，集中导出 Tailwind 工具类字符串与色调映射（路径：src/components/knowledge/tokens.ts） | R:code:src/components/knowledge/SectionCard.tsx,code:src/app/globals.css | A:设计令牌 | S:只含样式常量不含业务逻辑；input 自带 w-full，需要自定义宽度时必须改用 inputInline，否则 w-auto 会被覆盖
 
 ===E:/JXF-AI/src/components/permissions/===
 Can.tsx[CI5T]: F:权限门控组件，有权限才渲染 children，否则渲染 fallback | R:code:src/components/permissions/usePermission.ts,code:src/lib/permissions/snapshot.ts | A:权限展示 | S:客户端判定只用于隐藏入口，不能替代服务端守卫
@@ -481,25 +481,25 @@ switch.tsx[CU5T]: F:全局开关组件，iOS 风格并提供 role=switch 语义 
 toast.tsx[CU6S]: F:全局轻提示，悬浮顶部居中展示并在 3 秒后淡出 | R:code:src/app/(app)/settings/mcp/TokenManager.tsx | A:UI 基础组件 | S:空消息直接忽略；点击立即消失，不占布局空间
 
 ===E:/JXF-AI/src/lib/===
-ai-employees.ts[DB8L]: F:AI 员工目录与授权，负责创建、更新、启停、部门与个人授权以及可见性查询 | R:code:db/policies/020_ai_employee_visibility.sql,code:src/lib/skills.ts,code:src/lib/audit.ts | A:AI 员工领域 | S:可见性完全由 RLS 决定，未授权者连名称与描述都拿不到；目录与授权增删改仅 L1；新建时自动给创建者一条个人 manage 授权；员工自身不携带数据权限，运行时继承调用者上下文
+ai-employees.ts[DB8L]: F:AI 员工目录与授权，负责创建、更新、启停、部门与个人授权以及可见性查询（路径：src/lib/ai-employees.ts） | R:code:db/policies/020_ai_employee_visibility.sql,code:src/lib/skills.ts,code:src/lib/audit.ts | A:AI 员工领域 | S:可见性完全由 RLS 决定，未授权者连名称与描述都拿不到；目录与授权增删改仅 L1；新建时自动给创建者一条个人 manage 授权；员工自身不携带数据权限，运行时继承调用者上下文
 audit-export.ts[DO7S]: F:审计导出服务，按类型与时间范围读取审计事件并写一条 audit.exported 留痕 | R:code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:审计领域 | S:需要 audit:read；数据范围由 audit_events 的 RLS 决定（L1 全量、L2 子树、L3 本人）；最大 50000 条，默认 10000；只读不修改审计记录
 audit.ts[PO8T]: F:审计写入，支持在业务事务内写审计与独立连接写审计两种入口 | R:code:db/schema/audit-events.ts,code:src/lib/db/pool.ts | A:审计持久化 | S:auditInTx 与业务写入同生共死；审计事件按租户与部门上下文写入，部门为空的事件仅用于登录等全局动作
 env.ts[CC9M]: F:启动期环境变量校验，统一解析数据库（含 AUTH_DATABASE_URL）、S3、AI、Embedding、OCR、MCP、邮件与运行时配置 | R:code:src/instrumentation.ts,code:src/lib/settings/runtime.ts | A:配置 | S:JXF_AUTH_SECRET 缺失或过短必须拒绝启动，不允许降级放行；AUTH_DATABASE_URL 缺失时回退 APP_DATABASE_URL；AI 缺失不拒绝启动，无 Key 时检索降级为 pg_bigm 纯关键词；结果带缓存供健康检查与连接池复用
-health.ts[OO7S]: F:就绪检查，验证数据库扩展、迁移版本与关键依赖并输出逐项结果 | R:code:src/lib/db/pool.ts,code:src/lib/env.ts | A:可观测性 | S:必需扩展为 vector、pg_bigm、pg_trgm；任一检查 error 即整体 degraded
+health.ts[OO7S]: F:就绪检查，验证数据库扩展、迁移版本与关键依赖并输出逐项结果（路径：src/lib/health.ts） | R:code:src/lib/db/pool.ts,code:src/lib/env.ts | A:可观测性 | S:必需扩展为 vector、pg_bigm、pg_trgm；任一检查 error 即整体 degraded
 logger.ts[OO6T]: F:结构化日志，单行 JSON 输出并按 JXF_LOG_LEVEL 控制级别 | R:code:src/lib/env.ts | A:可观测性 | S:私有化现场统一按 request_id 或 run_id 检索；禁止输出明文密钥；error 写 stderr
 pipeline-events.ts[DW8M]: F:产线内部事件总线，发布事件、维护订阅并在 runner 周期分发时以发起人身份运行产线 | R:code:src/lib/pipelines.ts,code:src/lib/pipeline-runner.ts,code:src/lib/audit.ts | A:产线领域 | S:生产者只调用 app.publish_event() 追加事件；每个产线每类事件一条订阅；事件最多尝试 3 轮，失败原因写 last_error 避免坏订阅无限重试
 pipeline-runner.ts[DW8M]: F:产线推进器，在每步结束后按上一步状态派发下一步、跳过可选步骤或标记整条产线失败 | R:code:src/lib/pipelines.ts,code:src/lib/work-items.ts,code:src/lib/knowledge/experience/collectors.ts | A:产线领域 | S:运行在 owner 连接上读取状态，但真正派活仍走 assignWork（jxf_app + RLS）并使用发起人上下文；{{previous}} 替换为上一步交付文本且截断到 1500 字；上一步仍在 queued/running 时本轮不动
 pipelines-webhook.ts[DW8S]: F:产线外部 Webhook 令牌签发、轮换、停用与校验，库内只存 SHA-256 哈希 | R:code:src/lib/pipelines.ts,code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:产线领域 | S:令牌只在生成时返回一次，库内保存哈希与末 4 位提示；校验使用 timingSafeEqual；查库走 SECURITY DEFINER 的 app.pipeline_webhook_lookup()，路由不需要用户会话也读不到其它产线
 pipelines.ts[DW8L]: F:自动化产线领域，负责定义、启停、手工运行、步骤快照与运行记录查询 | R:code:src/lib/work-items.ts,code:src/lib/knowledge/experience/collectors.ts,code:src/lib/audit.ts | A:产线领域 | S:产线不新增执行引擎，每一步复用 assignWork 生成 work_item 与 kind=task 的 run；运行一次只派第一步，之后由上一步结果驱动；某步失败停止后续，标记 optional 的步骤失败则跳过；触发方式为 manual/schedule/webhook/event，定时按间隔分钟数由 runner 发起
 skills.ts[DE8L]: F:技能注册表与执行记录，负责技能增删改、启停、选项装配与提示词技能运行 | R:code:src/lib/ai/openai.ts,code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:技能领域 | S:skills 是唯一真相源，内置技能 tenant_id 为 null、租户自建技能按租户隔离；department_packs.skill_ids 与 ai_employees.skill_keys 写入前必须过 assertSkillKeys，禁止悬空字符串；执行记录与业务写入同事务落库，失败不伪造成功
-work-items.ts[DW8L]: F:AI 员工派活，创建与列出工作项、派发运行时任务并处理人工或自动验收 | R:code:src/lib/ai-employees.ts,code:src/lib/runtime/accept.ts,code:src/lib/knowledge/experience/capture.ts,code:src/lib/audit.ts | A:工作项领域 | S:AI 员工是执行体不提供对话；派发仅 L1 或部门负责人 L2；一次派发等于 work_item 加 kind=task 的 run，执行、事件与用量全部复用运行时；交付物默认人工验收，自动验收门槛在派发时快照进工作项，未达标仍转人工
+work-items.ts[DW8L]: F:AI 员工派活，创建与列出工作项、派发运行时任务并处理人工或自动验收（路径：src/lib/work-items.ts） | R:code:src/lib/ai-employees.ts,code:src/lib/runtime/accept.ts,code:src/lib/knowledge/experience/capture.ts,code:src/lib/audit.ts | A:工作项领域 | S:AI 员工是执行体不提供对话；派发仅 L1 或部门负责人 L2；一次派发等于 work_item 加 kind=task 的 run，执行、事件与用量全部复用运行时；交付物默认人工验收，自动验收门槛在派发时快照进工作项，未达标仍转人工
 
 ===E:/JXF-AI/src/lib/ai/===
-ocr.ts[IA7S]: F:扫描件 OCR，调用 Gemini 视觉接口把 PDF 与图片转成逐页文本 | R:code:src/lib/env.ts,code:src/lib/logger.ts | A:AI 集成 | S:任何失败都返回 null，由调用方标记 needs_ocr 并回落人工补录，不写残缺结果；只接受 PDF 与 png/jpeg/webp；日志只记模型、字节数与错误摘要，不打印文档内容与 Key
+ocr.ts[IA7S]: F:扫描件 OCR，调用 Gemini 视觉接口把 PDF 与图片转成逐页文本（路径：src/lib/ai/ocr.ts） | R:code:src/lib/env.ts,code:src/lib/logger.ts | A:AI 集成 | S:任何失败都返回 null，由调用方标记 needs_ocr 并回落人工补录，不写残缺结果；只接受 PDF 与 png/jpeg/webp；日志只记模型、字节数与错误摘要，不打印文档内容与 Key
 openai.ts[IA8L]: F:AI 出口模块，封装 OpenAI 兼容的对话、嵌入与详细调用，并在瞬时故障时指数退避与切换备用节点 | R:code:src/lib/env.ts,code:src/lib/settings/runtime.ts,code:src/lib/logger.ts | A:AI 集成 | S:无 Key 或调用失败一律返回 null，由调用方降级（检索退化为 pg_bigm 关键词、问答拒绝生成）；禁止在此抛错打断入库；可重试状态为 408/425/429/500/502/503/504 与网络层失败
 
 ===E:/JXF-AI/src/lib/auth/===
-actions.ts[EI5T]: F:退出登录 Server Action，调用 signOut 并重定向到登录页 | R:code:src/auth.ts,code:src/components/shell/ProfileMenu.tsx | A:认证 | S:-
+actions.ts[EI5T]: F:退出登录 Server Action，调用 signOut 并重定向到登录页（路径：src/lib/auth/actions.ts） | R:code:src/auth.ts,code:src/components/shell/ProfileMenu.tsx | A:认证 | S:-
 password.ts[DS7T]: F:口令哈希与校验，使用 Node 内置 scrypt 并按固定参数生成与比对 | R:code:src/auth.ts,code:src/app/(app)/me/profile/actions.ts | A:认证安全 | S:存储格式固定为 scrypt$N$r$p$saltBase64$keyBase64；参数 N=16384、r=8、p=1、密钥 64 字节；校验用 timingSafeEqual
 session.ts[MI8T]: F:服务端会话校验，要求登录并检查账号状态，未登录或非 active 直接跳转登录页 | R:code:src/auth.ts,code:src/lib/db/pool.ts | A:认证 | S:同一请求内用 React cache 复用账号状态查询；非 active 状态以 reason 参数跳转登录页；此时尚未建立用户上下文，users 的 RLS 会清空直查，账号状态必须经 app.user_status 读取
 
@@ -522,11 +522,11 @@ distill.ts[DA8L]: F:文档蒸馏，调用 AI 从切片生成待确认知识卡�
 evidence.ts[KB7S]: F:证据核对算法，抹平空白、全半角与标点差异后逐字比对并映射回原文字符区间 | R:code:src/lib/knowledge/card-evidence.ts,code:src/lib/knowledge/distill.ts | A:知识库算法 | S:只归一化写法差异，不做模糊匹配，对不上就是不对上；命中后必须能映射回切片原文的绝对区间
 folders.ts[CB7T]: F:知识库目录常量，定义 10 个标准业务目录、文档与卡片默认目录及 key 校验 | R:code:src/lib/knowledge/workspace.ts,code:src/lib/knowledge/experience/routing.ts | A:知识库基础 | S:key 落库、label 只用于展示；目录是规范视图不是真实文件夹表，空目录也会常驻
 gaps.ts[DB6S]: F:知识缺口，问答未命中时自动沉淀并支持手动记录、关闭与重开 | R:code:db/schema/knowledge.ts,code:src/lib/audit.ts | A:知识库领域 | S:状态为 open/answered/closed；来源为 manual/qa_miss/expired；追问次数由 qa_logs.gap_id 关联统计
-ingest.ts[DB8L]: F:入库流水线，完成上传、规则筛、解析、分块、向量化与落库 | R:code:src/lib/knowledge/parse.ts,code:src/lib/knowledge/chunk.ts,code:src/lib/ai/openai.ts,code:src/lib/ai/ocr.ts,code:src/lib/storage/local.ts | A:知识库领域 | S:解析、向量化与对象存储都在事务外完成，事务内只做去重与写入以避免长事务持锁；embedding 失败不阻断入库，切片保留空向量；扫描件落 needs_ocr 且不生成切片；单文件上限 20MB，单批次最多 20 个文件
-ocr.ts[DB7M]: F:扫描件补录，把 OCR 正文按页标记重建为切片并重新向量化 | R:code:src/lib/knowledge/chunk.ts,code:src/lib/ai/openai.ts,code:src/lib/ai/ocr.ts | A:知识库领域 | S:只允许待 OCR 或解析失败的文档补录，绝不覆盖已解析文档；补录后重建切片并重新向量化，向量失败不阻断；分页只认【第 N 页】标记，没有标记视为一页
+ingest.ts[DB8L]: F:入库流水线，完成上传、规则筛、解析、分块、向量化与落库（路径：src/lib/knowledge/ingest.ts） | R:code:src/lib/knowledge/parse.ts,code:src/lib/knowledge/chunk.ts,code:src/lib/ai/openai.ts,code:src/lib/ai/ocr.ts,code:src/lib/storage/local.ts | A:知识库领域 | S:解析、向量化与对象存储都在事务外完成，事务内只做去重与写入以避免长事务持锁；embedding 失败不阻断入库，切片保留空向量；扫描件落 needs_ocr 且不生成切片；单文件上限 20MB，单批次最多 20 个文件
+ocr.ts[DB7M]: F:扫描件补录，把 OCR 正文按页标记重建为切片并重新向量化（路径：src/lib/knowledge/ocr.ts） | R:code:src/lib/knowledge/chunk.ts,code:src/lib/ai/openai.ts,code:src/lib/ai/ocr.ts | A:知识库领域 | S:只允许待 OCR 或解析失败的文档补录，绝不覆盖已解析文档；补录后重建切片并重新向量化，向量失败不阻断；分页只认【第 N 页】标记，没有标记视为一页
 parse.ts[IB7T]: F:文档解析，把 PDF、DOCX 与文本类文件转成分页文本并如实标记是否需要 OCR | R:code:src/lib/knowledge/ingest.ts | A:知识库解析 | S:解析不出文字必须标 needs_ocr 或 failed，不假装读过；图片只接受 png/jpeg/webp；不支持的类型抛 UnsupportedDocumentError
 qa.ts[DA8M]: F:单轮 RAG 问答，混合检索已确认卡片后生成带编号引用的答案并做引用与数字校验 | R:code:src/lib/ai/openai.ts,code:src/lib/knowledge/evidence.ts,code:src/lib/permissions/server.ts | A:知识库领域 | S:只召回已确认卡片；没命中就如实说没查到并沉淀缺口；编号必须落在本轮召回集合内，否则记 invalid_cites；数字必须能在卡片正文或证据原文找到，否则记 unverified_numbers；未配置 AI 时只返回检索结果
-regression.ts[DQ7M]: F:检索回归门禁，用已确认卡标题生成基线题，改动分块或向量模型后验证召回没有退化 | R:code:src/lib/ai/openai.ts,code:src/lib/audit.ts | A:知识库领域 | S:每题保留率等于基线卡与召回卡交集除以基线卡数；保留率低于 0.9 或任一道未通过整轮判失败；题集最多 50 道
+regression.ts[DQ7M]: F:检索回归门禁，用已确认卡标题生成基线题，改动分块或向量模型后验证召回没有退化（路径：src/lib/knowledge/regression.ts） | R:code:src/lib/ai/openai.ts,code:src/lib/audit.ts | A:知识库领域 | S:每题保留率等于基线卡与召回卡交集除以基线卡数；保留率低于 0.9 或任一道未通过整轮判失败；题集最多 50 道
 share.ts[DS7M]: F:公司共享审批，处理文档与知识卡进入共享区前的申请、审批、收回与撤回 | R:code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:知识库领域 | S:visibility 只有 L1 审批通过后才允许变成 shared，申请期间保持 department 且不进入公共检索；L1 本人操作视为直接通过；收回或撤回后一律回到 department 并清空申请字段
 stats.ts[DB6S]: F:知识库统计聚合（只读），统计文档、切片、卡片、冲突、缺口、问答与回归结果 | R:code:src/lib/knowledge/workspace.ts,code:src/app/(app)/knowledge/_components/StatBar.tsx | A:知识库领域 | S:所有计数必须在 withUserContext 的 jxf_app 连接内执行由 RLS 兜底，不能换成 owner 连接否则会算进兄弟部门数据；知识单元等于已解析文档加已确认卡片
 trash.ts[DB7M]: F:回收站，处理文档软删与还原、卡片作废后还原、彻底删除与清空 | R:code:src/lib/audit.ts,code:src/lib/storage/local.ts,code:src/lib/permissions/server.ts | A:知识库领域 | S:全部在 withUserContext 内执行，写范围只由 app.can_write 决定；彻底删除只对回收站内的行生效（文档 deleted_at 非空或卡片 status=dropped）；磁盘清理由事务提交后执行，失败只记日志不回滚数据库删除
@@ -546,12 +546,12 @@ routing.ts[KB7M]: F:目录语义路由纯函数，按人工选择、来源目录
 truncate.ts[KB7S]: F:智能截断，先抽关键段再按头三成、关键段四成、尾三成拼装来源文本 | R:code:src/lib/knowledge/experience/capture.ts | A:经验沉淀 | S:禁止从中间粗暴切断，按行边界对齐；相邻重复行折叠并标注次数；上限按字符数而非字节，默认 12000 字
 
 ===E:/JXF-AI/src/lib/mcp/===
-approvals.ts[DI8M]: F:MCP 逐工具审批闸门，命中的写类工具先落待审批单，由 L1 批准或驳回后按令牌绑定任用执行 | R:code:src/lib/mcp/tools.ts,code:src/lib/mcp/tokens.ts,code:src/lib/audit.ts | A:MCP 治理 | S:只有 L1（platform:settings）能批准或驳回；批准后按令牌绑定任用身份执行；离职任用审批后也无法执行，resolve 失败即拒绝
+approvals.ts[DI8M]: F:MCP 逐工具审批闸门，命中的写类工具先落待审批单，由 L1 批准或驳回后按令牌绑定任用执行（路径：src/lib/mcp/approvals.ts） | R:code:src/lib/mcp/tools.ts,code:src/lib/mcp/tokens.ts,code:src/lib/audit.ts | A:MCP 治理 | S:只有 L1（platform:settings）能批准或驳回；批准后按令牌绑定任用身份执行；离职任用审批后也无法执行，resolve 失败即拒绝
 clients.ts[CI5T]: F:MCP 客户端标识常量，声明 6 个受支持客户端的 key、标签与归一化函数 | R:code:src/lib/mcp/tokens.ts | A:MCP 基础 | S:前后端共用，禁止引入任何 server-only 依赖
 connectors.ts[IN8L]: F:外部 MCP 连接器管理，支持 http/stdio/sse 三种传输的注册、启停、工具刷新与调用 | R:code:src/lib/mcp/ssrf.ts,code:src/lib/permissions/server.ts,code:src/lib/audit.ts | A:MCP 集成 | S:仅 L1 可管理；http 连接器必须通过 SSRF 校验且拒绝跟随重定向；stdio 只允许 MCP_STDIO_ALLOWED_COMMANDS 白名单内的可执行文件且不使用 shell；每次调用写 mcp_server_calls，既是审计也是每分钟限流账本
-health.ts[OO7M]: F:MCP 连接器心跳体检，驱动 unknown、healthy、degraded、down 状态机并在迁移时写审计 | R:code:src/lib/mcp/connectors.ts,code:src/lib/audit.ts | A:MCP 可观测性 | S:连续失败 1 到 2 次为 degraded 仍参与运行，连续失败 3 次为 down 且运行时跳过；体检只更新健康列，不改 tools_cache 与 allowed_tools
+health.ts[OO7M]: F:MCP 连接器心跳体检，驱动 unknown、healthy、degraded、down 状态机并在迁移时写审计（路径：src/lib/mcp/health.ts） | R:code:src/lib/mcp/connectors.ts,code:src/lib/audit.ts | A:MCP 可观测性 | S:连续失败 1 到 2 次为 degraded 仍参与运行，连续失败 3 次为 down 且运行时跳过；体检只更新健康列，不改 tools_cache 与 allowed_tools
 ssrf.ts[MS8S]: F:MCP 连接器的 SSRF 防护，解析域名后拒绝内网、回环、链路本地与保留地址 | R:code:src/lib/mcp/connectors.ts | A:MCP 安全 | S:只允许 http/https 且禁止 URL 内嵌账号密码；内网主机必须显式列入 MCP_TRUSTED_HOSTS；调用方必须禁止跟随重定向，避免 302 绕过校验
-tokens.ts[DI8L]: F:MCP 令牌签发、列表、续期、吊销与外部请求解析，令牌绑定任用与六维 scope | R:code:src/lib/mcp/clients.ts,code:src/lib/mcp/tools.ts,code:src/lib/audit.ts,code:src/lib/db/user-context.ts | A:MCP 治理 | S:明文只在签发时返回一次，库里只有 sha256；令牌绑定任用，离岗、停用、过期、吊销任一成立即失效；解析出的上下文按任用计算，L1 也不因令牌扩大范围
+tokens.ts[DI8L]: F:MCP 令牌签发、列表、续期、吊销与外部请求解析，令牌绑定任用与六维 scope（路径：src/lib/mcp/tokens.ts） | R:code:src/lib/mcp/clients.ts,code:src/lib/mcp/tools.ts,code:src/lib/audit.ts,code:src/lib/db/user-context.ts | A:MCP 治理 | S:明文只在签发时返回一次，库里只有 sha256；令牌绑定任用，离岗、停用、过期、吊销任一成立即失效；解析出的上下文按任用计算，L1 也不因令牌扩大范围
 tools.ts[DB8M]: F:MCP 工具注册表与六维 scope 判定，定义工具可见性、可调用性与审批要求 | R:code:src/lib/mcp/tokens.ts,code:src/lib/ai-employees.ts,code:src/lib/work-items.ts,code:src/lib/knowledge/qa.ts | A:MCP 治理 | S:六维为 skills、pipelines、tools、allowWrite、approvalTools、channels，空数组表示不额外限制；工具可见性与可调用性都由令牌 scope 决定；工具内部以令牌绑定任用身份执行，权限点与 RLS 照常校验；不读取客户端传来的部门或用户参数
 worker-tools.ts[IE8M]: F:worker 侧 MCP 工具计划与执行，从连接器快照生成工具定义并在调用时写运行审计与连接器账本 | R:code:src/lib/mcp/connectors.ts,code:src/lib/ai/openai.ts,code:src/lib/logger.ts | A:MCP 集成 | S:worker 只读 mcp_servers 快照，不碰业务表；员工 allowedTools 条目形如 mcp:<serverId>:<toolName>，模型看到的是单段别名；每次调用写 tool_calls 与 mcp_server_calls
 
@@ -561,7 +561,7 @@ mailer.ts[IM7M]: F:SMTP 邮件通知，配置以设置面优先、环境变量�
 
 ===E:/JXF-AI/src/lib/ops/===
 tasks.ts[DO7S]: F:运维任务领域层，L1 落单 backup 或 restore_verify 任务并查询状态 | R:code:src/lib/ops/types.ts,code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:运维领域 | S:Web 容器不持有 docker 权限，只落单，执行由宿主机 runner 完成；任务类型固定为 backup 与 restore_verify，参数只允许 cold 布尔值，不接受任意命令
-types.ts[CO4T]: F:运维任务共享类型与中文标签，客户端可安全导入 | R:code:src/lib/ops/tasks.ts | A:运维基础 | S:不含 Node 与数据库依赖
+types.ts[CO4T]: F:运维任务共享类型与中文标签，客户端可安全导入（路径：src/lib/ops/types.ts） | R:code:src/lib/ops/tasks.ts | A:运维基础 | S:不含 Node 与数据库依赖
 
 ===E:/JXF-AI/src/lib/org/===
 slug.ts[KI4T]: F:部门名称转拼音 slug，供内部唯一标识使用 | R:code:src/app/(app)/admin/organization/actions.ts | A:组织算法 | S:纯符号或空名称兜底为 dept，唯一性由调用方追加递增后缀；仅内部使用不出现在 UI
@@ -597,9 +597,9 @@ ai.ts[CC7T]: F:模型配置诊断，展示当前进程实际生效的配置并�
 crypto.ts[MS8T]: F:设置面密钥加密，使用 AES-256-GCM 加解密模型、SMTP 与技能令牌，并按密文版本选择 v1 回退密钥或 v2 专用密钥 | R:code:src/lib/settings/store.ts,code:src/lib/notifications/mailer.ts | A:设置安全 | S:新密文优先用 JXF_DATA_ENCRYPTION_KEY 写 v2，未配置时回退 JXF_AUTH_SECRET 写 v1；读取按密文版本选钥，所以配了专用密钥后旧 v1 仍可解，而移除专用密钥后 v2 解不开并返回 null；密文为 v1 或 v2 前缀加 base64url 的 iv.tag.ciphertext 三段
 delivery-status.ts[OO6S]: F:交付状态只读视图，读取 backups 目录下的备份与升级状态产物 | R:code:scripts/backup.mjs,code:scripts/upgrade.mjs | A:交付运维 | S:Web 容器通过只读挂载看到宿主机 backups 目录；未挂载或没有备份时如实显示暂无，不伪造状态；最多展示 5 份备份
 runtime-server.ts[CC8T]: F:把数据库中的模型配置应用到当前进程，刷新 env 缓存并设置运行时覆盖 | R:code:src/lib/settings/store.ts,code:src/lib/settings/runtime.ts,code:src/lib/settings/crypto.ts,code:src/lib/env.ts | A:平台设置 | S:启动期由 instrumentation 调用一次，保存设置后由 Server Action 再调用；Worker 是独立进程，需重启才加载新配置；解密失败时保留环境变量配置，避免整站 AI 不可用
-runtime.ts[CC7T]: F:运行时 AI 覆盖的内存容器，供 env 解析时读取 | R:code:src/lib/env.ts,code:src/lib/settings/runtime-server.ts | A:平台设置 | S:纯内存不依赖数据库与 Next；明文 Key 只存在于进程内存，禁止落日志
+runtime.ts[CC7T]: F:运行时 AI 覆盖的内存容器，供 env 解析时读取（路径：src/lib/settings/runtime.ts） | R:code:src/lib/env.ts,code:src/lib/settings/runtime-server.ts | A:平台设置 | S:纯内存不依赖数据库与 Next；明文 Key 只存在于进程内存，禁止落日志
 store.ts[DC8L]: F:平台设置领域层，读写品牌、模型 Key、审计留存与邮件通知配置并写审计 | R:code:src/lib/settings/crypto.ts,code:src/lib/settings/types.ts,code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:平台设置 | S:读写必须经 platform:settings 守卫（仅 L1），所有变更写审计；模型 Key 与 SMTP 口令加密后入库，前端只看末 4 位；登录页与启动期通过 SECURITY DEFINER 函数读取，不绕过 RLS 直接查表
-types.ts[CC5T]: F:设置面共享类型与默认值，声明品牌、AI、审计与通知配置结构 | R:code:src/lib/settings/store.ts | A:平台设置 | S:CLEAR_API_KEY 是前端清空已保存 Key 的显式指令，避免空字符串与不修改产生歧义；客户端可安全导入，不含 Node 与数据库依赖
+types.ts[CC5T]: F:设置面共享类型与默认值，声明品牌、AI、审计与通知配置结构（路径：src/lib/settings/types.ts） | R:code:src/lib/settings/store.ts | A:平台设置 | S:CLEAR_API_KEY 是前端清空已保存 Key 的显式指令，避免空字符串与不修改产生歧义；客户端可安全导入，不含 Node 与数据库依赖
 
 ===E:/JXF-AI/src/lib/skills/===
 distribute.ts[DE7L]: F:多平台分发，维护账号分组、生成九平台文案副本、创建发布任务并支持发布机令牌领取 | R:code:src/lib/skills.ts,code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:技能领域 | S:平台固定为抖音、视频号、小红书等九个且各有标题、正文与标签长度上限；发布机用一次性令牌通过 SECURITY DEFINER 函数领取任务，业务角色不能直接改任务状态；服务端不保存平台口令
@@ -617,11 +617,11 @@ permission.ts[CI7T]: F:权限系统标准数据结构，声明授权、有效权
 profile.ts[CU5T]: F:个人资料与成员清单共享结构，声明邮箱身份、任用摘要与资料聚合 | R:code:src/app/(app)/me/profile/actions.ts | A:类型声明 | S:页面、Server Action 与资产交接都以这里为准，避免各处自定义形状；工号留空时由组织架构自动生成 JXF-0001
 
 ===E:/JXF-AI/src/worker/===
-experience.ts[RR7T]: F:worker 侧经验消费者，领取一个 job、执行提炼并维护心跳与失败退避 | R:code:src/lib/knowledge/experience/process.ts,code:src/lib/knowledge/experience/queue.ts | A:运行时恢复 | S:与运行时队列共用同一 worker 进程，交互式 run 优先，无 run 可领才处理经验 job；执行期间 30s 心跳续租，崩溃由 sweepExperienceJobs 回队列；失败按尝试次数指数退避，3 次后进 dead
+experience.ts[RR7T]: F:worker 侧经验消费者，领取一个 job、执行提炼并维护心跳与失败退避（路径：src/worker/experience.ts） | R:code:src/lib/knowledge/experience/process.ts,code:src/lib/knowledge/experience/queue.ts | A:运行时恢复 | S:与运行时队列共用同一 worker 进程，交互式 run 优先，无 run 可领才处理经验 job；执行期间 30s 心跳续租，崩溃由 sweepExperienceJobs 回队列；失败按尝试次数指数退避，3 次后进 dead
 main.ts[RR9L]: F:worker 进程入口，循环领取运行时 run 并执行流式模型调用、工具调用、事件与用量记账 | R:code:src/lib/runtime/claim.ts,code:src/lib/runtime/emit.ts,code:src/lib/runtime/recover.ts,code:src/lib/mcp/worker-tools.ts,code:src/lib/settings/runtime-server.ts | A:worker 运行 | S:只消费队列不承担 HTTP，使用 WORKER_DATABASE_URL 的 app_worker 受限角色；启动时把不属于本进程的 running 收口为 interrupted；心跳 30s、巡检 60s、空闲 800ms；连接池 max 4，query_timeout 与服务端 statement_timeout 均为 60s，任务续跑靠租约而非超时；经验沉淀后台单并发，不阻塞前台 run 领取
 
 ===E:/JXF-AI/docs/audit/===
-2026-11-09-全面审计报告.md[SQ5M]: F:工作台项目静态全面审计报告，按六条线分级列出安全、认知、可靠性与交付问题，附真实库复核、处置记录与修复路线图 | R:code:src/auth.ts,code:src/lib/db/pool.ts,code:docker/postgres/00-init.sh | A:审计交付 | S:结论绑定 2026-11-09 的索引与库内只读目录查询，未读取业务行；SEC-01 已闭环：先拆 jxf_auth 再收权，users 行级策略加三个 SECURITY DEFINER 入口；CI 只跑无 DB 的 7 项，集成测试走 verify:delivery；SEC-02 支持 v1 密文平滑升级；IDX-04 抽查无失效断言
+2026-11-09-全面审计报告.md[SQ5M]: F:工作台项目静态全面审计报告，按六条线分级列出安全、认知、可靠性与交付问题，附真实库复核、处置记录与修复路线图 | R:code:src/auth.ts,code:src/lib/db/pool.ts,code:docker/postgres/00-init.sh | A:审计交付 | S:结论绑定 2026-11-09 的索引与库内只读目录查询，未读取业务行；SEC-01 已闭环：先拆 jxf_auth 再收权，users 行级策略加三个 SECURITY DEFINER 入口；CI 只跑无 DB 的 7 项，集成测试走 verify:delivery；SEC-02 支持 v1 密文平滑升级；IDX-02 已为 75 条同名 Entry 补路径；IDX-04 抽查无失效断言
 
 ===E:/JXF-AI/db/ops/===
 auth-role-cutover.sql[OS8T]: F:jxf_auth 角色的人工切换脚本：超级用户建角色、部署后验证登录，再由 owner 对 jxf_app 收权 | R:code:db/policies/034_auth_role.sql,code:docker/postgres/00-init.sh | A:角色切换运维 | S:migrate 只读 db/policies，不会执行本文件；收权必须在 AUTH_DATABASE_URL 生效并验证登录之后，顺序颠倒会直接锁死登录；users 只收回 password_hash 列，其余展示列继续授予 jxf_app
