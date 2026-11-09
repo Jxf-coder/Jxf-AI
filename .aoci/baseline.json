@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-08T16:11:12Z",
-  "updated_at": "2026-11-09T09:13:56Z",
+  "updated_at": "2026-11-09T09:20:13Z",
   "files": {
     ".dockerignore": {
       "role": "index",
@@ -35,9 +35,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "e025944c6a8d5676fda432c08579f768d7e8e18158fa018eb9b4e0ec0545f59b",
-      "size": 156174,
-      "normalized_sha256": "e025944c6a8d5676fda432c08579f768d7e8e18158fa018eb9b4e0ec0545f59b"
+      "sha256": "380fd31c6853555773369cdf230ceea8d378eb41118346442b51a7476b8413b1",
+      "size": 156859,
+      "normalized_sha256": "380fd31c6853555773369cdf230ceea8d378eb41118346442b51a7476b8413b1"
     },
     "aoci.database.txt": {
       "role": "index",
@@ -741,6 +741,12 @@
       "size": 3643,
       "normalized_sha256": "fc724847fdb3977fc7ef0321e5deb6d269144e8f5f870af146b7b7d786ee8607"
     },
+    "db/policies/033_auth_tables_rls.sql": {
+      "role": "index",
+      "sha256": "d87da6f2cb2613ecf6112fb9d294e40484fde37b39214a82272c56debbcfa0c4",
+      "size": 2288,
+      "normalized_sha256": "d87da6f2cb2613ecf6112fb9d294e40484fde37b39214a82272c56debbcfa0c4"
+    },
     "db/schema/ai-employees.ts": {
       "role": "index",
       "sha256": "c43c25b332ee6b385fd80689e7b9d86e7b5ecfb3174a1737609e8df5b9e7791c",
@@ -1379,9 +1385,9 @@
     },
     "src/app/(app)/admin/organization/actions.ts": {
       "role": "index",
-      "sha256": "1ab3de5d95254c375f4f1e066a45a316c83678723bca87a2fbf87d371c12d010",
-      "size": 42713,
-      "normalized_sha256": "1ab3de5d95254c375f4f1e066a45a316c83678723bca87a2fbf87d371c12d010"
+      "sha256": "eb4f7d0d6bd9e404980fbc2b27b33664b46d5611cb695e00a1165adcb77ef6a9",
+      "size": 42897,
+      "normalized_sha256": "eb4f7d0d6bd9e404980fbc2b27b33664b46d5611cb695e00a1165adcb77ef6a9"
     },
     "src/app/(app)/admin/organization/page.tsx": {
       "role": "index",
