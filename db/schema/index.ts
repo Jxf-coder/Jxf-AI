@@ -10,6 +10,7 @@ export * from "./assets";
 export * from "./ingest";
 export * from "./documents";
 export * from "./knowledge";
+export * from "./experience";
 export * from "./regression";
 export * from "./ai-employees";
 export * from "./runtime";

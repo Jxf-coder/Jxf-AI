@@ -34,7 +34,11 @@ create policy mcp_tokens_update on mcp_tokens
 -- 不提供 DELETE：吊销走 revoked_at，保留审计痕迹
 grant select, insert, update on mcp_tokens to jxf_app;
 
--- 按 hash 反查：只在 token 未吊销、未过期且任用仍在岗时返回
+-- 按 hash 反查：只在 token 未吊销、未过期且任用仍在岗时返回。
+-- 返回 scope_version 供工具集版本门槛判定；返回类型变化无法 create or replace，
+-- 必须先 drop 再建（策略文件每次部署幂等重放）。
+drop function if exists app.lookup_mcp_token(text);
+
 create or replace function app.lookup_mcp_token(p_hash text)
 returns table (
   id uuid,
@@ -42,14 +46,15 @@ returns table (
   membership_id uuid,
   user_id uuid,
   department_id uuid,
-  scope jsonb
+  scope jsonb,
+  scope_version integer
 )
 language sql
 stable
 security definer
 set search_path = public, pg_temp
 as $fn$
-  select t.id, t.tenant_id, t.membership_id, t.user_id, t.department_id, t.scope
+  select t.id, t.tenant_id, t.membership_id, t.user_id, t.department_id, t.scope, t.scope_version
     from mcp_tokens t
     join memberships m on m.id = t.membership_id
    where t.token_hash = p_hash
