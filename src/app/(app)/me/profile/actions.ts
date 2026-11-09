@@ -281,11 +281,13 @@ export async function addEmailIdentity(formData: FormData): Promise<ActionResult
       );
       const isFirst = countResult.rows[0]?.count === "0";
 
-      const ownerResult = await client.query<{ id: string }>(
-        "select id from users where email = $1 and id <> $2",
-        [email, targetUserId],
+      // users 已启用 RLS，跨部门的邮箱占用探测改走 SECURITY DEFINER 函数
+      const ownerResult = await client.query<{ id: string | null }>(
+        "select app.user_id_by_email($1) as id",
+        [email],
       );
-      if (ownerResult.rows.length > 0) {
+      const ownerId = ownerResult.rows[0]?.id ?? null;
+      if (ownerId && ownerId !== targetUserId) {
         throw new Error("该邮箱已被其他账号使用");
       }
 

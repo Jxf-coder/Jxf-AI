@@ -393,27 +393,13 @@ export async function addMember(
       });
     }
 
-    const existing = await client.query<{ id: string }>(
-      "select id from users where phone = $1",
-      [phone],
+    // users 已启用 RLS：按手机号复用既有人员必须走 SECURITY DEFINER，
+    // 否则跨部门人员在写入任用之前对当前角色不可见，会撞唯一索引。
+    const ensured = await client.query<{ id: string }>(
+      "select app.ensure_user($1, $2, $3, $4::date) as id",
+      [name, phone, email, birthday],
     );
-
-    let userId: string;
-    if (existing.rows.length > 0) {
-      userId = existing.rows[0].id;
-      await client.query(
-        "update users set name = $1, birthday = coalesce($3::date, birthday) where id = $2",
-        [name, userId, birthday],
-      );
-    } else {
-      const created = await client.query<{ id: string }>(
-        `insert into users (name, phone, email, birthday)
-         values ($1, $2, $3, $4::date)
-         returning id`,
-        [name, phone, email, birthday],
-      );
-      userId = created.rows[0].id;
-    }
+    const userId: string = ensured.rows[0].id;
 
     const employeeNo = employeeNoInput || (await nextEmployeeNo(client));
     let membershipId: string;
@@ -459,10 +445,11 @@ export async function addMember(
         throw new Error("该邮箱已绑定其他成员");
       }
 
-      const emailOwner = await client.query<{ id: string }>("select id from users where email = $1", [
-        email,
-      ]);
-      if (emailOwner.rows.length > 0 && emailOwner.rows[0].id !== userId) {
+      const emailOwner = await client.query<{ id: string | null }>(
+        "select app.user_id_by_email($1) as id",
+        [email],
+      );
+      if (emailOwner.rows[0]?.id && emailOwner.rows[0].id !== userId) {
         throw new Error("该邮箱已被其他账号使用");
       }
 
