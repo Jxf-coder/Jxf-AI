@@ -59,3 +59,4 @@ user_permission_grants[RI9T]: F:用户级授权表，按用户与权限节点保
 users[EI9T]: F:用户主表，保存姓名、邮箱、手机、头像、口令哈希、状态与生日 | R:- | A:用户身份 | S:email 与 phone 各自全局唯一；status 为 user_status 枚举；password_hash 使用 scrypt 格式；账号非 active 时登录页按 reason 拒绝
 verification_tokens[SI5T]: F:Auth.js 验证令牌表，按 identifier 与 token 保存过期时间 | R:- | A:认证令牌 | S:主键是 identifier 与 token 复合键；主要用于邮箱验证等一次性流程
 work_items[EW9T]: F:工作项表，保存派活标题简述、输入快照、状态、交付物与人工验收字段 | R:database://primary/public/ai_employees,database://primary/public/users,database://primary/public/runs,database://primary/public/departments | A:工作项 | S:status 为 work_item_status 枚举；一次派发等于一条工作项加一个 kind=task 的 run；交付物在 deliverable jsonb；验收门槛在派发时快照进 input.review
+department_closure[RT9T]: F:部门闭包表，按祖先与后代记录整棵组织树的路径与深度，供 RLS 与部门子树判定使用 | R:database://primary/public/departments | A:组织闭包 | S:主键是 ancestor_id 与 descendant_id 复合键；depth=0 表示部门自身；整棵租户树由 app.rebuild_department_closure_for_tenant 在 advisory lock 下重建；业务角色无直接读写权限，只经 SECURITY DEFINER 的 can_read 使用

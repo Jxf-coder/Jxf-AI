@@ -624,3 +624,4 @@ main.ts[RR9L]: F:worker 进程入口，循环领取运行时 run 并执行流式
 
 ===E:/JXF-AI/db/ops/===
 auth-role-cutover.sql[OS8T]: F:jxf_auth 角色的人工切换脚本：超级用户建角色、部署后验证登录，再由 owner 对 jxf_app 收权 | R:code:db/policies/034_auth_role.sql,code:docker/postgres/00-init.sh | A:角色切换运维 | S:migrate 只读 db/policies，不会执行本文件；收权必须在 AUTH_DATABASE_URL 生效并验证登录之后，顺序颠倒会直接锁死登录；users 只收回 password_hash 列，其余展示列继续授予 jxf_app
+aoci-evidence-visibility.sql[OS8T]: F:AOCI 数据库证据可见性补丁：用 REFERENCES 让受限业务角色看见无数据权限的四张表，避免认知快照缺表 | R:code:db/ops/auth-role-cutover.sql,code:docker/postgres/00-init.sh | A:认知运维 | S:REFERENCES 不授予读写，只允许建立外键引用，业务角色没有 DDL 所以运行时无效；仅用于 AOCI 快照可见性；migrate 不执行本文件，新环境需手工执行

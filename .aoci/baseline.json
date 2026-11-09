@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-08T16:11:12Z",
-  "updated_at": "2026-11-09T09:47:17Z",
+  "updated_at": "2026-11-09T09:58:52Z",
   "files": {
     ".dockerignore": {
       "role": "index",
@@ -35,15 +35,15 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "654a9b135a7049042e24ad11c7247d533d6451f451fc77fefdff6f1bd035afb7",
-      "size": 159284,
-      "normalized_sha256": "654a9b135a7049042e24ad11c7247d533d6451f451fc77fefdff6f1bd035afb7"
+      "sha256": "fc4bb4d4f463bb3d736b14620b53e678908da8cfa9bf11486ae3c114949fc551",
+      "size": 159741,
+      "normalized_sha256": "fc4bb4d4f463bb3d736b14620b53e678908da8cfa9bf11486ae3c114949fc551"
     },
     "aoci.database.txt": {
       "role": "index",
-      "sha256": "991f31dc99ee41172bbe9c978e26343e6faa32fd0ef6b133d953ae9ed3eeeb88",
-      "size": 20665,
-      "normalized_sha256": "991f31dc99ee41172bbe9c978e26343e6faa32fd0ef6b133d953ae9ed3eeeb88"
+      "sha256": "1b63335d83d74838a447b6cba64ee4e43b4f7092202827bc7601311dc03ef50f",
+      "size": 21122,
+      "normalized_sha256": "1b63335d83d74838a447b6cba64ee4e43b4f7092202827bc7601311dc03ef50f"
     },
     "aoci.meta.txt": {
       "role": "index",
@@ -548,6 +548,12 @@
       "sha256": "b7af2bffb1acd724de862ada4f53d1a7498facc2ffff3ceaa92e4569a9eacf90",
       "size": 5695,
       "normalized_sha256": "b7af2bffb1acd724de862ada4f53d1a7498facc2ffff3ceaa92e4569a9eacf90"
+    },
+    "db/ops/aoci-evidence-visibility.sql": {
+      "role": "index",
+      "sha256": "8e750a2901abcd6653f2dcad121e79fee3db832ef994635ba12101ee8bdcbceb",
+      "size": 954,
+      "normalized_sha256": "8e750a2901abcd6653f2dcad121e79fee3db832ef994635ba12101ee8bdcbceb"
     },
     "db/ops/auth-role-cutover.sql": {
       "role": "index",
@@ -2921,6 +2927,13 @@
         "evidence_version": "database-evidence/v1",
         "table_evidence_sha256": "8f848ca6facc5d97481bde2c609dd2b88bb9d1136754235fef981809d5aa151d",
         "entry_sha256": "c0b857d789a08037fba0b7f79de365d4ff554c04c8dba45bdec897e812c3ff16"
+      },
+      {
+        "object_ref": "database://primary/public/department_closure",
+        "source_id": "primary",
+        "evidence_version": "database-evidence/v1",
+        "table_evidence_sha256": "3f0fdd5e04af3d5ba5b310e9d059ab4a7499b751ad2bf92855632f845199d162",
+        "entry_sha256": "a412611f735bed9b3f824831f4dcd2116963481358862326167a3b1941a2113d"
       },
       {
         "object_ref": "database://primary/public/department_packs",
