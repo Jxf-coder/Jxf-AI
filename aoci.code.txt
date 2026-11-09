@@ -267,7 +267,7 @@ layout.tsx[EI8T]: F:应用外壳布局，解析当前上下文与权限快照，
 
 ===E:/JXF-AI/src/app/(app)/admin/organization/===
 MembersTab.tsx[EI7L]: F:组织管理成员页签，展示成员列表并提供新增、移除、恢复与基础信息编辑 | R:code:src/app/(app)/admin/organization/actions.ts,code:src/components/ui/confirm-dialog.tsx | A:组织管理界面 | S:司龄由入职日期动态计算不落库；移除与恢复等危险操作必须经确认对话框
-OrgTree.tsx[EI7L]: F:组织架构树，支持部门与成员拖拽排序、迁移成员、删除部门与移除成员预检 | R:code:src/app/(app)/admin/organization/actions.ts,code:src/components/permissions/usePermission.tsx | A:组织管理界面 | S:拖拽与移除前必须调用 checkMemberBlockers 预检；前端权限只控制显隐，真正拦截在服务端守卫
+OrgTree.tsx[EI7L]: F:组织架构树，支持部门与成员拖拽排序、迁移成员、删除部门与移除成员预检 | R:code:src/app/(app)/admin/organization/actions.ts,code:src/components/permissions/usePermission.ts | A:组织管理界面 | S:拖拽与移除前必须调用 checkMemberBlockers 预检；前端权限只控制显隐，真正拦截在服务端守卫
 actions.ts[AI8L]: F:组织管理 Server Actions，处理部门增改、删除、排序与成员新增、迁移、移除、恢复及离职交接 | R:code:src/lib/permissions/server.ts,code:src/lib/db/user-context.ts,code:src/lib/handover/registry.ts,code:src/lib/org/slug.ts | A:组织管理 | S:每个导出入口必须经 requireContextPermission；移除成员前必须检查未完成工作与资产，存在阻塞时转离职交接流程
 page.tsx[EI7M]: F:组织管理页面，汇总部门树与成员列表并按权限裁剪可见页签 | R:code:src/app/(app)/admin/organization/OrgTree.tsx,code:src/app/(app)/admin/organization/MembersTab.tsx | A:组织管理界面 | S:force-dynamic，每次请求都按当前上下文实时鉴权；数据读取走 withUserContext 以应用 RLS
 
@@ -454,7 +454,7 @@ Field.tsx[CU3T]: F:表单字段容器，统一 label 排版，控件由调用方
 InlineMessage.tsx[CU4T]: F:操作回执提示条，按信息或错误语义渲染并自动播报给读屏器 | R:code:src/components/knowledge/tokens.ts | A:知识库界面 | S:error 使用 role=alert，info 使用 role=status
 Pill.tsx[CU3T]: F:胶囊标签，状态徒章与选中态共用 | R:code:src/components/knowledge/tokens.ts | A:知识库界面 | S:active 优先于 tone，选中态固定蓝色
 SectionCard.tsx[CU4T]: F:通用卡片容器，提供标题行、计数徒章与说明 | R:code:src/components/knowledge/tokens.ts | A:知识库界面 | S:传入 right 时忽略 count
-StatTile.tsx[CU4T]: F:统计条单格，展示标签、数值与阈值提示，色调只影响描边和数值颜色 | R:code:src/components/knowledge/StatBar.tsx | A:知识库界面 | S:无 tone 时使用中性灰描边
+StatTile.tsx[CU4T]: F:统计条单格，展示标签、数值与阈值提示，色调只影响描边和数值颜色 | R:code:src/app/(app)/knowledge/_components/StatBar.tsx | A:知识库界面 | S:无 tone 时使用中性灰描边
 tokens.ts[CU7T]: F:知识库 UI 设计令牌，集中导出 Tailwind 工具类字符串与色调映射 | R:code:src/components/knowledge/SectionCard.tsx,code:src/app/globals.css | A:设计令牌 | S:只含样式常量不含业务逻辑；input 自带 w-full，需要自定义宽度时必须改用 inputInline，否则 w-auto 会被覆盖
 
 ===E:/JXF-AI/src/components/permissions/===
@@ -524,7 +524,7 @@ parse.ts[IB7T]: F:文档解析，把 PDF、DOCX 与文本类文件转成分页�
 qa.ts[DA8M]: F:单轮 RAG 问答，混合检索已确认卡片后生成带编号引用的答案并做引用与数字校验 | R:code:src/lib/ai/openai.ts,code:src/lib/knowledge/evidence.ts,code:src/lib/permissions/server.ts | A:知识库领域 | S:只召回已确认卡片；没命中就如实说没查到并沉淀缺口；编号必须落在本轮召回集合内，否则记 invalid_cites；数字必须能在卡片正文或证据原文找到，否则记 unverified_numbers；未配置 AI 时只返回检索结果
 regression.ts[DQ7M]: F:检索回归门禁，用已确认卡标题生成基线题，改动分块或向量模型后验证召回没有退化 | R:code:src/lib/ai/openai.ts,code:src/lib/audit.ts | A:知识库领域 | S:每题保留率等于基线卡与召回卡交集除以基线卡数；保留率低于 0.9 或任一道未通过整轮判失败；题集最多 50 道
 share.ts[DS7M]: F:公司共享审批，处理文档与知识卡进入共享区前的申请、审批、收回与撤回 | R:code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:知识库领域 | S:visibility 只有 L1 审批通过后才允许变成 shared，申请期间保持 department 且不进入公共检索；L1 本人操作视为直接通过；收回或撤回后一律回到 department 并清空申请字段
-stats.ts[DB6S]: F:知识库统计聚合（只读），统计文档、切片、卡片、冲突、缺口、问答与回归结果 | R:code:src/lib/knowledge/workspace.ts,code:src/components/knowledge/StatBar.tsx | A:知识库领域 | S:所有计数必须在 withUserContext 的 jxf_app 连接内执行由 RLS 兜底，不能换成 owner 连接否则会算进兄弟部门数据；知识单元等于已解析文档加已确认卡片
+stats.ts[DB6S]: F:知识库统计聚合（只读），统计文档、切片、卡片、冲突、缺口、问答与回归结果 | R:code:src/lib/knowledge/workspace.ts,code:src/app/(app)/knowledge/_components/StatBar.tsx | A:知识库领域 | S:所有计数必须在 withUserContext 的 jxf_app 连接内执行由 RLS 兜底，不能换成 owner 连接否则会算进兄弟部门数据；知识单元等于已解析文档加已确认卡片
 trash.ts[DB7M]: F:回收站，处理文档软删与还原、卡片作废后还原、彻底删除与清空 | R:code:src/lib/audit.ts,code:src/lib/storage/local.ts,code:src/lib/permissions/server.ts | A:知识库领域 | S:全部在 withUserContext 内执行，写范围只由 app.can_write 决定；彻底删除只对回收站内的行生效（文档 deleted_at 非空或卡片 status=dropped）；磁盘清理由事务提交后执行，失败只记日志不回滚数据库删除
 upload-target.ts[DI7S]: F:上传目标预填，把目录点击解析成部门、岗位、目录与共享范围并做权限校验 | R:code:src/lib/knowledge/folders.ts,code:src/lib/db/user-context.ts | A:知识库领域 | S:L1 可预填任意部门，L2 与普通成员只能预填当前部门且跨部门必须明确拒绝而不能静默回落；岗位必须是该部门在职岗位；公司资料共享的归属部门仍是上传者当前部门，非 L1 需 L1 审批后才真正共享
 workspace.ts[DB7L]: F:知识库工作区只读查询，组装共享区与部门、岗位、标准目录树并加载文档、卡片、图谱与检索 | R:code:src/lib/knowledge/cards.ts,code:src/lib/knowledge/folders.ts,code:src/lib/knowledge/share.ts | A:知识库领域 | S:全部在 withUserContext 内执行，隔离只由 RLS 决定；除 setDocumentVisibility 外均为只读；目录树按共享区、部门、岗位、10 个标准目录组装，空目录也常驻
@@ -615,3 +615,6 @@ profile.ts[CU5T]: F:个人资料与成员清单共享结构，声明邮箱身份
 ===E:/JXF-AI/src/worker/===
 experience.ts[RR7T]: F:worker 侧经验消费者，领取一个 job、执行提炼并维护心跳与失败退避 | R:code:src/lib/knowledge/experience/process.ts,code:src/lib/knowledge/experience/queue.ts | A:运行时恢复 | S:与运行时队列共用同一 worker 进程，交互式 run 优先，无 run 可领才处理经验 job；执行期间 30s 心跳续租，崩溃由 sweepExperienceJobs 回队列；失败按尝试次数指数退避，3 次后进 dead
 main.ts[RR9L]: F:worker 进程入口，循环领取运行时 run 并执行流式模型调用、工具调用、事件与用量记账 | R:code:src/lib/runtime/claim.ts,code:src/lib/runtime/emit.ts,code:src/lib/runtime/recover.ts,code:src/lib/mcp/worker-tools.ts,code:src/lib/settings/runtime-server.ts | A:worker 运行 | S:只消费队列不承担 HTTP，使用 WORKER_DATABASE_URL 的 app_worker 受限角色；启动时把不属于本进程的 running 收口为 interrupted；心跳 30s、巡检 60s、空闲 800ms；经验沉淀后台单并发，不阻塞前台 run 领取
+
+===E:/JXF-AI/docs/audit/===
+2026-11-09-全面审计报告.md[SQ5M]: F:工作台项目静态全面审计报告，按六条线分级列出安全、认知、可靠性与交付问题，并附真实库复核结果与修复路线图 | R:code:src/auth.ts,code:src/lib/db/pool.ts,code:docker/postgres/00-init.sh | A:审计交付 | S:结论绑定 2026-11-09 的索引与库内只读目录查询，未读取业务行；SEC-01 修复必须先拆 Auth.js 专用角色再对 jxf_app 收权，顺序颠倒会导致登录不可用
