@@ -364,8 +364,10 @@ async function main() {
       `${appDeleteRun.rowCount}/${runStillThere.rows[0].n}`,
     );
 
+    // 经验沉淀通道会显式授予 worker 对 knowledge_cards 的读写，因此这里改用
+    // 仍然完全属于业务侧的知识库主表 documents 做越权判定。
     const workerReadBusiness = await expectErrorCode(
-      () => workerPool.query("select count(1) from knowledge_cards"),
+      () => workerPool.query("select count(1) from documents"),
       "42501",
     );
     check("worker 角色不持有业务表权限", workerReadBusiness.ok, workerReadBusiness.error?.code);

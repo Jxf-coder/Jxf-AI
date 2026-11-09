@@ -25,6 +25,15 @@ fi
 WORKER_USER="app_worker"
 WORKER_PASSWORD="${JXF_WORKER_PASSWORD:-}"
 
+# 认证专用角色：Auth.js 只持有 users/accounts/sessions/verification_tokens 的最小 DML。
+# 未配置密码时跳过（登录回退到业务角色）；旧库切换见 db/ops/auth-role-cutover.sql
+if [ "${JXF_AUTH_USER:-jxf_auth}" != "jxf_auth" ]; then
+  echo "JXF_AUTH_USER 必须固定为 jxf_auth（授权按角色名下发）" >&2
+  exit 1
+fi
+AUTH_USER="jxf_auth"
+AUTH_PASSWORD="${JXF_AUTH_PASSWORD:-}"
+
 psql -v ON_ERROR_STOP=1 \
   --username "${POSTGRES_USER}" \
   --dbname "${POSTGRES_DB}" \
@@ -34,6 +43,8 @@ psql -v ON_ERROR_STOP=1 \
   -v app_password="${JXF_APP_PASSWORD}" \
   -v worker_user="${WORKER_USER}" \
   -v worker_password="${WORKER_PASSWORD}" \
+  -v auth_user="${AUTH_USER}" \
+  -v auth_password="${AUTH_PASSWORD}" \
   -v db_name="${POSTGRES_DB}" <<'EOSQL'
 -- 1. 扩展
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -64,6 +75,15 @@ SELECT format('ALTER ROLE %I NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION N
 WHERE :'worker_password' <> ''
 \gexec
 
+-- 认证角色：只供 Auth.js 使用；表级授权由 db/policies/034_auth_role.sql 执行
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'auth_user', :'auth_password')
+WHERE :'auth_password' <> '' AND NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'auth_user')
+\gexec
+
+SELECT format('ALTER ROLE %I NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS', :'auth_user')
+WHERE :'auth_password' <> ''
+\gexec
+
 -- 3. 库归属与权限
 SELECT format('ALTER DATABASE %I OWNER TO %I', :'db_name', :'owner_user')
 \gexec
@@ -88,6 +108,14 @@ SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'worker_user')
 WHERE :'worker_password' <> ''
 \gexec
 
+SELECT format('GRANT CONNECT ON DATABASE %I TO %I', :'db_name', :'auth_user')
+WHERE :'auth_password' <> ''
+\gexec
+
+SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'auth_user')
+WHERE :'auth_password' <> ''
+\gexec
+
 -- 迁移角色后续建表 / 建序列时，自动授予业务角色 DML 权限（RLS 仍逐行生效）
 SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %I', :'owner_user', :'app_user')
 \gexec
@@ -96,4 +124,4 @@ SELECT format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public GRANT USAGE
 \gexec
 EOSQL
 
-echo "[00-init] extensions (vector, pg_bigm, pg_trgm) and roles (${JXF_OWNER_USER}, ${JXF_APP_USER}) are ready"
+echo "[00-init] extensions (vector, pg_bigm, pg_trgm) and roles (${JXF_OWNER_USER}, ${JXF_APP_USER}, ${AUTH_USER}) are ready"

@@ -172,6 +172,8 @@ services:
       JXF_AUTH_SECRET: ${JXF_AUTH_SECRET:?JXF_AUTH_SECRET 不能为空}
       # 运行时只能使用受限业务角色 jxf_app（禁止 owner / superuser）
       APP_DATABASE_URL: postgresql://${JXF_APP_USER}:${JXF_APP_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # Auth.js 专用角色：容器内固定走服务名 postgres；密码缺失时拒绝启动
+      AUTH_DATABASE_URL: postgresql://${JXF_AUTH_USER:-jxf_auth}:${JXF_AUTH_PASSWORD:?JXF_AUTH_PASSWORD 必须配置}@postgres:5432/${POSTGRES_DB}
       S3_ENDPOINT: http://minio:9000
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_BUCKET: ${MINIO_BUCKET:?MINIO_BUCKET 不能为空}
