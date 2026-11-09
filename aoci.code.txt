@@ -1,0 +1,617 @@
+#AOCI-CODE-VOLUME: 1
+
+===E:/JXF-AI/===
+.dockerignore[FV5T]: F:定义镜像构建上下文排除项：依赖、构建产物、Git、文档脚本、环境变量与上传件不进镜像，仅白名单放行学习知识库 Markdown | R:code:docker/Dockerfile.web,code:docker/Dockerfile.worker,code:docker/Dockerfile.migrate | A:Docker 构建 | S:content/skills/learning-knowledge/*.md 的例外必须保留，否则学习知识库不会进入镜像；*.md 先全局排除再白名单放行
+.env.example[FC8S]: F:环境变量模板，覆盖通用、安全、PostgreSQL、MinIO、AI、Embedding、OCR、MCP、产线与邮件通知，默认关闭外部 AI 与 OCR | R:code:scripts/install.mjs,code:docker/docker-compose.yml,code:src/lib/env.ts | A:安装向导与部署 | S:JXF_AUTH_SECRET 缺失或少于 32 字符会拒绝启动；数据库与 MinIO 口令只能使用字母数字，因为会直接拼进连接串；.env 禁止入库
+.gitattributes[CG3T]: F:统一文本检出为 LF，并把 png/jpg/jpeg/gif/webp/ico 标记为二进制 | R:- | A:Git 检出 | S:CRLF 会改变文本字节与哈希，导致跨平台构建和 AOCI 基线漂移
+.gitignore[CG5T]: F:忽略依赖、构建产物、上传件、环境变量、运行数据与本地 AOCI MCP 配置，同时保留 .env.example | R:code:.env.example,code:docker/docker-compose.yml | A:Git 边界 | S:.trae/mcp.json 含本机二进制绝对路径与数据库连接串，必须保持本地；AOCI 认知资产不能被忽略，否则 scan 会静默跳过
+AGENTS.md[SG8S]: F:定义 Agent 在本仓库的 AOCI 认知建立、复用、维护与收尾合同，并声明静态文档不能覆盖机器事实 | R:code:aoci.txt,code:aoci.meta.txt | A:AOCI 会话 | S:aoci 区块由 AOCI 管理，手工改写会脱离 init/scan 的一致性；Live Guide、工具 Schema、Spec 与 Validator 始终优先于本文件
+drizzle.config.ts[XD4T]: F:drizzle-kit 配置，从 db/schema 生成迁移到 db/migrations | R:code:db/schema/index.ts | A:开发工具 | S:不参与 Next.js 构建；连接串来自 MIGRATION_DATABASE_URL；本仓库 0017 起为手写迁移，不自动生成
+next-env.d.ts[XV2T]: F:Next.js 自动生成的 TypeScript 类型引用 | R:code:next.config.ts | A:构建配置 | S:文件不应手工编辑，由 Next 生成
+next.config.ts[XV6T]: F:Next.js 配置：standalone 产物、严格模式、关闭 poweredBy 与 pg 外部化 | R:code:docker/Dockerfile.web | A:构建配置 | S:standalone 是容器镜像的前提；pg 必须在 serverExternalPackages 中避免被打包
+package-lock.json[XV5L]: F:npm 依赖锁定文件，固定全部直接与传递依赖版本 | R:code:package.json | A:构建配置 | S:由 npm 生成，不手工编辑；镜像 npm ci 依赖它保证可重复构建
+package.json[XV8T]: F:项目清单与脚本入口，定义 Next/Drizzle/Auth/MCP 等依赖以及测试、验收、运维命令 | R:code:scripts/verify-delivery.mjs,code:scripts/ops-runner.mjs | A:构建配置 | S:Node 版本 >=22；验收脚本统一 test:/verify:/audit: 前缀；worker 使用 --import tsx 直接运行 TS
+postcss.config.mjs[XV4T]: F:PostCSS 配置，启用 Tailwind CSS 与 autoprefixer | R:code:tailwind.config.ts | A:构建配置 | S:-
+tailwind.config.ts[XU6T]: F:Tailwind 配置，声明内容扫描范围、设计令牌色板、细分割线与卡片阴影 | R:code:src/app/globals.css,code:src/components/knowledge/tokens.ts | A:构建配置 | S:lx-* 兼容类通过 safelist 保留，否则会被裁剪；色板以 apple-* 与 hairline、shadow-card 等令牌为准
+tsconfig.json[XV7T]: F:TypeScript 配置，开启 strict 与 bundler 模块解析并声明 @/* 与 @db/* 路径别名 | R:code:next.config.ts,code:drizzle.config.ts | A:构建配置 | S:strict 必须开启；allowJs 为 false；exclude 掉 node_modules 与 docker
+
+===E:/JXF-AI/content/skills/learning-knowledge/===
+INDEX.md[SG6T]: F:学习提炼知识库的来源索引，把来源编号映射到标题、脱敏原文文件与消费技能 | R:code:content/skills/learning-knowledge/SRC-COMPLIANCE.md,code:content/skills/learning-knowledge/SRC-IMA.md,code:content/skills/learning-knowledge/SRC-EMPLOYEE-MANUAL.md | A:技能知识检索 | S:桌面原件不入库；目录内只保留脱敏全文，评论扣数字、留联系方式等历史写法不得当作默认动作
+SRC-7SEC.md[SU4T]: F:7 秒线索型开场生产参考表，按我是谁、价值、事件、热点、情感锚点等结构给出双示例 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-HOOK-LIBRARY.md | A:技能 lead-script-expert | S:表格是历史文案样本，口述数字与业绩待核验，不得当作承诺或默认动作
+SRC-COMPLIANCE.md[SS8S]: F:2026 微信视频号与抖音双平台违禁规则、违规行为分级处罚与合规落地清单 | R:code:content/skills/learning-knowledge/INDEX.md | A:技能 dual-platform-rules-expert | S:平台已用语义加关键词双检，谐音、拆字、拼音规避失效；抖音要求 AI 生成内容显著标注；只允许平台内成交，禁止站外导流
+SRC-DAY2-DOUYIN.md[SU6T]: F:抖音账号搭建训练转写，讲解四步提示词填空法、账号方案五要素与人设、流量、获客定位 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-DAY2-TRAIN.md | A:技能 douyin-ops-expert | S:一套方案必须含置顶内容、账号名、简介、头像、头图五项；直接泛问得不到可用结果
+SRC-DAY2-JIMENG.md[SU6S]: F:即梦分身创建、参数设置、素材植入与获客视频标准化生产流水线 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-JIMENG-PROMPT.md | A:技能 jimeng-lead-pipeline | S:单条提示词最多插入 3 张图片；默认 9:16、15 秒、720P；免费额度与会员价格会变动，不得写死
+SRC-DAY2-LEAD.md[SU6T]: F:获客短视频三段式方法，按钩子、购买理由、行动指令组织，并串联文案到脚本到视频到后期的流水线 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-HVA-COPY.md | A:技能 lead-copy-hva | S:12 秒文案按三段式；内容配比 532；报价与未接通外部工具不得写成已部署
+SRC-DAY2-POSITION.md[SU7S]: F:流量、人设、获客三类内容定位，人设三要素、获客黄金结构、532 配比与各阶段发布策略 | R:code:content/skills/learning-knowledge/INDEX.md | A:技能 short-video-positioning | S:获客型内容占比 20%，过量会被判营销号；两秒跳出率是开头优化的关键指标
+SRC-DAY2-TOOLS.md[SU6M]: F:动建 AI 智能体的立项、行业分析报告、120 选题库与 12 语言风格批量文案生成流程 | R:code:content/skills/learning-knowledge/INDEX.md | A:技能 ai-marketing-course | S:未投喂知识库的智能体无法匹配行业与品牌；立项需一次性填完，避免中途退出丢失内容
+SRC-DAY2-TRAIN.md[SU6S]: F:垂直领域 AI 专家四步训练法：知识库摸底、定角色与任务、约束纠偏、固化方法论 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-EMPLOYEE-MANUAL.md | A:技能 ai-employee-trainer | S:同一专家的多轮训练必须在同一对话完成，中途新建会丢失上下文；必须先让 AI 复述需求再输出
+SRC-DAY2-XHS.md[SU5T]: F:小红书笔记专家训练要点、平台短段落与表情格式要求、训练后调用规则 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-DAY2-TRAIN.md | A:技能 xiaohongshu-post-expert | S:小红书是图文笔记而不是短视频文案；产品资料缺失时不得让 AI 编造单品、成分或备案功效
+SRC-DAY2.md[SU6L]: F:第二天课程总稿，汇总小红书笔记、抖音账号搭建、内容定位与 AI 专家训练全流程 | R:code:content/skills/learning-knowledge/SRC-DAY2-TRAIN.md,code:content/skills/learning-knowledge/SRC-DAY2-XHS.md,code:content/skills/learning-knowledge/SRC-DAY2-DOUYIN.md,code:content/skills/learning-knowledge/SRC-DAY2-POSITION.md | A:技能 ai-marketing-course | S:总稿与拆分稿内容重叠，检索优先用拆分稿；课件中的外部私域工具未接通，不能写成已部署
+SRC-DOUYIN-HOME.md[SU7M]: F:抖音账号主页六模块搭建教程：昵称、头像、头图、简介、置顶视频与全局交叉校验 | R:code:content/skills/learning-knowledge/INDEX.md | A:技能 douyin-ops-expert | S:新号先搭完主页再批量发布；老号先清理低质作品再改资料并观察 3 到 7 天；个人号与蓝 V 都禁止手写微信、手机号、二维码
+SRC-EMPLOYEE-MANUAL.md[SU7M]: F:IMA 知识库训练 AI 数字员工的 5 阶段实操手册、通用模板、填空作业与故障排查 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-DAY2-TRAIN.md | A:技能 ai-employee-trainer | S:业务资料未上传并梳理完成前禁止执行训练；数字员工规则只存在于当前对话，新建对话必须整套重跑
+SRC-GEO.md[SU6T]: F:GEO 生成式搜索占位与 SEO 的差异、企业布局价值、四步落地方法与排名维持口径 | R:code:content/skills/learning-knowledge/INDEX.md | A:技能 geo-search-expert | S:AI 推荐排名靠持续投喂维持，停更会下滑；案例中的 7 天见效等口述效果待核验
+SRC-HOOK-LIBRARY.md[SU5T]: F:爆款线索型短视频素材库，按行业记录账号、标题、脚本与互动数据 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-7SEC.md | A:技能 lead-script-expert | S:课程内部资料勿外传；评论扣数字、收集手机号微信号是历史写法，不得当作默认动作
+SRC-HVA-COPY.md[SU8M]: F:H-V-A 三段式获客短文案方法论：Hook、Value、Action 结构、跨行业话术库与平台适配 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-DAY2-LEAD.md | A:技能 lead-copy-hva | S:文案控制在 12 秒内，Hook 约 2 秒、Value 5 到 6 秒、Action 2 到 3 秒；不得使用夸大功效或虚假承诺
+SRC-IMA.md[SU8L]: F:IMA 知识库的企业痛点、知识资产化价值、总部建脑体系理念与落地应用指南 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-EMPLOYEE-MANUAL.md | A:技能 ima-knowledge | S:知识库未上传梳理完成前不得训练数字员工；文中的客户案例与业绩数字待核验
+SRC-JIMENG-COURSE.md[SU6M]: F:即梦获客实战课五步闭环：训练专家、生成文案、生成提示词、即梦出片、精剪 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-JIMENG-PROMPT.md | A:技能 jimeng-lead-pipeline | S:五步顺序固定，文案必须先经提示词专家再进入即梦；工具组合为豆包、即梦与开拍
+SRC-JIMENG-PROMPT.md[SU7M]: F:12 秒口播驱动的分镜提示词生成规则：拆 6 个镜头、行业识别、运镜设计与合规扫描 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-JIMENG-COURSE.md,code:content/skills/learning-knowledge/SRC-HVA-COPY.md | A:技能 jimeng-shot-prompt | S:默认 6 镜头乘 2 秒、9:16；画面不得出现字幕、水印或医疗功效承诺；口播与画面必须逐镜同步
+SRC-PPT.md[SU6L]: F:AI 营销课件，讲解 AI 时代营销革命、企业降本增效与全域数字化新连锁打法 | R:code:content/skills/learning-knowledge/INDEX.md | A:技能 ai-marketing-course | S:服务品牌数、门店数与业绩为讲师口述，待核验，不构成承诺
+SRC-PRIVATE.md[SU7L]: F:私域成交课件，讲解 AI 驱动的私域业绩增长与招商裂变案例 | R:code:content/skills/learning-knowledge/INDEX.md | A:技能 private-domain-expert | S:门店、业绩与报价均为口述待核验；课件里的外部私域工具未接通，不得写成已部署
+SRC-REDNOTE.md[SU7L]: F:小红书贴图号精细化运营指南，覆盖 CES 算法、账号定位、图片制作、标题正文标签、选题与复盘 | R:code:content/skills/learning-knowledge/INDEX.md | A:技能 xiaohongshu-post-expert | S:CES 权重与流量池阈值为课程口径，点击率低于 5% 限流等规则需按平台最新公告复核
+SRC-SCRIPT-7STEP.md[SU6T]: F:线索型短视频脚本七步结构参考表，逐句给出抓人、塑造、分割线、核心问题、三点式干货与行动启发示例 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-HOOK-LIBRARY.md | A:技能 lead-script-expert | S:课程内部资料勿外传；案例数字待核验；评论扣数字等历史写法不得当作默认动作
+SRC-SCRIPT-UNIVERSAL.md[SU6T]: F:线索型短视频脚本万能写法，按一个答案、一个塑造、三个干货、一个总结四块给出跨行业示例 | R:code:content/skills/learning-knowledge/INDEX.md,code:content/skills/learning-knowledge/SRC-SCRIPT-7STEP.md | A:技能 lead-script-expert | S:示例中的业绩和效果为口述待核验，不得当作承诺；历史引导动作不得默认执行
+SRC-SHORTVIDEO-METHOD.md[SU7M]: F:爆款短视频文案方法论，按七类开头、正文内容与片尾转化三段组织，并给出赛道与优化要点 | R:code:content/skills/learning-knowledge/INDEX.md | A:技能 viral-video-copy-expert | S:结构可以套用但事实不能编；疗效句、评论扣数字、私信领资料与假装删除均标记为不得执行
+SRC-TRANSCRIPT.md[SU6L]: F:2026-10-14 多场课程合并转写，覆盖企业 AI 认知误区、发展趋势与全域矩阵转型路径 | R:code:content/skills/learning-knowledge/INDEX.md | A:技能 ai-marketing-course | S:这是合并摘要而非逐字稿；讲师姓名存在转录口误，以开场自述为准；业绩与案例数据待核验
+
+===E:/JXF-AI/db/migrations/===
+0000_p0_baseline.sql[PG8T]: F:P0 基线迁移，不创建业务表，只断言 pgvector、pg_bigm、pg_trgm 三个扩展可用 | R:code:docker/postgres/00-init.sh | A:迁移 0000 | S:任一扩展缺失即抛异常中止，属于 fail-closed；扩展必须在 initdb 阶段创建
+0001_p1_org_departments.sql[PI9S]: F:P1 组织基线迁移，创建用户、账号、会话、部门、部门闭包、任用、部门包与审计事件表及其索引 | R:code:db/schema/auth.ts,code:db/schema/departments.ts,code:db/schema/memberships.ts,code:db/schema/audit-events.ts | A:迁移 0001 | S:memberships_active_unique 是仅约束 active 的部分唯一索引；departments_slug_unique 包含 tenant_id 与 parent_id；removed_shape 要求 active 时 removed_at 为空
+0002_p1_identity_phone.sql[PI7T]: F:身份扩展迁移，新增用户邮箱身份表与手机号列，并放宽 users.email 为可空 | R:code:db/schema/auth.ts | A:迁移 0002 | S:主邮箱按 tenant_id 加 email 唯一；is_primary 使用部分唯一索引保证每人只有一个主邮箱；手机号全局唯一
+0003_p1_org_sort_order.sql[PI4T]: F:为 departments 增加排序字段 sort_order，默认值为 0 | R:code:db/schema/departments.ts | A:迁移 0003 | S:-
+0004_p1_audit_department.sql[PO6T]: F:给审计事件增加 department_id 字段与部门索引，支持按部门检索审计 | R:code:db/schema/audit-events.ts,code:db/policies/009_audit_scope.sql | A:迁移 0004 | S:department_id 未加外键，历史审计不因部门删除而丢失
+0005_permissions_and_handover.sql[PI9T]: F:权限与交接迁移，新增用户状态、待移除任用状态、审批请求、交接明细、权限修订、角色模板与用户授权表 | R:code:db/schema/approvals.ts,code:db/schema/permission-grants.ts,code:db/schema/enums.ts | A:迁移 0005 | S:approval_requests.status 只允许 pending/approved/rejected/cancelled/expired；授权 scope_type 与 scope_id 有组合约束；用户授权按 tenant 加 user 加 permission_key 唯一
+0006_pending_removal_shape.sql[PI6T]: F:重建任用状态形状约束，允许 pending_removal 状态并保持 removed_at 为空 | R:code:db/schema/enums.ts,code:db/schema/memberships.ts | A:迁移 0006 | S:pending_removal 必须 removed_at 为空；只有 removed 才允许非空 removed_at
+0007_bitter_nighthawk.sql[PI6T]: F:审计与人事字段迁移，把审计时间改为毫秒精度，并新增生日、工号、入职日期与岗位字段 | R:code:db/schema/auth.ts,code:db/schema/memberships.ts,code:db/schema/audit-events.ts | A:迁移 0007 | S:工号按 tenant 加 employee_no 唯一，且仅对非空工号生效
+0008_knowledge_base.sql[PB9M]: F:知识库核心迁移，创建 AI 员工授权、资产、文档、切片、入库批次与文件、知识卡、证据、缺口、问答审计与回归题相关表 | R:code:db/schema/documents.ts,code:db/schema/knowledge.ts,code:db/schema/ai-employees.ts,code:db/schema/ingest.ts | A:迁移 0008 | S:doc_chunks.embedding 固定 vector(1024)；卡片状态仅 pending/confirmed/dropped；证据位置按卡、文档与字符区间唯一
+0009_qa_invalid_cites_text.sql[PB5T]: F:把问答审计的无效引用列改为 text 数组并调整默认值 | R:code:db/schema/knowledge.ts | A:迁移 0009 | S:无效引用保存模型原始编号而不是卡片 ID，便于回放
+0010_kb_folders_shared.sql[PB7T]: F:为文档与知识卡增加 role_key、folder_key 与 visibility，并建立部门目录索引 | R:code:db/schema/documents.ts,code:db/schema/knowledge.ts | A:迁移 0010 | S:visibility 默认 department，历史行必须回填为 department；否则旧 shared 值会在 RLS 生效后越权
+0011_kb_card_source_document.sql[PB6T]: F:给知识卡增加来源文档外键，并建立同文档单草稿的部分唯一索引 | R:code:db/schema/knowledge.ts | A:迁移 0011 | S:唯一性只作用于 source_document_id 非空的行；人工文档建卡依赖它保持一文档一草稿的幂等
+0012_kb_document_trash.sql[PB6T]: F:为文档增加软删字段 deleted_at 与 deleted_by，并建立部门软删索引 | R:code:db/schema/documents.ts | A:迁移 0012 | S:回收站靠软删实现，检索与列表必须显式排除 deleted_at 非空行
+0013_kb_card_versions.sql[PB7T]: F:创建知识卡版本表，并给知识卡增加最近编辑人外键 | R:code:db/schema/knowledge.ts | A:迁移 0013 | S:版本文档按 card_id 加 rev 唯一；保存正文才写版本，确认与作废只改状态
+0014_ingest_files_ocr_model.sql[PB5T]: F:给入库文件记录 OCR 使用的模型名，便于追溯识别结果来源 | R:code:db/schema/ingest.ts | A:迁移 0014 | S:-
+0015_knowledge_share_approval.sql[PB6T]: F:为文档与知识卡增加共享状态、申请人与审批人及时间字段 | R:code:db/schema/knowledge.ts,code:db/schema/documents.ts,code:db/schema/enums.ts | A:迁移 0015 | S:共享状态为 none/pending_approval/approved/rejected；只有 approved 才允许跨部门只读；申请与审批人外键删除时置空
+0016_runtime_tables.sql[PW9S]: F:创建 AI 运行时队列表（线程、运行、步骤、事件、工具调用、用量），并扩展 AI 员工人格、提示词、技能与工具配置 | R:code:db/schema/runtime.ts,code:db/schema/ai-employees.ts | A:迁移 0016 | S:runs_queue_idx 仅覆盖 queued/running；client_turn_id 部分唯一防重复受理；run_events 主键为 run_id 加 seq 且只追加；worker 租约与心跳字段在 runs 上
+0017_work_items.sql[PW8T]: F:创建工作项表与状态枚举，记录标题、说明、交付物、验收备注与当前执行指针 | R:code:db/schema/work-items.ts,code:db/schema/enums.ts | A:迁移 0017 | S:重跑只替换 current_run_id 指针，历史 run 保留；交付物为 jsonb；工作项状态含 waiting_review 与 returned
+0018_mcp_tokens.sql[PI8T]: F:创建 MCP 访问令牌表，保存哈希、前缀、任用与部门绑定及工具 scope | R:code:db/schema/mcp.ts,code:db/policies/024_mcp_tokens_rls.sql | A:迁移 0018 | S:只存 token_hash，明文仅签发时展示；令牌绑定 membership、user 与 department；token_hash 全局唯一
+0019_mcp_servers.sql[PN7T]: F:创建 MCP 连接器与调用记录表，支持 http/stdio 传输、工具白名单与缓存 | R:code:db/schema/mcp-servers.ts,code:db/schema/mcp.ts | A:迁移 0019 | S:transport 只允许 http 或 stdio；allowed_tools 为空数组的含义由应用层解释；env 为 jsonb，敏感值不得明文入库
+0020_mcp_governance.sql[PS7T]: F:为 MCP 连接器增加每日配额，并创建工具调用审批表 | R:code:db/schema/mcp-approvals.ts,code:db/schema/mcp-servers.ts | A:迁移 0020 | S:审批状态只允许 pending/approved/rejected/failed；令牌、任用、部门与用户外键均级联删除
+0021_app_versions.sql[PV5T]: F:创建应用版本表与 current_app_version() 只读函数，返回最近一次应用的版本、提交与说明 | R:- | A:迁移 0021 | S:函数为 SECURITY DEFINER 且只返回最新一行；执行权限仅授予 jxf_app
+0022_app_settings.sql[PC8T]: F:创建单行应用设置表，并提供公开品牌与运行时设置两个只读函数 | R:code:src/lib/settings/store.ts,code:src/lib/settings/runtime.ts | A:迁移 0022 | S:app_settings 只允许 id=1；站点名 1-40 字、标语不超过 120 字；品牌色必须匹配 #RRGGBB；审计留存 30-3650 天；AI Key 只存密文
+0023_ops_tasks.sql[PR6T]: F:创建运维任务表，记录备份与恢复演练请求、状态、结果与错误 | R:code:src/lib/ops/tasks.ts,code:scripts/ops-runner.mjs | A:迁移 0023 | S:kind 只允许 backup 或 restore_verify；status 只允许 queued/running/done/failed；业务角色只发起不执行
+0024_mcp_health.sql[PO6T]: F:为 MCP 连接器增加健康状态、检查时间、延迟、连续失败次数与告警时间 | R:code:src/lib/mcp/health.ts,code:db/schema/mcp-servers.ts | A:迁移 0024 | S:health_status 只允许 unknown/healthy/degraded/down；连续失败计数默认 0
+0025_pipelines.sql[PW8T]: F:创建产线定义与运行记录表，steps 为 JSON 数组，运行记录保存已派工作项与失败步骤 | R:code:src/lib/pipelines.ts,code:db/schema/runtime.ts | A:迁移 0025 | S:名称 1-60 字、说明不超过 300 字；steps 必须是 1-10 个元素的数组
+0026_pipeline_advance.sql[PW8T]: F:产线支持定时触发、链式推进、可选步骤与跳过记录，运行记录保存下一个待派下标与结束时间 | R:code:src/lib/pipeline-runner.ts,code:src/lib/pipelines.ts | A:迁移 0026 | S:定时间隔为 5-10080 分钟；trigger_kind 只允许 manual 或 schedule；next_step_index 不得为负；历史运行需回填到已派末尾
+0027_notifications.sql[PM6T]: F:为应用设置增加 SMTP 邮件通知字段，并让 runtime_settings 一并返回通知配置 | R:code:src/lib/notifications/mailer.ts,code:src/lib/settings/store.ts | A:迁移 0027 | S:SMTP 端口范围 1-65535；主机不超过 255 字、收件人不超过 500 字；SMTP 口令只存密文与末 4 位提示；设置面优先于环境变量
+0028_metrics.sql[PO6T]: F:创建 metrics_snapshot() 跨部门聚合函数，返回 runs、work_items、ops_tasks、连接器、产线与审计的计数 | R:code:src/app/api/metrics/route.ts | A:迁移 0028 | S:函数为 SECURITY DEFINER，只返回状态计数，不包含任何用户或文档明细
+0029_pipeline_events.sql[PM8S]: F:产线支持 Webhook 令牌、内部事件总线与事件订阅，并提供发布事件与 Webhook 查询函数 | R:code:src/lib/pipeline-events.ts,code:src/lib/pipelines-webhook.ts | A:迁移 0029 | S:Webhook 只存哈希与末 4 位提示；事件状态只允许 pending/processed/failed；订阅事件类型固定三种；publish_event 额外授权给 app_worker
+0030_skills.sql[PE8M]: F:创建技能注册表、执行记录、运行时令牌、Meta 投放与多平台分发任务表，并注册首批内置技能 | R:code:src/lib/skills.ts,code:src/lib/skills/distribute.ts,code:src/lib/skills/meta-ads.ts | A:迁移 0030 | S:技能 key 全局唯一且为小写短横线；status/origin/category 有白名单；执行状态 running/done/failed；发布机通过 SECURITY DEFINER 函数领取任务
+0031_mcp_connector_nodes.sql[PN7T]: F:把 MCP 连接器节点化，区分 inbound 与 outbound 方向，增加稳定 node_key 与角色限制 | R:code:db/schema/mcp-servers.ts,code:src/lib/mcp/connectors.ts | A:迁移 0031 | S:node_key 为小写短横线；同一租户同方向的 node_key 唯一；roles 为空表示不限制角色
+0032_mcp_transport_sse.sql[PN5T]: F:扩展连接器传输白名单，允许 sse 传输 | R:code:src/lib/mcp/connectors.ts,code:db/schema/mcp-servers.ts | A:迁移 0032 | S:transport 只允许 http、stdio 或 sse
+0033_mcp_token_client.sql[PI4T]: F:为 MCP 令牌增加客户端标识列 | R:code:src/lib/mcp/tokens.ts,code:db/schema/mcp.ts | A:迁移 0033 | S:-
+0034_mcp_token_deleted.sql[PI4T]: F:为 MCP 令牌增加软删时间与租户索引 | R:code:src/lib/mcp/tokens.ts,code:db/schema/mcp.ts | A:迁移 0034 | S:令牌删除采用软删，保留审计追溯
+0035_mcp_scope_version.sql[PI6T]: F:为 MCP 令牌增加工具集版本 scope_version | R:code:src/lib/mcp/tokens.ts,code:src/lib/mcp/tools.ts | A:迁移 0035 | S:scope_version 默认 1；新签发由应用显式写入 2，不依赖列默认值
+0036_experience_jobs.sql[PW8T]: F:创建经验采集队列与目录纠偏样本表，含指纹、冷却桶、租约、结果卡与来源文本 | R:code:db/schema/experience.ts,code:db/policies/032_knowledge_experience_rls.sql | A:迁移 0036 | S:source_id 必须非空；按租户、通道、来源与版本唯一；指纹加小时桶唯一；status 与 channel 有白名单；来源文本上限 12000 字符
+0037_knowledge_cards_route.sql[PB8T]: F:知识卡增加来源通道、目录路由、建议目录、去重键与来源 job，并回填人工单卡的 doc 去重键 | R:code:db/schema/knowledge.ts,code:src/lib/knowledge/distill.ts,code:src/lib/knowledge/cards.ts | A:迁移 0037 | S:dedupe_key 带非空部分唯一索引；蒸馏多卡不写 source_document_id；route_pending 卡不能确认；source_job_id 删除时置空
+0038_card_evidence_sources.sql[PB8T]: F:为证据链增加来源类型、来源引用、来源与引文哈希、上下文摘录，并建立非空哈希的部分唯一索引 | R:code:db/schema/knowledge.ts,code:src/lib/knowledge/evidence.ts | A:迁移 0038 | S:旧位置唯一索引在 document_id 或 char_start 为空时失效；新索引只作用于 source_hash 非空行；历史切片回填 source_kind=chunk
+
+===E:/JXF-AI/db/migrations/meta/===
+0001_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0001 应用后的完整表、列、索引与外键元数据 | R:code:db/migrations/0001_p1_org_departments.sql | A:迁移工具 | S:-
+0002_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0002 应用后的完整表结构元数据 | R:code:db/migrations/0002_p1_identity_phone.sql | A:迁移工具 | S:-
+0003_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0003 应用后的完整表结构元数据 | R:code:db/migrations/0003_p1_org_sort_order.sql | A:迁移工具 | S:-
+0004_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0004 应用后的完整表结构元数据 | R:code:db/migrations/0004_p1_audit_department.sql | A:迁移工具 | S:-
+0005_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0005 权限与交接表结构元数据 | R:code:db/migrations/0005_permissions_and_handover.sql | A:迁移工具 | S:-
+0006_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0006 任用状态约束表结构元数据 | R:code:db/migrations/0006_pending_removal_shape.sql | A:迁移工具 | S:-
+0007_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0007 审计与人事字段表结构元数据 | R:code:db/migrations/0007_bitter_nighthawk.sql | A:迁移工具 | S:-
+0008_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0008 知识库核心表结构元数据 | R:code:db/migrations/0008_knowledge_base.sql | A:迁移工具 | S:-
+0009_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0009 问答引用列结构元数据 | R:code:db/migrations/0009_qa_invalid_cites_text.sql | A:迁移工具 | S:-
+0010_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0010 文档与卡片目录字段结构元数据 | R:code:db/migrations/0010_kb_folders_shared.sql | A:迁移工具 | S:-
+0011_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0011 卡片来源文档结构元数据 | R:code:db/migrations/0011_kb_card_source_document.sql | A:迁移工具 | S:-
+0012_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0012 文档软删字段结构元数据 | R:code:db/migrations/0012_kb_document_trash.sql | A:迁移工具 | S:-
+0013_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0013 卡片版本表结构元数据 | R:code:db/migrations/0013_kb_card_versions.sql | A:迁移工具 | S:-
+0014_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0014 入库文件 OCR 模型字段结构元数据 | R:code:db/migrations/0014_ingest_files_ocr_model.sql | A:迁移工具 | S:-
+0015_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0015 共享审批字段结构元数据 | R:code:db/migrations/0015_knowledge_share_approval.sql | A:迁移工具 | S:-
+0016_snapshot.json[XD2L]: F:Drizzle 迁移快照，记录 0016 运行时表结构元数据 | R:code:db/migrations/0016_runtime_tables.sql | A:迁移工具 | S:-
+_journal.json[XV5M]: F:Drizzle 迁移日志，按顺序登记迁移标签、时间戳与 breakpoint 开关 | R:code:db/migrations/meta/0001_snapshot.json,code:docker/migrate/entrypoint.mjs | A:迁移工具 | S:未登记到 journal 的 SQL 文件会被迁移器静默跳过；新迁移必须按顺序登记并保持 breakpoint 为 true
+
+===E:/JXF-AI/db/policies/===
+001_app_functions.sql[PI9S]: F:定义 app schema 下的身份上下文函数、权限判定函数与离岗函数，并显式授予业务角色执行权限 | R:code:src/lib/db/user-context.ts,code:db/policies/002_rls_policies.sql | A:策略重放 | S:未注入 GUC 时返回空指针或空数组，fail-closed；can_read 看子树、can_write 仅本部门；离岗必须保留至少一个 L1；所有函数 revoke public 后逐个授予 jxf_app
+002_rls_policies.sql[PI9S]: F:为部门、部门闭包、任用、部门能力包与审计事件启用 RLS 并定义读写策略 | R:code:db/policies/001_app_functions.sql,code:db/schema/departments.ts,code:db/schema/memberships.ts | A:策略重放 | S:应用角色不是 owner，未注入身份时所有策略不命中；memberships 撤销 UPDATE/DELETE，换部门与离岗只走 SECURITY DEFINER 函数；根部门不可改名或删除；部门闭包禁止应用角色直接读写
+003_department_closure.sql[PI8T]: F:定义部门闭包整棵重建函数与部门表触发器，并在策略重放时初始化已有租户的闭包 | R:code:db/schema/departments.ts,code:db/policies/001_app_functions.sql | A:策略重放 | S:每个部门必须包含自身 depth=0；使用事务级 advisory lock 串行化同租户重建；函数与触发器不允许应用角色直接调用
+004_audit.sql[PO6T]: F:为审计事件定义只插入与只读策略，并撤销更新、删除与截断权限 | R:code:db/schema/audit-events.ts,code:src/lib/audit.ts | A:策略重放 | S:只有 L1 可读审计；插入只校验租户，不要求部门写权限；UPDATE/DELETE/TRUNCATE 权限已撤销
+005_membership_move.sql[PI8T]: F:定义成员跨部门调整函数，只允许 L1 在可读子树内移动在岗任用 | R:code:db/schema/memberships.ts,code:db/policies/002_rls_policies.sql | A:策略重放 | S:memberships 未开放 UPDATE，换部门必须走该函数；源与目标部门都必须在可读子树内；部门未变化时直接返回
+006_membership_restore.sql[PI7T]: F:成员恢复函数，只允许 L1 在可读子树内把 removed 状态的任用恢复为 active | R:code:db/policies/002_rls_policies.sql,code:db/schema/memberships.ts | A:策略重放 | S:memberships 未开放 UPDATE，恢复必须走该函数；只有 removed 可恢复；全程无物理删除
+007_membership_blockers.sql[PI7T]: F:移出成员前的预检函数，统计名下排队与执行中的 runs 以及创建的 assets | R:code:db/schema/runtime.ts,code:db/schema/assets.ts | A:策略重放 | S:表不存在或列缺失时计数为 0，不阻断移出；仅 L1 可调用；只返回计数不返回明细
+008_profile_membership_update.sql[PI8S]: F:个人资料更新函数，处理业务岗位、所属部门与权限等级，并保护最后一位 L1 | R:code:db/policies/002_rls_policies.sql,code:db/schema/memberships.ts | A:策略重放 | S:业务岗位允许 L1 改所有人与 L2 改下级 L3；部门与权限等级仅 L1；标题限制 1-40 字；不允许降级最后一位 L1
+009_audit_scope.sql[PO7T]: F:审计日志分级可见策略：L1 看全租户，L2 看本人与可读部门，L3 只看本人 | R:code:db/schema/audit-events.ts,code:src/lib/audit.ts | A:策略重放 | S:department_id 为空的事件仅操作者本人与 L1 可见
+010_permission_grants.sql[PI9S]: F:授权表 RLS、系统角色模板与授权写入函数，变更后自增权限版本 | R:code:db/schema/permission-grants.ts,code:src/lib/permissions/grant.ts | A:策略重放 | S:授权表对 jxf_app 撤销 INSERT/UPDATE/DELETE；本人或 L1 可读；模板全员可读但只有 L1 可改；版本号用 upsert 自增作为快照失效依据
+011_handover_approval.sql[PI8T]: F:离职交接审批与交接明细的 RLS，L1 可发起与审批，申请人可读自己的单 | R:code:db/schema/approvals.ts,code:db/schema/memberships.ts | A:策略重放 | S:只有 L1 可写审批单与交接明细；DELETE 已撤销；交接明细可见性跟随审批单
+012_active_membership_context.sql[PI8S]: F:单部门上下文函数：有效任用列表、部门子树、全租户部门与权限版本号 | R:code:src/lib/db/user-context.ts,code:db/policies/001_app_functions.sql | A:策略重放 | S:请求入口只解析当前任用；子树由 SECURITY DEFINER 计算；L1 才取全租户部门；无有效任用时返回空
+013_permission_admin.sql[PI9M]: F:权限管理写入函数，提供版本自增、覆盖成员授权与角色模板管理 | R:code:src/lib/permissions/grant.ts,code:src/lib/permissions/snapshot.ts | A:策略重放 | S:授权表不能直写，所有变更只走函数；仅 L1 可调用；每次变更必须同步自增权限版本，否则客户端快照不失效
+014_pending_handover.sql[PI9M]: F:离职交接状态机：发起移出审批、审批通过/驳回/撤回、待办转交与最后 L1 保护 | R:code:src/lib/handover/adapters.ts,code:src/app/(app)/me/approvals/ApprovalsClient.tsx | A:策略重放 | S:同一任用只允许一条 pending 审批（部分唯一索引）；仅 L1 可发起与审批；最后一位 L1 不可移出；所有写入走 SECURITY DEFINER
+015_hr_profile.sql[PI7S]: F:HR 工号序列、档案更新函数与停用前待处理审批转交 | R:code:src/app/(app)/me/profile/actions.ts,code:db/schema/memberships.ts | A:策略重放 | S:工号留空时自动生成 JXF-0001 形式；L2 只能改下级 L3；工号、入职日期与岗位写入收口到函数
+016_self_birthday.sql[PI5T]: F:生日自助修改函数，只允许本人修改自己的生日 | R:code:src/app/(app)/me/profile/actions.ts,code:db/schema/auth.ts | A:策略重放 | S:必须本人；必须有有效任用；未来日期直接拒绝
+017_knowledge_rls.sql[PB9L]: F:知识库全表 RLS、确认门槛视图 v_confirmable_cards 与切片级、卡片级混合检索函数 | R:code:db/schema/knowledge.ts,code:src/lib/knowledge/qa.ts,code:src/lib/knowledge/cards.ts | A:策略重放 | S:读子树写本部门；确认门槛要求 pending、无冲突、未过期、人工编辑或已核对证据、route_pending=false；hybrid_search_cards 只召回 confirmed 并支持目录白名单；旧函数签名必须先 drop
+018_knowledge_shared.sql[PB8T]: F:共享区读策略：visibility=shared 的文档、切片、知识卡、证据与原件允许跨部门只读 | R:code:src/lib/knowledge/workspace.ts,code:db/schema/knowledge.ts | A:策略重放 | S:写策略不变；共享必须显式设置 visibility；证据与原件必须随共享文档放行，否则共享区点开是 404
+019_knowledge_card_versions.sql[PB6T]: F:知识卡版本表 RLS：读跟随卡片可见性，写仅限本部门插入 | R:code:src/lib/knowledge/cards.ts,code:db/schema/knowledge.ts | A:策略重放 | S:版本是历史事实，不提供 update/delete；卡片彻底删除时由外键级联清理
+020_ai_employee_visibility.sql[PI8S]: F:AI 员工 fail-closed 可见性：草稿仅创建者与 L1，上线与停用按授权，部门授权沿子树继承 | R:code:src/lib/ai-employees.ts,code:db/schema/ai-employees.ts | A:策略重放 | S:未授权者连名称与描述都拿不到；可见性判定函数必须 SECURITY DEFINER，避免与授权表策略递归
+021_knowledge_share_approval.sql[PB7T]: F:共享审批回填：历史 visibility=shared 的文档与知识卡视为已审批，已审批必须保持 shared | R:code:src/lib/knowledge/share.ts,code:db/schema/knowledge.ts | A:策略重放 | S:不回填会产生“已共享但 share_status=none”的中间态；已审批但 visibility 不是 shared 时纠正回 shared；幂等可重复执行
+022_runtime_rls.sql[PW9S]: F:运行时表 RLS：业务角色读子树写本部门，worker 使用 app_worker 独立通道，事件与用量只追加 | R:code:src/lib/runtime/claim.ts,code:db/schema/runtime.ts | A:策略重放 | S:worker 只获运行时表 DML；全部表无 DELETE 策略；worker 写 returning 时需能求值 GUC 读取函数，因此额外授权 execute
+023_work_items_rls.sql[PW8T]: F:工作项 RLS：业务角色本部门读写，worker 只读并修改执行状态与交付物 | R:code:src/lib/work-items.ts,code:db/schema/work-items.ts | A:策略重放 | S:不提供 DELETE 策略，工作项保留审计与历史；worker 只授权 select 与 update
+024_mcp_tokens_rls.sql[PI8T]: F:MCP 令牌 RLS 与 lookup_mcp_token 函数，仅 L1 可管理，外部客户端按 hash 反查 | R:code:src/lib/mcp/tokens.ts,code:db/schema/mcp.ts | A:策略重放 | S:不提供 DELETE，吊销用 revoked_at；反查要求未吊销、未过期且任用仍在岗；返回 scope_version；返回类型变化必须先 drop 再建
+025_mcp_servers_rls.sql[PN7T]: F:MCP 连接器与调用账本 RLS：仅 L1 管理连接器，worker 只读配置并写入调用账本 | R:code:src/lib/mcp/connectors.ts,code:db/schema/mcp-servers.ts | A:策略重放 | S:调用账本只追加，不提供 UPDATE/DELETE；worker 只读连接器、写账本；jxf_app 策略引用的 GUC 函数也授权给 worker
+026_mcp_approvals_rls.sql[PS7T]: F:逐工具审批单 RLS：申请人可为本人的写类调用落单，L1 可读全部并做决定 | R:code:src/lib/mcp/approvals.ts,code:db/schema/mcp-approvals.ts | A:策略重放 | S:插入要求 user_id 等于当前用户；更新仅 L1；DELETE 已撤销以保留审计
+027_app_settings_rls.sql[PC8T]: F:平台设置单行表 RLS：仅 L1 可读可改，禁止新增与删除 | R:code:src/lib/settings/store.ts,code:src/lib/settings/runtime.ts | A:策略重放 | S:单行约束；启动期与登录页通过 SECURITY DEFINER 的品牌/运行时设置函数读取，不绕过策略直查表
+028_ops_tasks_rls.sql[PR6T]: F:运维任务 RLS：仅 L1 可插入 queued 任务并读取，不能修改状态 | R:code:src/lib/ops/tasks.ts,code:scripts/ops-runner.mjs | A:策略重放 | S:业务角色只能落单，状态由宿主机 owner runner 回写；UPDATE 与 DELETE 已撤销
+029_pipelines_rls.sql[PW8T]: F:产线定义与运行记录的 RLS：定义按部门可读写，运行记录只追加 | R:code:src/lib/pipelines.ts,code:db/schema/runtime.ts | A:策略重放 | S:pipeline_runs 对应用角色撤销 update/delete；插入要求 requested_by 为本人；应用层还需 pipeline:manage 守卫
+030_pipeline_events_rls.sql[PM7T]: F:产线事件订阅与事件总线的 RLS：订阅跟随产线可见性，事件仅 L1 可读 | R:code:src/lib/pipeline-events.ts,code:db/schema/runtime.ts | A:策略重放 | S:事件写入只走 SECURITY DEFINER 的 publish_event；jxf_app 无 insert/update/delete；订阅写入要求创建人本人且产线启用
+031_skills_rls.sql[PE8M]: F:技能注册表与执行、Meta 投放、多平台分发表的 RLS：内置技能全员可读，自建按租户且仅创建者或 L1 可改 | R:code:src/lib/skills.ts,code:src/lib/skills/distribute.ts | A:策略重放 | S:内置技能 tenant_id 为空；只有 L1 可删除技能；发布机令牌只存 SHA-256；执行记录写入必须绑定当前用户
+032_knowledge_experience_rls.sql[PW8T]: F:经验采集队列与目录纠偏样本的 RLS，业务角色按租户与部门读写，worker 走独立通道 | R:code:db/schema/experience.ts,code:src/lib/knowledge/experience/queue.ts | A:策略重放 | S:不提供物理 DELETE；worker 通道按 current_user 判定；worker 写卡片仍需先设置租户与部门 GUC 上下文
+
+===E:/JXF-AI/db/schema/===
+ai-employees.ts[PB8T]: F:AI 员工定义与授权 schema，含人格、系统提示、技能包、工具范围、模型参数与部门或个人二选一授权 | R:code:db/schema/auth.ts,code:db/schema/departments.ts,code:db/policies/020_ai_employee_visibility.sql | A:数据库 schema | S:AI 员工不携带数据权限，运行时继承调用者上下文；部门与个人授权互斥；同员工同部门与同用户各唯一
+approvals.ts[PI7T]: F:离职交接审批与资产明细 schema，审批单保存类型、主体、状态与决定人 | R:code:db/schema/auth.ts,code:db/policies/011_handover_approval.sql | A:数据库 schema | S:审批状态五值；asset_id 用 text 兼容非 uuid 资产；交接双方外键为 restrict
+assets.ts[PB7T]: F:MinIO 对象存储引用 schema，按部门与 sha256 去重，记录展示名、类型、大小与归属人 | R:code:db/schema/departments.ts,code:db/schema/auth.ts | A:数据库 schema | S:同租户同部门同 sha256 唯一；created_by 删除 restrict；离职交接需要改派归属人
+audit-events.ts[PO7T]: F:审计事件 schema，append-only，记录租户、操作者、部门、动作、目标与载荷 | R:code:db/schema/auth.ts,code:db/policies/009_audit_scope.sql | A:数据库 schema | S:只有 insert 策略，无 update/delete；department_id 无外键；时间戳为毫秒精度
+auth.ts[PI9S]: F:Auth.js 用户、账号、会话、验证令牌与邮箱身份 schema，手机号为主账号、邮箱为选填 | R:code:db/schema/enums.ts,code:db/policies/016_self_birthday.sql | A:数据库 schema | S:身份基础表不启用 RLS；手机号全局唯一；主邮箱按 userId 部分唯一；pending_handover 期间拒绝登录
+department-packs.ts[PI6T]: F:部门能力包 schema，记录部门可用的技能与产线 id 列表 | R:code:db/schema/departments.ts,code:db/policies/002_rls_policies.sql | A:数据库 schema | S:能力包是数据不是代码，改权限不需要发版；技能与产线数组建 GIN 索引
+departments.ts[PI9T]: F:部门树与部门闭包 schema，提供层级组织容器与子树读权限基础 | R:code:db/policies/003_department_closure.sql,code:db/policies/001_app_functions.sql | A:数据库 schema | S:同级 slug 按租户与父部门唯一；父部门删除 restrict；闭包表避免策略内递归
+documents.ts[PB8S]: F:文档与切片 schema，含目录、共享审批、软删与 1024 维向量切片 | R:code:db/schema/assets.ts,code:db/schema/ingest.ts,code:db/policies/017_knowledge_rls.sql | A:数据库 schema | S:扫描件落 needs_ocr 且不生成切片；软删行必须从常规目录与检索排除；embedding 维度固定 1024；切片冗余 department_id 供 RLS
+enums.ts[PG8S]: F:全局 PostgreSQL 枚举：访问等级、任用与账号状态、入库与文档状态、卡片类型与状态、共享审批与回归等 | R:code:db/schema/auth.ts,code:db/schema/memberships.ts,code:db/schema/knowledge.ts | A:数据库 schema | S:新库首次迁移时新增枚举值需用 ::text 比较，直接使用新值会触发 unsafe use of new value
+experience.ts[PW8S]: F:经验采集队列与目录路由纠偏 schema，含指纹、冷却桶、租约、结果卡与来源文本 | R:code:db/policies/032_knowledge_experience_rls.sql,code:src/lib/knowledge/experience/capture.ts | A:数据库 schema | S:source_id 非空；指纹加小时桶唯一；来源文本只存去敏截断文本，上限 12000 字符
+index.ts[CG3T]: F:Drizzle schema 汇总出口，按模块重导出全部表定义 | R:- | A:数据库 schema | S:-
+ingest.ts[PB7T]: F:入库批次与文件处置 schema，关联运行、资产与解析后的文档 | R:code:db/schema/assets.ts,code:db/schema/documents.ts,code:db/schema/runtime.ts | A:数据库 schema | S:撤回只影响本批未确认产出；ingest_files.document_id 不建外键以避免循环依赖；ocr_model 区分自动 OCR 与待人工
+knowledge.ts[PB9M]: F:知识卡、卡片版本、证据链、知识缺口与问答审计 schema，含目录路由、来源通道与去重键 | R:code:db/schema/documents.ts,code:db/policies/017_knowledge_rls.sql,code:src/lib/knowledge/cards.ts | A:数据库 schema | S:确认门槛由视图表达；证据位置与来源哈希均建唯一索引；dedupe_key 部分唯一；卡片版本按 card_id 加 rev 唯一
+mcp-approvals.ts[PS7T]: F:逐工具审批单 schema，保存已脱敏参数、审批状态、决定人与结果预览 | R:code:db/schema/mcp.ts,code:db/policies/026_mcp_approvals_rls.sql | A:数据库 schema | S:参数写入前必须脱敏；批准后按令牌绑定的任用身份执行，不扩大数据范围；状态仅 pending/approved/rejected/failed
+mcp-servers.ts[PN7T]: F:外部 MCP 连接器与调用账本 schema，记录传输、工具白名单、超时、限流与健康状态 | R:code:db/schema/mcp.ts,code:src/lib/mcp/connectors.ts | A:数据库 schema | S:http 地址必须过 SSRF 校验，内网需白名单；stdio 只允许白名单命令且不经 shell；allowed_tools 为空表示全部已发现工具
+mcp.ts[PI8T]: F:MCP 访问令牌 schema，令牌绑定任用、部门与六维 scope，并记录工具集版本 | R:code:db/schema/memberships.ts,code:db/policies/024_mcp_tokens_rls.sql,code:src/lib/mcp/tokens.ts | A:数据库 schema | S:只存 sha256 与明文前缀；任用非 active 立即失效；scope 空数组表示不额外限制；数据权限仍走 RLS
+memberships.ts[PI9T]: F:成员任用 schema，记录所属部门、权限等级、状态与工号、入职日期、岗位等 HR 档案 | R:code:db/schema/departments.ts,code:db/schema/enums.ts,code:db/policies/008_profile_membership_update.sql | A:数据库 schema | S:仅 active 的行受同用户同部门唯一约束；状态形状用 ::text 比较；工号按租户唯一且仅对非空工号生效
+permission-grants.ts[PI9S]: F:角色模板、模板授权、用户授权与权限修订版本 schema | R:code:db/schema/enums.ts,code:db/policies/010_permission_grants.sql,code:src/lib/permissions/grant.ts | A:数据库 schema | S:权限目录在代码中，表里只存授予关系；写类动作不允许 DEPT_TREE；scope 与 scope_id 有组合约束；deny 优先于 allow
+regression.ts[PQ7T]: F:回归题集、回归运行与单题结果 schema，用基线保留率做检索/切分策略门禁 | R:code:src/lib/knowledge/regression.ts,code:db/schema/knowledge.ts | A:数据库 schema | S:保留率低于 0.9 或未全部通过即判定失败；build_tag 用于标识基线版本
+runtime.ts[PW9M]: F:AI 运行时 schema：线程、运行队列、步骤、事件、工具调用与 token 用量 | R:code:db/policies/022_runtime_rls.sql,code:src/lib/runtime/claim.ts | A:数据库 schema | S:runs 自身就是队列，状态、租约与尝试次数都在同一表；事件按 seq 递增且只追加，delta 不落库；全部表按部门走 can_read/can_write
+work-items.ts[PW8T]: F:工作项 schema，记录派发、交付物、验收结论与当前执行指针 | R:code:db/schema/runtime.ts,code:db/policies/023_work_items_rls.sql,code:src/lib/work-items.ts | A:数据库 schema | S:重跑只替换 current_run_id 指针，历史 run 保留；无 DELETE 策略以保证审计
+
+===E:/JXF-AI/db/seed/===
+dev.ts[XI5S]: F:开发种子脚本，冷启动老板根节点与演示账号，仅用于本地或演示环境 | R:code:db/migrations/0001_p1_org_departments.sql,code:src/lib/auth/password.ts | A:开发种子 | S:SEED_PASSWORD 至少 12 位；缺少租户或数据库环境变量直接抛错；生产环境禁止执行
+
+===E:/JXF-AI/deploy/systemd/===
+jxf-ops-runner.service[OR6T]: F:systemd 单元，常驻 npm run ops:runner，异常退出后自动重启 | R:code:scripts/ops-runner.mjs | A:运维部署 | S:runner 需要 docker CLI 与宿主机 .env；User 与 WorkingDirectory 必须按实际部署修改
+
+===E:/JXF-AI/deploy/windows/===
+install-ops-runner.ps1[OR6T]: F:注册 Windows 计划任务 JxfAI-OpsRunner，登录或开机时拉起运维 runner | R:code:deploy/windows/run-ops-runner.ps1,code:scripts/ops-runner.mjs | A:运维部署 | S:需要管理员 PowerShell；-AtStartup 使用 S4U，默认按登录启动；多实例策略为 IgnoreNew
+run-ops-runner.ps1[OR6T]: F:Windows 启动器，循环执行 npm run ops:runner，退出后 10 秒重启并追加日志 | R:code:scripts/ops-runner.mjs | A:运维部署 | S:日志写入 backups/ops-runner.log；计划任务无控制台时仍保留输出
+
+===E:/JXF-AI/docker/===
+Caddyfile[ON7T]: F:反向代理入口，把 localhost 308 跳转到 127.0.0.1，并代理 web:3000 与安全响应头 | R:code:docker/docker-compose.yml | A:运维部署 | S:localhost 跳转是会话 Cookie 按主机名隔离的要求；端口由 JXF_HOST_PORT 注入；生产 TLS 需在站点块内启用
+Dockerfile.migrate[OV7T]: F:一次性迁移镜像，安装生产依赖后运行 entrypoint，以迁移角色执行 drizzle 与策略重放 | R:code:docker/migrate/entrypoint.mjs | A:运维部署 | S:必须使用 jxf_owner，禁止超级用户；不引入外部 buildkit 前端，适配离线构建
+Dockerfile.postgres[OV8T]: F:自建 PostgreSQL 16 镜像，从源码编译 pgvector 与 pg_bigm，并内置初始化与健康检查脚本 | R:code:docker/postgres/00-init.sh,code:docker/postgres/healthcheck.sh | A:运维部署 | S:pg_bigm 使用 Debian 而非 Alpine；扩展版本固定；数据卷为空时才执行初始化
+Dockerfile.web[OV7T]: F:Next.js standalone 生产镜像，三阶段构建 web 服务 | R:code:docker/docker-compose.yml,code:.dockerignore | A:运维部署 | S:public/uploads 必须先建目录并 chown，否则命名卷属主错误；content 目录必须复制，否则学习知识库缺失
+Dockerfile.worker[OV7T]: F:worker 运行镜像，复用同一份源码与依赖，CMD 启动 src/worker/main.ts | R:code:src/worker/main.ts,code:docker/docker-compose.yml | A:运维部署 | S:worker 与 web 共用源码但使用独立角色环境变量；不暴露端口
+docker-compose.yml[OV9M]: F:单机编排：postgres、migrate、minio、minio-init、web、worker、caddy，定义严格依赖与健康检查 | R:code:docker/Dockerfile.web,code:docker/Dockerfile.worker,code:docker/Dockerfile.postgres,code:docker/Dockerfile.migrate | A:运维部署 | S:web 必须等 migrate 成功；postgres 只绑定 127.0.0.1；worker 使用 app_worker 角色；日志 json-file 限 20m×5
+
+===E:/JXF-AI/docker/migrate/===
+entrypoint.mjs[OV8M]: F:迁移容器入口：连接 jxf_owner，执行 drizzle 迁移、按文件名重放全部策略、断言三个扩展并记录应用版本 | R:code:db/migrations/meta/_journal.json,code:db/policies/001_app_functions.sql | A:迁移执行 | S:每个策略文件独立事务且必须幂等；扩展缺失 fail-closed；未登记 journal 的迁移文件会被静默跳过
+
+===E:/JXF-AI/docker/postgres/===
+00-init.sh[OV9T]: F:initdb 阶段创建 vector、pg_bigm、pg_trgm 扩展与 owner、app、worker 三角色，并收紧权限 | R:code:db/policies/022_runtime_rls.sql,code:docker/postgres/healthcheck.sh | A:数据库初始化 | S:app_worker 角色名固定，RLS 按角色名判定；owner 与 app 均 NOSUPERUSER NOBYPASSRLS；口令轮换不会因容器重启生效
+healthcheck.sh[OR6T]: F:PostgreSQL 容器健康检查，连接可用且三个扩展齐全才返回成功 | R:code:docker/Dockerfile.postgres | A:数据库初始化 | S:扩展计数不是 3 时返回非零，避免中文检索能力缺失被标记为 healthy
+
+===E:/JXF-AI/docs/architecture/===
+MCP工具能力梳理报告.md[SN7M]: F:MCP 工具能力盘点：已注册 4 个工具、可扩展 50 多个后端能力与首批 18 个落地建议 | R:code:src/lib/mcp/tools.ts,code:docs/architecture/master-plan.md | A:架构文档 | S:只列代码中真实存在的函数与路由；需要新开发的能力单独标注
+Milestone1-岗位与授权数据模型.md[SI7M]: F:M1 组织与授权数据模型设计，定义租户、隔离粒度、岗位与 RLS 骨架的最小闭环 | R:code:db/migrations/0001_p1_org_departments.sql,code:docs/architecture/master-plan.md | A:架构文档 | S:实际实现已拆为部门树、memberships.title 与 access_level；DDL 以 0001 迁移与 policies 为准
+Milestone2-知识库数据模型.md[SB8L]: F:M2 知识库数据模型设计：证据链、确认门槛、批次血缘与回归评测四类资产 | R:code:db/migrations/0008_knowledge_base.sql,code:db/schema/knowledge.ts | A:架构文档 | S:明确不做文件系统当库、全量读 cards.json、TF-IDF 字面检索与两套卡库并存
+Milestone3-运行态数据模型.md[SW8M]: F:M3 AI 运行时数据模型设计：threads、runs、steps、events、tool_calls、token_usages | R:code:db/migrations/0016_runtime_tables.sql,code:db/schema/runtime.ts | A:架构文档 | S:threads 是会话、runs 是单次执行、ingest_runs 是入库批次，三者不合并；不做 DAG 与事件重放
+WorkBuddy连接器清单.md[SN7L]: F:WorkBuddy 连接器盘点，共 619 个工具包、530 个含 MCP 服务，并给出接入字段映射 | R:code:src/lib/mcp/connectors.ts,code:db/schema/mcp-servers.ts | A:架构文档 | S:清单来自本机插件目录扫描；streamable-http 需映射为 http；接入前需按 SSRF 与命令白名单校验
+master-plan.md[SG9L]: F:工程架构与落地路线图，冻结 Docker 单机交付、Next.js 全栈、PostgreSQL 与 RLS 等选型 | R:code:docs/architecture/Milestone1-岗位与授权数据模型.md,code:docs/architecture/Milestone2-知识库数据模型.md | A:架构文档 | S:本文件是唯一实施基准；与对话记录冲突时以本文件为准；Python 仅作离线工具且不持数据库凭据
+permission-model.md[SI9M]: F:权限模型语义冻结稿，定义 L1–L3、PermissionNode、Scope 与本轮纳入范围 | R:code:docs/architecture/权限系统与UI落地实施计划.md,code:src/lib/permissions/catalog.ts | A:架构文档 | S:代码以本文件为唯一语义依据；财务、教学、市场投放本轮不纳入，仅保留扩展接口
+原项目技能盘点报告.md[SE7L]: F:原项目 Skill 四层资产盘点：技能包、可执行技能、外部扩展与内置目录 | R:code:src/lib/skills.ts,code:db/migrations/0030_skills.sql | A:架构文档 | S:仅只读盘点，未搬迁代码或修改接口；老项目 Skill 不是单一概念，迁移需按四层分别评估
+原项目权限体系分析报告.md[SI8L]: F:原项目权限体系只读分析，梳理权限模型、全量权限点、绑定模式与前端拦截机制 | R:code:docs/architecture/permission-model.md,code:docs/architecture/权限系统与UI落地实施计划.md | A:架构文档 | S:只读分析，未修改被扫描项目；迁移目标是角色加权限点多选勾选架构
+权限系统与UI落地实施计划.md[SI8L]: F:权限系统落地实施计划，覆盖 L1–L3 防越权、细粒度 PermissionNode、Scope 与离职交接审批流 | R:code:docs/architecture/permission-model.md,code:src/lib/permissions/authorize.ts | A:架构文档 | S:按评审做减法，本轮仅保留扩展接口；阶段与迁移清单以本计划为准
+知识库UI移植与重构可行性评估与实施流程.md[SB7M]: F:知识库纯 UI 无损重构方案，锁定六个 Tab 与统计条的信息架构和数据来源 | R:code:src/app/(app)/knowledge/page.tsx,code:docs/architecture/知识库十目录与蒸馏对标报告.md | A:架构文档 | S:约束为零数据库迁移、零后台任务；视觉统一走全站苹果令牌
+知识库十目录与蒸馏对标报告.md[SB7M]: F:新旧项目 10 个业务目录、经验蒸馏流转与检索落点的逐项对标 | R:code:src/lib/knowledge/folders.ts,code:docs/architecture/知识库经验沉淀融合方案.md | A:架构文档 | S:新项目实际只有 01-original 与 02-cards 有写入方；老项目同时存在 Markdown 与 JSON 两套卡库，不可照搬
+知识库经验沉淀融合方案.md[SW8L]: F:知识库与经验沉淀融合方案：单一卡库、多通道采集、目录语义路由与确认门槛，Phase 0–2 已落地 | R:code:src/lib/knowledge/experience/capture.ts,code:src/lib/knowledge/experience/process.ts,code:db/schema/experience.ts | A:架构文档 | S:所有 AI 卡必须 pending 且至少一条逐字证据；05 经验不进事实问答；来源文本去敏截断后 90 天清理
+
+===E:/JXF-AI/docs/development/===
+P0-infrastructure.md[SV7L]: F:P0 环境底座开发记录：容器编排、自建 PG 镜像、反向代理与健康检查 | R:code:docs/gates/P0-gate.md,code:docker/docker-compose.yml | A:开发文档 | S:自建 PG 镜像锁定扩展版本；迁移容器为一次性任务，退出码即结果
+P1-auth-rls.md[SI8M]: F:P1 组织治理与身份链路开发记录：部门树、闭包、成员、RLS 与会话上下文 | R:code:docs/gates/P1-gate.md,code:db/policies/001_app_functions.sql | A:开发文档 | S:jxf_app 非 owner、非 superuser、非 bypassrls；策略文件每次 migrate 重放
+P1-progress.md[SG6L]: F:P1 推进账本，按日期追加需求、代码迁移、验收证据与方案偏差 | R:code:docs/development/P1-auth-rls.md,code:docs/gates/P1-gate.md | A:开发文档 | S:只追加不改写历史；未提交改动必须显式标注；闸门步骤过时先记偏差
+P6-阶段交付与验收报告.md[SI7M]: F:P6 权限管理面板交付报告，记录三个 Tab、授权模型与自动化验证结果 | R:code:docs/architecture/permission-model.md,code:src/app/(app)/admin/permissions/page.tsx | A:开发文档 | S:面板仅 L1 可访问与编辑；镜像重建与截图级人工验收为待补项
+
+===E:/JXF-AI/docs/gates/===
+P0-gate.md[SG7T]: F:P0 环境底座人工闸门，列出 docker、db、health 端点与 env fail-closed 交付物与验收步骤 | R:code:docs/development/P0-infrastructure.md | A:验收文档 | S:验收主体为用户本人，AI 自评不算通过
+P1-gate.md[SI8T]: F:P1 组织治理与权限体系人工闸门，覆盖部门、身份、HR 档案、权限表与审计 | R:code:docs/development/P1-auth-rls.md | A:验收文档 | S:验收主体为用户本人；旧路径已改为兼容跳转，不应再作为验收入口
+P2-gate.md[SB8T]: F:P2 知识库人工闸门，覆盖入库解析、双通道检索、知识卡确认门槛、问答证据、共享与回收站 | R:code:docs/architecture/Milestone2-知识库数据模型.md | A:验收文档 | S:15 步验收必须用户本人完成；全部通过后打 tag gate/p2-passed
+P3-gate.md[SW8T]: F:P3 AI 运行时与对话人工闸门，覆盖运行态表、队列状态机、事件流、对话页与 AI 员工派活 | R:code:docs/architecture/Milestone3-运行态数据模型.md | A:验收文档 | S:验收主体为用户本人；超时收口为 interrupted 而不是 failed
+P4-gate.md[SN8T]: F:P4 MCP Hub 人工闸门，覆盖对外令牌、MCP 端点、内置工具、六维 scope、逐工具审批与外部连接器 | R:code:docs/architecture/MCP工具能力梳理报告.md,code:db/schema/mcp.ts | A:验收文档 | S:令牌只存哈希并绑定任用；写类工具命中审批维时先落单不执行；连接器需 SSRF 与命令白名单
+P5-gate.md[SO8S]: F:P5 治理面与交付人工闸门，覆盖版本表、备份恢复、审计导出、设置面、运维任务与连接器心跳 | R:code:docs/operations/ops-runner.md,code:db/policies/028_ops_tasks_rls.sql | A:验收文档 | S:业务角色只能落单，任务状态只能由 owner runner 回写；设置面密钥只存密文与末 4 位
+
+===E:/JXF-AI/docs/operations/===
+observability.md[SO7S]: F:可观测性说明：存活/就绪探针、聚合指标端点与日志口径 | R:code:src/app/api/metrics/route.ts,code:src/app/api/health/route.ts | A:运维文档 | S:指标只返回聚合计数，不含用户/文档/令牌明细；METRICS_TOKEN 非空时强制 Bearer 校验
+ops-runner.md[SO7S]: F:宿主机运维 runner 部署说明：轮询运维任务、连接器心跳与产线推进 | R:code:scripts/ops-runner.mjs,code:deploy/systemd/jxf-ops-runner.service | A:运维文档 | S:Web 容器不持有 docker 权限；连续失败 1–2 次降级、3 次熔断；告警 webhook 可选
+pipeline-triggers.md[SW7T]: F:产线触发说明：外部 Webhook 令牌与内部事件订阅两种触发方式 | R:code:src/lib/pipelines-webhook.ts,code:src/lib/pipeline-events.ts | A:运维文档 | S:令牌只显示一次，库内只存 SHA-256 与末 4 位；宿主机 runner 必须常驻负责派发与推进
+
+===E:/JXF-AI/public/brand/===
+Fxf-icon.svg[CU4T]: F:品牌应用图标 SVG，36×36 圆角底与蓝紫渐变图形 | R:code:public/brand/fxf-mark.svg | A:品牌资源 | S:视口与渐变品牌色需保持一致，避免与站点品牌色冲突
+fxf-mark.svg[CU4T]: F:品牌标记 SVG，与 Fxf-icon.svg 同字节，用于导航与登录页展示 | R:code:public/brand/Fxf-icon.svg,code:src/components/brand/BrandMark.tsx | A:品牌资源 | S:两文件内容一致，修改时必须同步，避免品牌标识不一致
+
+===E:/JXF-AI/scripts/===
+audit-grants.mjs[TQ7S]: F:授权收口体检脚本，检查权限目录漂移、过期授权、无在岗任用与停用 AI 员工的残留授权 | R:code:src/lib/permissions/catalog.ts,code:db/schema/permission-grants.ts | A:质量验收 | S:默认只体检；--fix-expired 才清理过期授权；--strict 让警告返回非零
+backfill-embeddings.mjs[OD6S]: F:向量回填脚本，为 embedding 为空的已入库切片补向量，支持 --limit/--batch/--dry-run | R:code:scripts/probe-embedding.mjs,code:src/lib/ai/openai.ts | A:运维数据修复 | S:只处理未删除、未撤回文档的切片，已有向量保持不变，可重复执行；每批独立事务，单批失败不影响已完成部分；不打印 Key
+backup.mjs[OR7S]: F:M5 交付底座备份，产出 PG custom dump、MinIO 与 uploads 卷归档及记录校验和的 manifest.json | R:code:scripts/lib/delivery.mjs,code:scripts/restore.mjs,code:docker/docker-compose.yml | A:交付运维 | S:--cold 先停应用与 MinIO 做一致性快照并在结束后自动拉起；产物固定落 backups/backup-<stamp>/，manifest 记录版本、校验和与关键表行数
+install.mjs[OC7S]: F:安装向导，从 .env.example 生成可启动的 .env，随机化密钥与口令并做 node/docker 前置检查 | R:code:scripts/lib/setup.mjs,code:scripts/lib/delivery.mjs,code:.env.example | A:安装部署 | S:.env 已存在时拒绝，--force 先备份为 .env.bak-<时间戳>；只替换密钥与口令，不自动启动容器，只在结束时打印后续命令
+ops-runner.mjs[OW8M]: F:宿主机常驻运维 runner，轮询 ops_tasks 执行白名单命令，并驱动连接器心跳与产线定时/链式推进 | R:code:src/lib/ops/tasks.ts,code:src/lib/mcp/health.ts,code:src/lib/pipelines.ts,code:src/lib/pipeline-events.ts | A:运维调度 | S:Web 容器不持有 docker 权限，只负责落单，执行权在本进程；只支持 backup 与 restore_verify 且参数只有 cold；不拼接 shell，不执行数据库下发的任意命令或路径；恢复演练固定用最近备份，永不覆盖生产库
+probe-embedding.mjs[OO6S]: F:Embedding 连通探针（只读），验证向量通道可用且维度与 doc_chunks.embedding 对齐 | R:code:scripts/backfill-embeddings.mjs,code:src/lib/ai/openai.ts | A:运维自检 | S:不写库、不产生业务数据；缺 Key 退出码 2，调用失败退出码 1；部分兼容网关不接收 dimensions，探针自动降级重试一次并如实报告实际维度
+prune-audit.mjs[OO7S]: F:审计留存清理脚本，按保留天数删除过期 audit_events 并追加 audit.retention_pruned 留痕 | R:code:db/schema/audit-events.ts,code:db/policies/009_audit_scope.sql | A:运维清理 | S:业务角色对 audit_events 只能 insert，清理必须由 owner 执行；默认只演练，--yes 才真正删除；每 10000 条一批
+restore.mjs[OR8M]: F:恢复脚本，--verify 在影子库演练校验，--yes 执行停应用、覆盖恢复、卷还原、migrate 与健康等待 | R:code:scripts/lib/delivery.mjs,code:scripts/backup.mjs,code:docker/docker-compose.yml | A:交付运维 | S:默认只做影子库演练；覆盖生产必须显式 --yes；恢复后必须 migrate 补齐策略与版本并等待健康检查通过
+rollback.mjs[OR7T]: F:回滚脚本，读升级状态文件把旧镜像改回正式标签，再覆盖恢复备份、migrate 与健康检查 | R:code:scripts/lib/delivery.mjs,code:scripts/restore.mjs,code:docker/docker-compose.yml | A:交付运维 | S:必须用 --state 指定 upgrade 写下的状态文件，缺失即失败；只有 --yes 才执行，--dry-run 仅打印计划
+smoke.mjs[OQ7M]: F:部署冒烟脚本，检查 compose 配置、容器健康、存活/就绪探针、版本表、未认证接口 401 与最近备份 | R:code:scripts/lib/delivery.mjs,code:docker/docker-compose.yml,code:src/lib/health.ts | A:部署验收 | S:只读检查、不写业务数据，可重复执行；必须在能执行 docker compose 的部署机上运行
+test-active-context.mjs[TI7M]: F:P3 单部门上下文验收，验证多任用用户在不同部门上下文下的 RLS 作用域 | R:code:db/policies/012_active_membership_context.sql,code:scripts/test-rls.mjs | A:权限验收 | S:需要真实 PostgreSQL 与 jxf_app 角色；使用独立测试租户 22222222-2222-4222-8222-222222222222，断言全部走 SET LOCAL 身份，不依赖超管权限
+test-ai-employees.mjs[TB7L]: F:M2 AI 员工目录与授权验收，覆盖 fail-closed 可见性、草稿语义、部门子树继承、个人例外与 L1 独占写权限 | R:code:db/policies/020_ai_employee_visibility.sql,code:src/lib/ai-employees.ts | A:业务验收 | S:写入用 owner 连接播种绕过 RLS，断言全部以 jxf_app + SET LOCAL 身份执行；离职后必须立即不可见，授权表不得泄露
+test-app-settings.mjs[TC7M]: F:P5 设置面验收，覆盖 RLS 边界、单行配置约束、公开读取函数与密钥加密 | R:code:db/policies/027_app_settings_rls.sql,code:src/lib/settings/store.ts | A:配置验收 | S:需要 .env 与已应用的 0022 迁移；owner 仅用于播种，断言以 jxf_app 身份执行
+test-knowledge.mjs[TB7L]: F:M2-A3 知识库验收，覆盖 RLS 隔离、sha256 去重、批次撤回、确认门槛与混合检索降级 | R:code:db/policies/017_knowledge_rls.sql,code:src/lib/knowledge/ingest.ts,code:src/lib/knowledge/qa.ts | A:业务验收 | S:真实 PostgreSQL + jxf_app；写入走 owner 播种，断言走应用角色 SET LOCAL，确保测的是策略而不是超管权限
+test-mcp-health.mjs[TO6S]: F:P5 MCP 连接器心跳体检验收，用假 probe 驱动 unknown→degraded→down→healthy 状态机 | R:code:src/lib/mcp/health.ts,code:scripts/ops-runner.mjs | A:可靠性验收 | S:不访问任何外部网络；同时校验健康列、审计事件、告警回调与 worker 降级 SQL 条件
+test-metrics.mjs[TO6T]: F:可观测性验收，验证 app.metrics_snapshot() 以 jxf_app 角色可读且只返回聚合计数 | R:code:db/migrations/0028_metrics.sql | A:可观测性验收 | S:返回结果不得包含任何明细字段；需要真实 PostgreSQL 与应用角色连接
+test-notifications.mjs[TM7M]: F:邮件通知验收，覆盖设置面读写、口令加密、配置解析、发送链路与事件模板 | R:code:src/lib/notifications/mailer.ts,code:src/lib/notifications/events.ts | A:消息验收 | S:不发起真实 SMTP，使用注入的假 transport；会临时改写 app_settings 通知字段，结束后按快照恢复
+test-pending-handover.mjs[TW7M]: F:P7 离职交接状态机验收，覆盖创建、通过、驳回、撤回、幂等与唯一 L1 约束 | R:code:db/policies/014_pending_handover.sql,code:src/lib/handover/registry.ts | A:流程验收 | S:需要真实 PostgreSQL；使用独立测试租户 33333333-3333-4333-8333-333333333333，owner 播种、jxf_app 断言
+test-permission-admin.mjs[TI7M]: F:P6 权限管理写入函数验收，覆盖授权覆盖、版本号递增、L1 限制与模板回滚 | R:code:db/policies/013_permission_admin.sql,code:src/lib/permissions/grant.ts,code:src/lib/permissions/catalog.ts | A:权限验收 | S:需要真实 PostgreSQL 与已应用权限迁移；写入以应用角色执行，用于验证函数内越权拦截而不是超管能力
+test-permission-core.mjs[TI7M]: F:P2 鉴权核心自检，验证 authorize、authorizeProtected 与 canGrant 的判定与拒绝路径 | R:code:src/lib/permissions/authorize.ts,code:src/lib/permissions/grant.ts,code:src/lib/permissions/catalog.ts | A:权限自检 | S:不依赖数据库，纯函数自检；节点与等级上限来自 catalog，新增节点必须同步更新默认模板
+test-permission-snapshot.mjs[TI6T]: F:P5 权限快照与客户端预检自检，验证快照序列化、缺快照默认拒绝与 Scope 覆盖判定 | R:code:src/lib/permissions/snapshot.ts,code:src/lib/permissions/scope.ts | A:权限自检 | S:不依赖数据库；无快照必须默认拒绝，Scope 只能向下覆盖
+test-permissions.mjs[TI6S]: F:权限目录自检，验证 L1/L2/L3 上限、模块开关、Scope 规则与模板合法性 | R:code:src/lib/permissions/catalog.ts,code:src/lib/permissions/scope.ts | A:权限自检 | S:不依赖数据库；目录不变量由 assertCatalogInvariants 守护，停用模块不得残留任何节点
+test-pipelines.mjs[TW7L]: F:自动化产线验收，覆盖定义、首步派活、链式推进、可选步骤、产物传递、定时与 Webhook/事件触发 | R:code:src/lib/pipelines.ts,code:src/lib/pipeline-runner.ts,code:src/lib/pipeline-events.ts,code:db/policies/029_pipelines_rls.sql | A:流程验收 | S:会创建真实 work_item 与 queued run，测试前必须停 worker 避免被领取；结束后清理测试数据
+test-rls.mjs[TI8L]: F:P1 越权验收，使用真实 PostgreSQL + jxf_app 逐条验证无身份、越权与离岗时 RLS fail-closed | R:code:db/policies/002_rls_policies.sql,code:src/lib/db/user-context.ts | A:安全验收 | S:依赖真实库与 jxf_app；使用独立测试租户 11111111-1111-4111-8111-111111111111；清理必须按部门闭包深度由深到浅，否则外键失败
+test-runtime.mjs[TR8L]: F:M3 运行时验收，覆盖受理幂等、队列租约、事件 seq、取消/续跑、收口、成本账本与 RLS 隔离 | R:code:src/lib/runtime/accept.ts,code:src/lib/runtime/claim.ts,code:src/lib/runtime/recover.ts,code:src/lib/runtime/resume.ts,code:src/lib/runtime/usage.ts | A:运行时验收 | S:写入以 owner 连接播种，业务断言用 jxf_app + SET LOCAL，队列断言用受限角色 app_worker；结束后清理测试租户数据
+test-setup.mjs[TC5T]: F:安装向导验收，验证模板替换、随机性、CHANGE_ME 占位符检测与 .env 覆盖保护 | R:code:scripts/lib/setup.mjs,code:scripts/install.mjs | A:安装验收 | S:不启动容器、不连接数据库；在临时目录生成 .env 后清理
+test-skills.mjs[TE7M]: F:技能注册表与绑定校验，覆盖技能增删改、状态切换、prompt 拼装与 AI 员工绑定 | R:code:src/lib/skills.ts,code:src/lib/ai-employees.ts,code:src/lib/skills/distribute.ts | A:业务验收 | S:需要先执行 0030_skills 迁移；会创建临时技能、分发任务与员工绑定，结束后清理
+upgrade.mjs[OR8S]: F:M5 交付底座升级，按备份、旧镜像打回滚标签、构建、迁移门禁、拉起、健康检查与写状态文件推进 | R:code:scripts/lib/delivery.mjs,code:scripts/backup.mjs,code:scripts/rollback.mjs,code:docker/docker-compose.yml | A:交付运维 | S:失败时不拉起新 web/worker，必须按输出提示执行 rollback；状态文件是 rollback 的唯一依据
+verify-delivery.mjs[TQ6T]: F:一键交付验收清单，串联权限守卫、类型检查、冒烟、设置面、心跳、产线、邮件、指标与授权体检 | R:code:scripts/smoke.mjs,code:scripts/verify-permission-guards.mjs,code:scripts/verify-skills.mjs | A:交付验收 | S:--quick 跳过 typecheck；不执行破坏性数据库测试，test:runtime 需单独运行
+verify-p0.sh[TQ6S]: F:Phase 0 验收脚本，校验 compose 配置、首次构建启动、健康检查、扩展与角色、迁移记录与重复 up 幂等 | R:code:docker/docker-compose.yml,code:scripts/install.mjs,code:scripts/smoke.mjs | A:部署验收 | S:必须在具备 Docker 的 Linux 宿主机或 WSL 执行；首次运行会自动生成 .env；set -euo pipefail 遇错即停
+verify-permission-guards.mjs[TI8M]: F:守卫覆盖检查，扫描所有 Server Action 与 Route Handler，要求每个导出入口都经过权限校验 | R:code:src/lib/permissions/server.ts,code:src/lib/permissions/guard.ts | A:权限验收 | S:跨文件追踪只沿本地导入，不做正则猜名字；公开探针、认证入口与仅靠 RLS 的入口必须进白名单并注明原因
+verify-skills.mjs[TQ5T]: F:技能与授权体检门禁，把技能注册验收与授权收口体检合成一个步骤 | R:code:scripts/test-skills.mjs,code:scripts/audit-grants.mjs | A:质量门禁 | S:保持 verify:delivery 仍为 10 个步骤；任一步失败即整体非零退出
+
+===E:/JXF-AI/scripts/lib/===
+delivery.mjs[OR8M]: F:备份/恢复/升级/回滚共用工具，统一封装 docker compose 调用、产物路径、校验和与版本信息 | R:code:scripts/backup.mjs,code:scripts/restore.mjs,code:scripts/rollback.mjs,code:scripts/smoke.mjs,code:docker/docker-compose.yml | A:交付运维 | S:容器操作一律走 docker compose --env-file .env，不硬编码容器名；恢复默认只做影子库演练，覆盖生产必须显式 --yes；升级失败不拉起新 web/worker，回滚依赖升级前备份与旧镜像标签
+setup.mjs[OC6T]: F:安装向导纯函数模块，定义必须随机化的口令与种子字段，生成 .env 内容并检测 CHANGE_ME 占位 | R:code:scripts/install.mjs,code:.env.example | A:安装部署 | S:口令会直接拼进数据库连接串，只能用字母数字；纯函数不写文件、不启动容器，便于单测
+
+===E:/JXF-AI/src/app/(app)/===
+actions.ts[EI6T]: F:切换当前部门上下文的 Server Action，只允许切到自己有效任用内的部门并写入 httpOnly Cookie | R:code:src/lib/db/user-context.ts,code:src/lib/auth/session.ts | A:部门上下文 | S:Cookie 必须 httpOnly，客户端无法伪造到其他部门；切换后 revalidatePath("/", "layout") 刷新全站上下文
+layout.tsx[EI8T]: F:应用外壳布局，解析当前上下文与权限快照，装配导航、待办角标与品牌信息 | R:code:src/lib/db/user-context.ts,code:src/lib/permissions/snapshot.ts,code:src/components/shell/Shell.tsx | A:应用外壳 | S:权限或上下文解析失败必须降级为无权限外壳而不是白屏；work_items 表缺失时待验收数降级为 0
+
+===E:/JXF-AI/src/app/(app)/admin/organization/===
+MembersTab.tsx[EI7L]: F:组织管理成员页签，展示成员列表并提供新增、移除、恢复与基础信息编辑 | R:code:src/app/(app)/admin/organization/actions.ts,code:src/components/ui/confirm-dialog.tsx | A:组织管理界面 | S:司龄由入职日期动态计算不落库；移除与恢复等危险操作必须经确认对话框
+OrgTree.tsx[EI7L]: F:组织架构树，支持部门与成员拖拽排序、迁移成员、删除部门与移除成员预检 | R:code:src/app/(app)/admin/organization/actions.ts,code:src/components/permissions/usePermission.tsx | A:组织管理界面 | S:拖拽与移除前必须调用 checkMemberBlockers 预检；前端权限只控制显隐，真正拦截在服务端守卫
+actions.ts[AI8L]: F:组织管理 Server Actions，处理部门增改、删除、排序与成员新增、迁移、移除、恢复及离职交接 | R:code:src/lib/permissions/server.ts,code:src/lib/db/user-context.ts,code:src/lib/handover/registry.ts,code:src/lib/org/slug.ts | A:组织管理 | S:每个导出入口必须经 requireContextPermission；移除成员前必须检查未完成工作与资产，存在阻塞时转离职交接流程
+page.tsx[EI7M]: F:组织管理页面，汇总部门树与成员列表并按权限裁剪可见页签 | R:code:src/app/(app)/admin/organization/OrgTree.tsx,code:src/app/(app)/admin/organization/MembersTab.tsx | A:组织管理界面 | S:force-dynamic，每次请求都按当前上下文实时鉴权；数据读取走 withUserContext 以应用 RLS
+
+===E:/JXF-AI/src/app/(app)/admin/permissions/===
+AuditTab.tsx[EO7M]: F:权限审计日志页签，展示审计事件、操作者与部门，并支持类型筛选与时间排序 | R:code:src/app/(app)/admin/permissions/AuditTypeFilter.tsx,code:src/lib/audit.ts | A:审计界面 | S:展示时间默认截断到秒，title 保留完整 ISO 时间戳便于高频排查
+AuditTypeFilter.tsx[EO4T]: F:审计日志筛选控件，切换日志类型与时间排序并刷新查询参数 | R:code:src/app/(app)/admin/permissions/AuditTab.tsx | A:审计界面 | S:-
+GrantsTab.tsx[EI7T]: F:成员授权页签，加载等级模板与成员列表并渲染个人例外编辑面板 | R:code:src/app/(app)/admin/permissions/PermissionAdminClient.tsx,code:src/app/(app)/admin/permissions/admin-data.ts | A:权限管理界面 | S:仅持有 protected:permission_grant 的 L1 可进入，否则不渲染管理面板
+MemberPanel.tsx[EI6M]: F:成员个人授权编辑面板，支持继承、允许、拒绝三态与 Scope 选择 | R:code:src/app/(app)/admin/permissions/PermissionAdminClient.tsx,code:src/lib/permissions/scope.ts | A:权限管理界面 | S:inherit 表示回落到等级模板；允许与拒绝的 Scope 必须受节点 allowedScopes 约束
+MineTab.tsx[EI6S]: F:我的权限页签，展示当前任用的有效权限、部门上下文与可见范围 | R:code:src/lib/permissions/server.ts,code:src/lib/permissions/catalog.ts | A:权限管理界面 | S:只读取当前上下文，不提供任何写入入口
+PermissionAdminClient.tsx[EI7L]: F:权限管理客户端容器，维护模板与成员授权草稿、脏标记、确认对话框与保存动作 | R:code:src/app/(app)/admin/permissions/MemberPanel.tsx,code:src/app/(app)/admin/permissions/TemplatePanel.tsx,code:src/app/(app)/admin/permissions/actions.ts | A:权限管理界面 | S:保存前必须二次确认；模板与成员草稿各自维护，切换目标时未保存改动会丢失
+RolesTab.tsx[EI7T]: F:角色管理页签，加载 L1/L2/L3 等级模板并渲染只读或可编辑的模板面板 | R:code:src/app/(app)/admin/permissions/TemplatePanel.tsx,code:src/app/(app)/admin/permissions/admin-data.ts | A:权限管理界面 | S:仅 L1 可编辑模板，其余等级只读；等级上限来自 LEVEL_CEILING
+TemplatePanel.tsx[EI6S]: F:等级模板编辑面板，按模块树勾选权限节点并设置 Scope | R:code:src/app/(app)/admin/permissions/PermissionAdminClient.tsx,code:src/lib/permissions/catalog.ts | A:权限管理界面 | S:只允许选择等级上限内的节点；停用模块不展示
+actions.ts[AI8M]: F:权限管理 Server Actions，保存与重置等级模板和成员授权，并写审计与递增版本号 | R:code:src/lib/permissions/grant.ts,code:src/lib/permissions/guard.ts,code:src/lib/audit.ts | A:权限管理 | S:必须经 requireProtectedCapability 校验；越权节点与 Scope 由 canGrant 再次拦截；每次写入递增授权版本号并落审计
+admin-data.ts[AI6S]: F:权限管理数据装配，从权限目录与授权表构建模块树、等级模板与成员授权映射 | R:code:src/lib/permissions/catalog.ts,code:src/lib/permissions/scope.ts | A:权限管理数据 | S:无效节点与 Scope 在装配时丢弃，避免脏授权渲染到界面
+page.tsx[EI7S]: F:权限管理页面，按 tab 参数渲染我的权限、角色管理、成员授权与审计日志 | R:code:src/app/(app)/admin/permissions/MineTab.tsx,code:src/app/(app)/admin/permissions/AuditTab.tsx | A:权限管理界面 | S:force-dynamic；tab 参数非法时回落到默认页签
+parts.tsx[EI4T]: F:权限管理共享展示部件，提供风险徒章、默认作用域推导与作用域选择器 | R:code:src/lib/permissions/scope.ts,code:src/app/(app)/admin/permissions/MemberPanel.tsx | A:权限管理界面 | S:默认作用域取节点 allowedScopes 的第一项，目录需保持从宽到窄排序
+
+===E:/JXF-AI/src/app/(app)/ai-employees/===
+AiEmployeesClient.tsx[EB8L]: F:AI 员工工作台客户端，管理员工创建与编辑、部门/个人授权、状态切换及工作项派发与验收 | R:code:src/app/(app)/ai-employees/actions.ts,code:src/lib/ai-employees.ts,code:src/lib/work-items.ts | A:AI 员工界面 | S:派发与验收只在服务端校验权限，前端可见性不能当作安全边界
+actions.ts[AB8S]: F:AI 员工 Server Actions，封装创建、更新、授权与撑销、状态切换及工作项派发、重跑、验收 | R:code:src/lib/ai-employees.ts,code:src/lib/work-items.ts,code:src/lib/permissions/guard.ts | A:AI 员工编排 | S:错误统一经 toPermissionMessage 转可读文案；成功后 revalidatePath("/ai-employees")
+page.tsx[EB7T]: F:AI 员工页面，按上下文加载员工列表、详情、授权候选、工作项与 MCP/技能选项 | R:code:src/app/(app)/ai-employees/AiEmployeesClient.tsx,code:src/lib/ai-employees.ts | A:AI 员工界面 | S:只有 L1 加载授权候选；选中 id 不在可见列表内时回落到第一个员工
+
+===E:/JXF-AI/src/app/(app)/chat/===
+ChatClient.tsx[EU8L]: F:Agent 对话客户端，处理流式消息、步骤进度、用量成本与会话重命名、置顶、删除和转知识库 | R:code:src/app/(app)/chat/actions.ts,code:src/lib/runtime/threads.ts | A:对话界面 | S:会话增删改都走 ./actions 的 Server Actions，客户端不直接访问数据库；用量与成本按模型返回的 token 展示
+actions.ts[AU6T]: F:会话管理 Server Actions，处理重命名、置顶、归档删除与把会话内容转成知识库文档 | R:code:src/lib/runtime/threads.ts,code:src/lib/knowledge/workspace.ts | A:会话编排 | S:所有入口先 requireSession 并解析当前上下文；threadId 必须通过 isUuid 校验后才访问数据库
+page.tsx[EU7T]: F:Agent 对话页面，加载会话列表与当前会话详情，无 Skill 权限时展示拒绝提示 | R:code:src/app/(app)/chat/ChatClient.tsx,code:src/lib/runtime/threads.ts | A:对话界面 | S:force-dynamic；列表或详情加载失败按无权限处理，不把异常抛成 500
+
+===E:/JXF-AI/src/app/(app)/knowledge/===
+DistillButton.tsx[EA5T]: F:文档蒸馏按钮，调用 AI 生成待确认知识卡并就地反馈结果 | R:code:src/app/(app)/knowledge/cards/actions.ts | A:知识库界面 | S:未配置 AI 时按钮禁用并提示；蒸馏产物一律先进入待确认，不直接生效
+QaPanel.tsx[EA6S]: F:知识问答面板，提交问题并展示答案、引用与逐条证据校验结果 | R:code:src/app/(app)/knowledge/actions.ts,code:src/lib/knowledge/qa.ts | A:知识库界面 | S:未启用 AI 时只返回检索到的已确认知识卡；问题长度上限 500 字
+RegressionPanel.tsx[EQ6T]: F:检索回归门禁面板，录入构建标记并发起基线题回归运行 | R:code:src/app/(app)/knowledge/actions.ts,code:src/lib/knowledge/regression.ts | A:知识库界面 | S:保留率低于 90% 或任一道未通过即判失败；构建标记最多 40 字
+actions.ts[AB8L]: F:知识库 Server Actions，处理问答、文档回收站与恢复、OCR 补录、共享审核、缺口与回归题维护 | R:code:src/lib/knowledge/qa.ts,code:src/lib/knowledge/trash.ts,code:src/lib/knowledge/ocr.ts,code:src/lib/knowledge/share.ts,code:src/lib/knowledge/regression.ts | A:知识库编排 | S:所有入口先 requireSession 并解析上下文；id 参数必须通过 isUuid 校验；错误统一经 toPermissionMessage 转可读文案
+page.tsx[EB8M]: F:知识库主页，汇总统计、目录树、页签视图与工作区编辑器，并按权限裁剪写操作 | R:code:src/lib/knowledge/workspace.ts,code:src/lib/knowledge/stats.ts,code:src/app/(app)/knowledge/_components/TabNav.tsx | A:知识库界面 | S:force-dynamic；所有读取走 withUserContext 以应用 RLS；非法 tab 或选中项不存在时回落默认视图
+
+===E:/JXF-AI/src/app/(app)/knowledge/_components/===
+CardItem.tsx[EB7M]: F:单张知识卡条目，展示状态与证据，并支持编辑、确认、丢弃与调整归档目录 | R:code:src/app/(app)/knowledge/cards/actions.ts,code:src/lib/knowledge/cards.ts,code:src/lib/knowledge/folders.ts | A:知识库界面 | S:确认与丢弃受 canConfirm 控制，编辑受 canWrite 控制；状态只允许 pending、confirmed、dropped 三态
+CardsClient.tsx[EB7M]: F:知识卡列表客户端，提供状态页签、多维筛选、多选批量决策与新建卡片入口 | R:code:src/app/(app)/knowledge/cards/actions.ts,code:src/app/(app)/knowledge/_components/CardItem.tsx,code:src/lib/knowledge/cards.ts | A:知识库界面 | S:批量决策与单卡操作复用同一组 Server Actions；筛选状态通过查询参数持久化
+CardsTab.tsx[EB6T]: F:知识卡页签服务端取数，按筛选条件在 RLS 内查询卡片与分面后交给客户端渲染 | R:code:src/lib/knowledge/cards.ts,code:src/app/(app)/knowledge/_components/CardsClient.tsx | A:知识库界面 | S:status 参数不在白名单时回落到 pending；查询一律走 withUserContext
+GapsClient.tsx[EB6S]: F:知识缺口客户端，按待补、已补、全部筛选并支持新增、关闭与重新打开缺口 | R:code:src/app/(app)/knowledge/actions.ts,code:src/lib/knowledge/gaps.ts | A:知识库界面 | S:缺口来源分为手动、问答未命中与知识过期三类；写入动作受 canWrite 控制
+GapsTab.tsx[EB5T]: F:知识缺口页签服务端取数，按状态读取缺口列表并交给客户端 | R:code:src/lib/knowledge/gaps.ts,code:src/app/(app)/knowledge/_components/GapsClient.tsx | A:知识库界面 | S:非法状态参数一律回落到 open
+GraphView.tsx[EB6S]: F:知识关系图谱，左列卡片右列文档，按证据链与冲突关系绘制边 | R:code:src/lib/knowledge/workspace.ts | A:知识库界面 | S:边颜色区分证据、未验证与冲突三种；无节点时展示空状态而不是空画布
+MetaRow.tsx[EB6S]: F:知识卡四字段补全行，可编辑来源、版本、负责人与有效期并保存 | R:code:src/app/(app)/knowledge/actions.ts,code:src/lib/knowledge/cards.ts | A:知识库界面 | S:四字段全部落在卡片的 extra jsonb，不新增结构化列
+MetaTab.tsx[EB5T]: F:条目四字段页签，读取知识卡并支持只看缺失四字段的条目 | R:code:src/lib/knowledge/cards.ts,code:src/app/(app)/knowledge/_components/MetaRow.tsx | A:知识库界面 | S:最多读取 200 张卡；来源、版本、负责人、有效期任一为空即视为缺失
+NewCardPanel.tsx[EB6S]: F:手写知识卡折叠面板，填写类型、标题、正文与来源等字段后提交 | R:code:src/app/(app)/knowledge/cards/actions.ts,code:src/lib/knowledge/cards.ts | A:知识库界面 | S:新建卡片一律进入待确认状态，不直接生效
+QaTab.tsx[EA6T]: F:知识问答页签，渲染问答面板并回放最近 50 条问答来源 | R:code:src/lib/knowledge/qa.ts,code:src/app/(app)/knowledge/QaPanel.tsx | A:知识库界面 | S:问答回放记录引用卡片、越界编号与数字校验结果；最多展示 50 条
+RegressionQuestions.tsx[EQ5S]: F:回归题集维护，支持手写加题、删题与查看基线命中卡数量 | R:code:src/app/(app)/knowledge/actions.ts,code:src/lib/knowledge/regression.ts | A:知识库界面 | S:加题时基线自动取前 3 张命中卡；写操作受 canWrite 控制
+RegressionTab.tsx[EQ6T]: F:回归题页签，汇总基线题集、运行门禁与最近一次逐题结果 | R:code:src/lib/knowledge/regression.ts,code:src/app/(app)/knowledge/RegressionPanel.tsx | A:知识库界面 | S:只有 canWrite 才渲染回归运行面板；题集最多读取 50 道
+ScoutTab.tsx[EB7L]: F:巡读上传页签，支持拖拽或多选上传文档、查看巡读运行与逐条决策、处理共享申请与撤回运行 | R:code:src/app/(app)/knowledge/actions.ts,code:src/app/(app)/knowledge/_components/file-drop.ts,code:src/lib/knowledge/ingest.ts | A:知识库界面 | S:拖拽目录会递归摊平，超过上限的文件直接丢弃；决策状态区分规则/模型入库、跳过、待人工与出错
+StatBar.tsx[EB5T]: F:知识库统计条，常驻展示知识单元、待确认、冲突过期、缺口、问答来源与回归结果六格 | R:code:src/lib/knowledge/stats.ts,code:src/components/knowledge/StatTile.tsx | A:知识库界面 | S:回归通过需同时满足全部题目通过且保留率不低于 0.9；冲突与过期都应保持 0
+TabNav.tsx[EB5T]: F:知识库页签导航，声明六个视图并全部由 URL 承载当前页签 | R:code:src/app/(app)/knowledge/page.tsx | A:知识库界面 | S:默认页签是 scout；非法 tab 值必须被 isKnowledgeTab 拒绝
+WorkspaceEditor.tsx[EB7L]: F:知识库右侧工作区，编辑文档或卡片基本信息与证据链，并复用既有服务做恢复、删除与可见性切换 | R:code:src/app/(app)/knowledge/actions.ts,code:src/app/(app)/knowledge/cards/actions.ts,code:src/lib/knowledge/workspace.ts | A:知识库界面 | S:文档与卡片共用同一编辑器组件，按 mode 分支渲染；保存一律复用既有服务，不新增写入链路
+WorkspaceTree.tsx[EB6M]: F:知识库目录树，按部门与角色展示文档和卡片，支持检索命中高亮与清空回收站 | R:code:src/lib/knowledge/workspace.ts,code:src/app/(app)/knowledge/actions.ts | A:知识库界面 | S:目录最多加载 500 条，超出部分靠服务端检索；状态点按已完成、待处理、失败三色区分
+card-labels.ts[CB4T]: F:知识卡中文标签常量，覆盖卡片类型、状态与来源的展示文案 | R:code:src/lib/knowledge/cards.ts | A:知识库界面 | S:只做展示映射，不参与业务判断；新增卡片类型必须同步补充标签
+file-drop.ts[CG4T]: F:拖拽与目录选择工具，把 DataTransfer 或 input 文件递归摊平成带相对路径的列表 | R:code:src/app/(app)/knowledge/_components/ScoutTab.tsx | A:知识库上传 | S:递归目录按 limit 截断，超出部分直接丢弃而不是报错
+
+===E:/JXF-AI/src/app/(app)/knowledge/cards/===
+actions.ts[AB8M]: F:知识卡 Server Actions，处理手工建卡、编辑、确认、丢弃、批量决策、换目录与证据增删、蒸馏 | R:code:src/lib/knowledge/cards.ts,code:src/lib/knowledge/card-evidence.ts,code:src/lib/knowledge/distill.ts | A:知识库编排 | S:保存冲突由 CardConflictError 转成可展示结果并回带库中最新版本；乐观锁冲突不得静默覆盖
+page.tsx[EB3T]: F:旧知识卡入口，兼容跳转到 /knowledge?tab=cards 并透传状态参数 | R:code:src/app/(app)/knowledge/page.tsx | A:知识库界面 | S:force-dynamic；只做重定向，不渲染任何内容
+
+===E:/JXF-AI/src/app/(app)/me/approvals/===
+ApprovalsClient.tsx[EW6M]: F:我的审批客户端，列出待处理与已决离职交接单并执行通过、驳回、撤回 | R:code:src/app/(app)/me/approvals/actions.ts,code:src/components/ui/confirm-dialog.tsx | A:审批界面 | S:通过与驳回必须二次确认；已决记录只读
+actions.ts[AW8S]: F:离职交接审批 Server Actions，审批通过时按交接登记表迁移资产并写审计 | R:code:src/lib/handover/registry.ts,code:src/lib/permissions/server.ts,code:src/lib/audit.ts | A:审批编排 | S:错误码必须映射为可读文案：42501 无权限、P0002 已处理、23505 重复申请、23514 不能移出最后一位 L1
+page.tsx[EW6S]: F:我的审批页面，加载待处理与已决交接单及其资产明细 | R:code:src/app/(app)/me/approvals/ApprovalsClient.tsx,code:src/lib/handover/registry.ts | A:审批界面 | S:force-dynamic；时间统一按 Asia/Shanghai 展示
+
+===E:/JXF-AI/src/app/(app)/me/audit/===
+page.tsx[EO3T]: F:旧审计入口，兼容跳转到 /admin/permissions?tab=audit | R:code:src/app/(app)/admin/permissions/page.tsx | A:审计界面 | S:只做重定向，不鉴权也不渲染
+
+===E:/JXF-AI/src/app/(app)/me/permissions/===
+page.tsx[EI3T]: F:旧权限入口，兼容跳转到 /admin/permissions | R:code:src/app/(app)/admin/permissions/page.tsx | A:权限管理界面 | S:只做重定向，不鉴权也不渲染
+
+===E:/JXF-AI/src/app/(app)/me/profile/===
+ProfileClient.tsx[EU7L]: F:个人资料客户端，编辑姓名、头像、生日与身份邮箱，并管理任用的部门与职级 | R:code:src/app/(app)/me/profile/actions.ts,code:src/types/profile.ts | A:个人资料界面 | S:头像只接受 png/jpeg/webp 的 base64 且不超过 400000 字符；司龄按入职日期动态计算不落库
+actions.ts[AI8L]: F:个人资料 Server Actions，处理核心资料、生日、邮箱身份与任职部门、职级的更新，敏感变更需二次校验 | R:code:src/lib/profile/access.ts,code:src/lib/auth/password.ts,code:src/lib/permissions/server.ts,code:src/lib/audit.ts | A:个人资料编排 | S:手机号去空格与连字符后必须匹配 6 到 20 位数字；头像只接受 png/jpeg/webp base64 且不超过 400000 字符；敏感字段变更需校验密码
+page.tsx[EU6S]: F:个人资料页面，加载用户资料、邮箱身份、部门选项与可编辑权限后交给客户端 | R:code:src/app/(app)/me/profile/ProfileClient.tsx,code:src/lib/profile/access.ts | A:个人资料界面 | S:force-dynamic；目标用户不存在时返回 404；日期统一规范为 YYYY-MM-DD
+
+===E:/JXF-AI/src/app/(app)/org/positions/===
+page.tsx[EI3T]: F:旧组织架构入口，兼容跳转到 /admin/organization | R:code:src/app/(app)/admin/organization/page.tsx | A:组织管理界面 | S:只做重定向，不鉴权也不渲染
+
+===E:/JXF-AI/src/app/(app)/pipelines/===
+PipelinesClient.tsx[EW8L]: F:自动化产线客户端，创建与启用产线、编辑步骤、手工运行、轮换或停用 Webhook 并配置事件订阅 | R:code:src/app/(app)/pipelines/actions.ts,code:src/lib/pipelines.ts | A:产线界面 | S:步骤可标记为可选；Webhook 轮换后旧地址立即失效，停用后不再接收事件
+actions.ts[AW8S]: F:产线 Server Actions，封装创建、启停、手工运行、Webhook 轮换与停用、事件订阅与失败通知 | R:code:src/lib/pipelines.ts,code:src/lib/pipelines-webhook.ts,code:src/lib/pipeline-events.ts | A:产线编排 | S:PipelineInputError 原样返回输入错误；权限拒绝统一经 toPermissionMessage；运行失败会触发通知
+page.tsx[EW6T]: F:自动化产线页面，按权限加载产线与运行记录、AI 员工选项和可订阅事件后交给客户端 | R:code:src/lib/pipelines.ts,code:src/lib/pipeline-events.ts,code:src/app/(app)/pipelines/PipelinesClient.tsx | A:产线界面 | S:force-dynamic；无有效任用时直接展示提示而不渲染产线
+
+===E:/JXF-AI/src/app/(app)/settings/===
+SettingsClient.tsx[EC8L]: F:平台设置客户端，编辑品牌、AI 模型 Key、邮件通知与审计留存，并触发连接测试与运维任务 | R:code:src/app/(app)/settings/actions.ts,code:src/lib/settings/types.ts,code:src/lib/ops/types.ts | A:平台设置界面 | S:空 API Key 表示保留已保存值，与 CLEAR_API_KEY 一致时清除；只有 L1 可见可改
+actions.ts[AC8M]: F:平台设置 Server Actions，保存品牌、AI、通知与审计留存配置，并测试连接、创建运维任务 | R:code:src/lib/settings/store.ts,code:src/lib/settings/ai.ts,code:src/lib/ops/tasks.ts,code:src/lib/notifications/mailer.ts | A:平台设置编排 | S:写入前必须 requireContextPermission；保存后刷新运行时设置缓存；密钥不回传明文
+page.tsx[EC7T]: F:平台设置页面，加载平台配置、生效 AI 摘要、交付状态与运维任务 | R:code:src/app/(app)/settings/SettingsClient.tsx,code:src/lib/settings/store.ts | A:平台设置界面 | S:force-dynamic；非 L1 只看到提示，不加载可编辑设置
+
+===E:/JXF-AI/src/app/(app)/settings/mcp/===
+ConnectorSection.tsx[EI7L]: F:MCP 连接器区块，管理服务注册、工具刷新、健康体检与工具调用 | R:code:src/app/(app)/settings/mcp/actions.ts,code:src/lib/mcp/connectors.ts | A:MCP 设置界面 | S:健康状态区分未体检、健康、降级与熔断；工具调用走服务端，不在浏览器直连
+McpClient.tsx[EI8L]: F:MCP 设置主客户端，汇总连接器、令牌管理、出站配置与工具审批 | R:code:src/app/(app)/settings/mcp/ConnectorSection.tsx,code:src/app/(app)/settings/mcp/TokenManager.tsx,code:src/lib/mcp/tokens.ts | A:MCP 设置界面 | S:审批状态分为待审批、已批准、已驳回与执行失败；令牌明文只在签发时展示一次
+McpDrawer.tsx[CU3T]: F:通用抽屉容器，提供遮罩点击关闭与对话框语义 | R:code:src/app/(app)/settings/mcp/McpClient.tsx | A:MCP 设置界面 | S:必须带 role=dialog 与 aria-modal，标题同时作为 aria-label
+OutboundPanel.tsx[EI6S]: F:MCP 出站配置面板，生成 WorkBuddy、Cursor、豆包、千问、Codex、Grok 等客户端的接入配置 | R:code:src/lib/mcp/clients.ts,code:src/lib/mcp/tokens.ts | A:MCP 设置界面 | S:服务名固定 jxf-workbench；配置中的令牌是占位符，必须由用户粘贴签发令牌
+TokenManager.tsx[EI7M]: F:MCP 令牌管理，列出、续期、吊销、删除令牌并清理无效令牌 | R:code:src/app/(app)/settings/mcp/actions.ts,code:src/lib/mcp/tokens.ts | A:MCP 设置界面 | S:令牌状态分为生效中、已关闭与已过期；列表每页 10 条
+TokenRevealModal.tsx[ES7S]: F:新令牌明文弹窗，强制确认已复制后才允许关闭 | R:code:src/app/(app)/settings/mcp/TokenManager.tsx | A:MCP 设置界面 | S:未点击复制时任何关闭入口都要二次确认；剪贴板受限时退回选区复制
+actions.ts[AI8M]: F:MCP 设置 Server Actions，处理服务注册与启停、工具刷新与调用、健康体检、令牌签发与吊销、审批决策 | R:code:src/lib/mcp/connectors.ts,code:src/lib/mcp/tokens.ts,code:src/lib/mcp/approvals.ts,code:src/lib/mcp/health.ts | A:MCP 设置编排 | S:明文令牌只在签发结果中返回一次；健康体检失败要触发告警通知
+page.tsx[EI7T]: F:MCP 设置页面，加载服务、工具、调用记录、令牌、审批与事件桥接，并推导接入端点 | R:code:src/app/(app)/settings/mcp/McpClient.tsx,code:src/lib/mcp/connectors.ts | A:MCP 设置界面 | S:本地开发端点固定 127.0.0.1 与 PORT，避免随 Host 头或代理变化
+
+===E:/JXF-AI/src/app/(app)/settings/permissions/===
+page.tsx[EI3T]: F:旧角色设置入口，兼容跳转到 /admin/permissions?tab=roles | R:code:src/app/(app)/admin/permissions/page.tsx | A:权限管理界面 | S:只做重定向，不鉴权也不渲染
+
+===E:/JXF-AI/src/app/(app)/skills/===
+SkillsClient.tsx[EE7L]: F:技能台客户端，按分类浏览技能、创建编辑与启停，并展示最近运行 | R:code:src/app/(app)/skills/actions.ts,code:src/lib/skills.ts | A:技能界面 | S:分类固定为创作、共用制作、专家、视频、知识库等枚举；无编辑权限时只读
+actions.ts[AE8M]: F:技能台 Server Actions，处理技能增删改与启停、运行、分发账号与任务、Meta 广告同步 | R:code:src/lib/skills.ts,code:src/lib/skills/distribute.ts,code:src/lib/skills/meta-ads.ts | A:技能编排 | S:SkillInputError 原样返回输入错误；权限拒绝统一经 toPermissionMessage；运行失败写日志
+page.tsx[EE6T]: F:技能台页面，按 skill:use 与 skill:edit 权限裁剪技能列表与编辑入口 | R:code:src/app/(app)/skills/SkillsClient.tsx,code:src/lib/skills.ts | A:技能界面 | S:force-dynamic；无有效任用或缺少 skill:use 时展示拒绝提示
+
+===E:/JXF-AI/src/app/(app)/skills/[key]/===
+DistributePanel.tsx[EE7L]: F:技能分发面板，维护平台账号与分组、创建分发任务、重试失败任务并轮换 runner 令牌 | R:code:src/app/(app)/skills/actions.ts,code:src/lib/skills/distribute.ts | A:技能界面 | S:平台固定为抖音、视频号、小红书等九项；runner 令牌轮换后旧令牌立即失效
+MetaPanel.tsx[EE7M]: F:Meta 广告技能面板，配置连接、同步草稿并确认、撑销或忽略草稿 | R:code:src/app/(app)/skills/actions.ts,code:src/lib/skills/meta-ads.ts | A:技能界面 | S:草稿状态分为待确认、执行中、已执行、失败与不做；执行前必须人工确认
+PromptPanel.tsx[EE7M]: F:提示词技能运行面板，填写业务素材后运行技能并展示最近输出 | R:code:src/app/(app)/skills/actions.ts,code:src/lib/skills.ts | A:技能界面 | S:输出默认优先展示最近一次成功运行的文本；表单字段为空时不提交
+page.tsx[EE7M]: F:技能详情页，按技能类型装配提示词、分发或 Meta 面板并加载运行记录 | R:code:src/lib/skills.ts,code:src/lib/skills/distribute.ts,code:src/lib/skills/meta-ads.ts | A:技能界面 | S:force-dynamic；技能不存在时返回 404
+
+===E:/JXF-AI/src/app/api/audit/export/===
+route.ts[EO7S]: F:审计导出接口，按类型与时间范围输出 JSONL 或 CSV，并做 CSV 公式注入防护 | R:code:src/lib/audit-export.ts,code:src/auth.ts | A:审计导出 | S:未登录返回 401；以 = + - @ 开头的单元格前置单引号；权限与可见范围由 exportAuditEvents 内校验
+
+===E:/JXF-AI/src/app/api/auth/[...nextauth]/===
+route.ts[EI7T]: F:NextAuth 路由入口，把 auth 配置的 GET 与 POST 处理器挂到 App Router | R:code:src/auth.ts | A:认证入口 | S:只做处理器再导出，不在此处写业务逻辑
+
+===E:/JXF-AI/src/app/api/chat/attachments/===
+route.ts[EB6S]: F:Agent 附件解析接口，接收 multipart 文件并返回可拼进提示词的纯文本，不落盘不入库 | R:code:src/lib/knowledge/parse.ts,code:src/lib/permissions/server.ts | A:附件解析 | S:单文件上限 10MB，单附件文本截断到 12000 字符并如实告知；附件属于本轮对话上下文，随 run 的 input 一起快照
+
+===E:/JXF-AI/src/app/api/handover/export/===
+route.ts[EW5T]: F:交接包导出接口，按 membershipId 返回可离线归档的 JSON 附件 | R:code:src/lib/handover/export.ts | A:交接导出 | S:membershipId 必须是 UUID；权限与数据范围都在 buildHandoverBundle 内按当前身份校验
+
+===E:/JXF-AI/src/app/api/health/live/===
+route.ts[OO6T]: F:存活探针，只证明进程可响应，不依赖数据库与对象存储 | R:code:src/app/api/health/route.ts | A:健康检查 | S:返回 no-store 并回写 x-request-id；就绪探针在 /api/health
+
+===E:/JXF-AI/src/app/api/health/===
+route.ts[OO7T]: F:就绪探针，执行数据库与依赖检查并按结果返回 200 或 503 | R:code:src/lib/health.ts | A:健康检查 | S:失败检查项会写 warn 日志；异常时返回 503 而不是抛出 500
+
+===E:/JXF-AI/src/app/api/knowledge/documents/[id]/===
+route.ts[EB6T]: F:原始文件下载接口，服务端转发对象存储并经过 RLS 与部门可见性校验 | R:code:src/lib/storage/local.ts,code:src/lib/db/user-context.ts | A:知识库下载 | S:越权与不存在统一返回 404，避免泄露文档存在性
+
+===E:/JXF-AI/src/app/api/knowledge/upload/file/===
+route.ts[EB7T]: F:逐文件入库接口，接收 multipart 文件并同步解析、分块、向量化后落库 | R:code:src/lib/knowledge/ingest.ts,code:src/lib/knowledge/folders.ts | A:知识库上传 | S:带 runId 追加到同一批次，不带则新建；单文件上限取 ingest 的 MAX_FILE_BYTES（20MB）；目录 key 必须通过 isFolderKey
+
+===E:/JXF-AI/src/app/api/knowledge/upload/===
+route.ts[EB6T]: F:批量文档入库接口，接收 files[] 与目标说明并返回每个文件的处置结论 | R:code:src/lib/knowledge/ingest.ts | A:知识库上传 | S:没有有效文件返回 400；权限拒绝统一转可读错误
+
+===E:/JXF-AI/src/app/api/mcp/===
+route.ts[EE8M]: F:MCP Hub 入口，以 Bearer 令牌认证并处理 tools/list 与 tools/call，每次调用都写审计 | R:code:src/lib/mcp/tokens.ts,code:src/lib/mcp/tools.ts,code:src/lib/mcp/approvals.ts,code:src/lib/audit.ts | A:MCP 服务 | S:令牌绑定任用，离岗即失效；tools/list 只返回 scope 内工具，tools/call 再校验一次；无状态不维护 Mcp-Session-Id
+
+===E:/JXF-AI/src/app/api/metrics/===
+route.ts[OO7S]: F:聚合指标端点，输出 JSON 或 Prometheus 文本形式的运行、工作项、运维、连接器与产线计数 | R:code:src/lib/db/pool.ts,code:db/migrations/0028_metrics.sql | A:可观测性 | S:只返回聚合计数不含明细；数据来自 SECURITY DEFINER 的 app.metrics_snapshot()，不受应用角色 RLS 部门范围影响；配置 METRICS_TOKEN 后要求 Bearer 认证
+
+===E:/JXF-AI/src/app/api/runs/[id]/cancel/===
+route.ts[ER7T]: F:运行中止接口，写入 cancel_requested_at 由 worker 感知并停止上游流 | R:code:src/lib/runtime/cancel.ts | A:运行时取消 | S:只接受同源请求，跨站返回 403；SSE 断开不触发中止，语义与关闭页面区分
+
+===E:/JXF-AI/src/app/api/runs/[id]/events/===
+route.ts[ER8M]: F:运行事件流接口，先用 SSE 推送 runs 快照，再按 after=seq 补发事件并持续推送增量 | R:code:src/lib/runtime/stream.ts,code:src/lib/permissions/server.ts | A:运行时事件流 | S:断线重连带 Last-Event-ID 即可续上；delta 不落事件表，只来自 worker 对 partial_text 的节流快照
+
+===E:/JXF-AI/src/app/api/runs/===
+route.ts[ER8S]: F:运行受理接口，校验同源、问题长度与附件后调用 acceptRun 创建运行 | R:code:src/lib/runtime/accept.ts,code:src/lib/permissions/server.ts | A:运行时受理 | S:问题上限 4000 字，附件最多 5 个、单个 12000 字、合计 30000 字；同源校验缺失 Origin 时交给会话 Cookie 兜底
+
+===E:/JXF-AI/src/app/api/webhooks/pipelines/[id]/===
+route.ts[EW8S]: F:产线外部 Webhook 触发入口，用每产线独立令牌鉴权后以发起人上下文运行产线 | R:code:src/lib/pipelines.ts,code:src/lib/pipelines-webhook.ts | A:产线 Webhook | S:库内只存令牌 SHA-256 并用恒定时间比较；请求体上限 64000 字节；令牌错误 401、产线不存在或未启用 404、停用或无发起人 409
+
+===E:/JXF-AI/src/app/===
+error.tsx[EO5T]: F:路由级错误边界，记录错误摘要并提供重试入口 | R:code:src/app/global-error.tsx | A:错误处理 | S:必须记录 digest 便于与服务器日志关联；不向用户暴露内部错误细节
+global-error.tsx[EO5T]: F:全局错误页，替换 root layout 渲染并自带 html 与 body | R:code:src/app/error.tsx | A:错误处理 | S:不依赖外部样式，全部内联，避免样式加载失败时页面不可读
+globals.css[CU7L]: F:全站样式基础，引入 Tailwind 并把旧项目变量与组件类别名映射到 Apple 风格设计令牌 | R:code:tailwind.config.ts,code:src/app/layout.tsx | A:全局样式 | S:品牌色由 root layout 注入 --brand-* 覆盖；旧 lx-* 类别只做兼容映射，新组件应使用设计令牌类
+layout.tsx[EC7T]: F:根布局，按数据库品牌生成元数据并把品牌色注入 CSS 变量 | R:code:src/lib/settings/store.ts,code:src/lib/settings/runtime-server.ts,code:src/app/globals.css | A:应用外壳 | S:force-dynamic；首个页面请求前要 ensureRuntimeSettings；品牌色已在服务端校验为 #RRGGBB 才可内联
+page.tsx[EU3T]: F:站点根路径，按登录状态跳转到 /chat 或 /login | R:code:src/auth.ts | A:入口跳转 | S:force-dynamic；只做重定向
+
+===E:/JXF-AI/src/app/health/===
+page.tsx[EO5T]: F:健康状态页面，调用就绪检查并展示实例信息与逐项结果 | R:code:src/lib/health.ts,code:src/app/api/health/route.ts | A:健康检查界面 | S:force-dynamic；检查抛错时展示 FAILED 而不是 500
+
+===E:/JXF-AI/src/app/login/===
+LoginForm.tsx[EI6T]: F:登录表单，提交账号密码并区分凭证错误与其他失败 | R:code:src/app/login/page.tsx,code:src/auth.ts | A:登录界面 | S:使用 signIn 的 redirect:false 形式；登录成功后跳转 /chat
+page.tsx[EI6T]: F:登录页面，按 reason 参数展示离职交接或停用提示并渲染登录表单 | R:code:src/app/login/LoginForm.tsx,code:src/lib/settings/store.ts | A:登录界面 | S:force-dynamic；reason 只识别 pending_handover 与 disabled 两个值
+
+===E:/JXF-AI/src/===
+auth.ts[RI9S]: F:Auth.js 配置，使用 Drizzle Adapter 与账号密码凭证登录，并在每次请求重新解析任用 | R:code:db/schema/index.ts,code:src/lib/auth/password.ts,code:src/lib/db/drizzle.ts,code:src/lib/audit.ts | A:认证 | S:会话策略为 JWT 且有效期 8 小时；离岗后下一次请求立即 0 行，不依赖 token 过期；secret 取 JXF_AUTH_SECRET
+instrumentation.ts[RO7T]: F:进程启动校验，非 Node 运行时跳过，环境变量不合法直接退出 | R:code:src/lib/env.ts,code:src/lib/logger.ts | A:进程启动 | S:Next 会吞掉 instrumentation 异常并继续监听端口，因此必须显式 process.exit(1) 保证 fail-closed
+middleware.ts[MO6T]: F:全局中间件，为每个请求生成或透传 x-request-id 并记录访问日志 | R:code:src/lib/logger.ts | A:可观测性 | S:跳过 _next/static、_next/image 与 favicon.ico；请求头与响应头都回写 request id
+
+===E:/JXF-AI/src/components/brand/===
+BrandMark.tsx[CU4T]: F:全站站点标识，组合品牌图形与站点名 | R:code:public/brand/fxf-mark.svg | A:品牌展示 | S:图形资源统一放 public/brand/，当前固定 fxf-mark.svg
+
+===E:/JXF-AI/src/components/knowledge/===
+EmptyState.tsx[CU3T]: F:空状态组件，统一渲染居中灰底提示 | R:code:src/components/knowledge/tokens.ts | A:知识库界面 | S:-
+EvidenceList.tsx[EB4T]: F:证据列表组件，逐条展示引文、文档标题、定位与核对状态 | R:code:src/components/knowledge/tokens.ts | A:知识库界面 | S:核对状态只有已核对与未核对两种；缺失标题或定位用占位文案
+Field.tsx[CU3T]: F:表单字段容器，统一 label 排版，控件由调用方传入 | R:code:src/components/knowledge/tokens.ts | A:知识库界面 | S:-
+InlineMessage.tsx[CU4T]: F:操作回执提示条，按信息或错误语义渲染并自动播报给读屏器 | R:code:src/components/knowledge/tokens.ts | A:知识库界面 | S:error 使用 role=alert，info 使用 role=status
+Pill.tsx[CU3T]: F:胶囊标签，状态徒章与选中态共用 | R:code:src/components/knowledge/tokens.ts | A:知识库界面 | S:active 优先于 tone，选中态固定蓝色
+SectionCard.tsx[CU4T]: F:通用卡片容器，提供标题行、计数徒章与说明 | R:code:src/components/knowledge/tokens.ts | A:知识库界面 | S:传入 right 时忽略 count
+StatTile.tsx[CU4T]: F:统计条单格，展示标签、数值与阈值提示，色调只影响描边和数值颜色 | R:code:src/components/knowledge/StatBar.tsx | A:知识库界面 | S:无 tone 时使用中性灰描边
+tokens.ts[CU7T]: F:知识库 UI 设计令牌，集中导出 Tailwind 工具类字符串与色调映射 | R:code:src/components/knowledge/SectionCard.tsx,code:src/app/globals.css | A:设计令牌 | S:只含样式常量不含业务逻辑；input 自带 w-full，需要自定义宽度时必须改用 inputInline，否则 w-auto 会被覆盖
+
+===E:/JXF-AI/src/components/permissions/===
+Can.tsx[CI5T]: F:权限门控组件，有权限才渲染 children，否则渲染 fallback | R:code:src/components/permissions/usePermission.ts,code:src/lib/permissions/snapshot.ts | A:权限展示 | S:客户端判定只用于隐藏入口，不能替代服务端守卫
+PermissionProvider.tsx[CI6T]: F:权限快照上下文提供者，把服务端注入的只读快照下发给客户端组件 | R:code:src/components/permissions/usePermission.ts,code:src/lib/permissions/snapshot.ts | A:权限展示 | S:客户端只读快照，不请求也不推导等级；权限变更依赖服务端重新渲染 layout
+usePermission.ts[CI6T]: F:权限上下文与消费 Hook，暴露快照、等级、can 与 check | R:code:src/components/permissions/PermissionProvider.tsx,code:src/lib/permissions/snapshot.ts | A:权限展示 | S:必须在 PermissionProvider 内使用，否则抛错
+
+===E:/JXF-AI/src/components/shell/===
+CommandPalette.tsx[EU6M]: F:全局命令面板，按关键词搜索跳转入口，并按权限与等级过滤结果 | R:code:src/components/permissions/usePermission.ts,code:src/components/shell/Shell.tsx | A:应用导航 | S:无对应权限的条目不进入搜索结果；仅指定等级可见的条目（如权限管理）只对 L1 展示
+DepartmentSwitcher.tsx[EI6T]: F:部门上下文切换器，多任用用户单选即提交切换 | R:code:src/app/(app)/actions.ts | A:应用导航 | S:只有一个任用时直接不渲染；Cookie 由服务端写入并校验，客户端无法越权切换
+ProfileMenu.tsx[EU5S]: F:用户菜单，展示邮箱与等级并按权限提供个人资料、组织、设置与退出入口 | R:code:src/lib/auth/actions.ts,code:src/components/permissions/usePermission.ts | A:应用导航 | S:点击外部或按 Escape 关闭；个人资料与组织入口分别受 profile:view_self 与 org:view 控制
+Shell.tsx[EU8M]: F:应用外壳导航，按权限渲染侧栏入口、待办角标、部门切换、用户菜单与命令面板 | R:code:src/components/shell/CommandPalette.tsx,code:src/components/shell/DepartmentSwitcher.tsx,code:src/components/permissions/usePermission.ts | A:应用导航 | S:每个导航入口由 can() 控制显隐；小屏用抽屉，大屏用固定侧栏
+
+===E:/JXF-AI/src/components/ui/===
+collapsible.tsx[CU4T]: F:折叠分组组件，提供标题行、统一箭头与内容区 | R:code:src/components/ui/icons.tsx | A:UI 基础组件 | S:箭头只能来自 ui/icons 的 ChevronIcon，禁止使用 ⌄、▸ 或原生 details 三角
+confirm-dialog.tsx[CU6T]: F:全局确认弹窗，支持标题、说明、附加表单、危险样式与待处理态 | R:code:src/app/(app)/admin/organization/MembersTab.tsx | A:UI 基础组件 | S:必须替代 window.confirm/alert/prompt；原生阻塞弹窗在 Electron 或 IDE 内置浏览器中会让宿主主线程假死
+icons.tsx[CU6M]: F:全局图标出口，统一封装 lucide 图标并导出带默认尺寸的组件 | R:code:src/components/shell/Shell.tsx | A:UI 基础组件 | S:全站图标只能从这里取，禁止页面内直接引 lucide 或写字符图标
+notice-bar.tsx[CU4T]: F:全局提示条，按信息或错误语义展示并提供关闭按钮 | R:code:src/components/ui/icons.tsx | A:UI 基础组件 | S:关闭图标必须用 CloseIcon，禁止写 × 字符
+select.tsx[CU5T]: F:全局下拉框组件，原生 select 去箭头后叠放统一 Chevron 图标 | R:code:src/components/ui/icons.tsx | A:UI 基础组件 | S:业务中的 select 必须走本组件，禁止各页面自定义样式
+switch.tsx[CU5T]: F:全局开关组件，iOS 风格并提供 role=switch 语义 | R:code:src/app/(app)/admin/permissions/TemplatePanel.tsx | A:UI 基础组件 | S:label 必填；所有开关必须使用本组件
+toast.tsx[CU6S]: F:全局轻提示，悬浮顶部居中展示并在 3 秒后淡出 | R:code:src/app/(app)/settings/mcp/TokenManager.tsx | A:UI 基础组件 | S:空消息直接忽略；点击立即消失，不占布局空间
+
+===E:/JXF-AI/src/lib/===
+ai-employees.ts[DB8L]: F:AI 员工目录与授权，负责创建、更新、启停、部门与个人授权以及可见性查询 | R:code:db/policies/020_ai_employee_visibility.sql,code:src/lib/skills.ts,code:src/lib/audit.ts | A:AI 员工领域 | S:可见性完全由 RLS 决定，未授权者连名称与描述都拿不到；目录与授权增删改仅 L1；新建时自动给创建者一条个人 manage 授权；员工自身不携带数据权限，运行时继承调用者上下文
+audit-export.ts[DO7S]: F:审计导出服务，按类型与时间范围读取审计事件并写一条 audit.exported 留痕 | R:code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:审计领域 | S:需要 audit:read；数据范围由 audit_events 的 RLS 决定（L1 全量、L2 子树、L3 本人）；最大 50000 条，默认 10000；只读不修改审计记录
+audit.ts[PO8T]: F:审计写入，支持在业务事务内写审计与独立连接写审计两种入口 | R:code:db/schema/audit-events.ts,code:src/lib/db/pool.ts | A:审计持久化 | S:auditInTx 与业务写入同生共死；审计事件按租户与部门上下文写入，部门为空的事件仅用于登录等全局动作
+env.ts[CC9M]: F:启动期环境变量校验，统一解析数据库、S3、AI、Embedding、OCR、MCP、邮件与运行时配置 | R:code:src/instrumentation.ts,code:src/lib/settings/runtime.ts | A:配置 | S:JXF_AUTH_SECRET 缺失或过短必须拒绝启动，不允许降级放行；AI 缺失不拒绝启动，无 Key 时检索降级为 pg_bigm 纯关键词；结果带缓存供健康检查与连接池复用
+health.ts[OO7S]: F:就绪检查，验证数据库扩展、迁移版本与关键依赖并输出逐项结果 | R:code:src/lib/db/pool.ts,code:src/lib/env.ts | A:可观测性 | S:必需扩展为 vector、pg_bigm、pg_trgm；任一检查 error 即整体 degraded
+logger.ts[OO6T]: F:结构化日志，单行 JSON 输出并按 JXF_LOG_LEVEL 控制级别 | R:code:src/lib/env.ts | A:可观测性 | S:私有化现场统一按 request_id 或 run_id 检索；禁止输出明文密钥；error 写 stderr
+pipeline-events.ts[DW8M]: F:产线内部事件总线，发布事件、维护订阅并在 runner 周期分发时以发起人身份运行产线 | R:code:src/lib/pipelines.ts,code:src/lib/pipeline-runner.ts,code:src/lib/audit.ts | A:产线领域 | S:生产者只调用 app.publish_event() 追加事件；每个产线每类事件一条订阅；事件最多尝试 3 轮，失败原因写 last_error 避免坏订阅无限重试
+pipeline-runner.ts[DW8M]: F:产线推进器，在每步结束后按上一步状态派发下一步、跳过可选步骤或标记整条产线失败 | R:code:src/lib/pipelines.ts,code:src/lib/work-items.ts,code:src/lib/knowledge/experience/collectors.ts | A:产线领域 | S:运行在 owner 连接上读取状态，但真正派活仍走 assignWork（jxf_app + RLS）并使用发起人上下文；{{previous}} 替换为上一步交付文本且截断到 1500 字；上一步仍在 queued/running 时本轮不动
+pipelines-webhook.ts[DW8S]: F:产线外部 Webhook 令牌签发、轮换、停用与校验，库内只存 SHA-256 哈希 | R:code:src/lib/pipelines.ts,code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:产线领域 | S:令牌只在生成时返回一次，库内保存哈希与末 4 位提示；校验使用 timingSafeEqual；查库走 SECURITY DEFINER 的 app.pipeline_webhook_lookup()，路由不需要用户会话也读不到其它产线
+pipelines.ts[DW8L]: F:自动化产线领域，负责定义、启停、手工运行、步骤快照与运行记录查询 | R:code:src/lib/work-items.ts,code:src/lib/knowledge/experience/collectors.ts,code:src/lib/audit.ts | A:产线领域 | S:产线不新增执行引擎，每一步复用 assignWork 生成 work_item 与 kind=task 的 run；运行一次只派第一步，之后由上一步结果驱动；某步失败停止后续，标记 optional 的步骤失败则跳过；触发方式为 manual/schedule/webhook/event，定时按间隔分钟数由 runner 发起
+skills.ts[DE8L]: F:技能注册表与执行记录，负责技能增删改、启停、选项装配与提示词技能运行 | R:code:src/lib/ai/openai.ts,code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:技能领域 | S:skills 是唯一真相源，内置技能 tenant_id 为 null、租户自建技能按租户隔离；department_packs.skill_ids 与 ai_employees.skill_keys 写入前必须过 assertSkillKeys，禁止悬空字符串；执行记录与业务写入同事务落库，失败不伪造成功
+work-items.ts[DW8L]: F:AI 员工派活，创建与列出工作项、派发运行时任务并处理人工或自动验收 | R:code:src/lib/ai-employees.ts,code:src/lib/runtime/accept.ts,code:src/lib/knowledge/experience/capture.ts,code:src/lib/audit.ts | A:工作项领域 | S:AI 员工是执行体不提供对话；派发仅 L1 或部门负责人 L2；一次派发等于 work_item 加 kind=task 的 run，执行、事件与用量全部复用运行时；交付物默认人工验收，自动验收门槛在派发时快照进工作项，未达标仍转人工
+
+===E:/JXF-AI/src/lib/ai/===
+ocr.ts[IA7S]: F:扫描件 OCR，调用 Gemini 视觉接口把 PDF 与图片转成逐页文本 | R:code:src/lib/env.ts,code:src/lib/logger.ts | A:AI 集成 | S:任何失败都返回 null，由调用方标记 needs_ocr 并回落人工补录，不写残缺结果；只接受 PDF 与 png/jpeg/webp；日志只记模型、字节数与错误摘要，不打印文档内容与 Key
+openai.ts[IA8L]: F:AI 出口模块，封装 OpenAI 兼容的对话、嵌入与详细调用，并在瞬时故障时指数退避与切换备用节点 | R:code:src/lib/env.ts,code:src/lib/settings/runtime.ts,code:src/lib/logger.ts | A:AI 集成 | S:无 Key 或调用失败一律返回 null，由调用方降级（检索退化为 pg_bigm 关键词、问答拒绝生成）；禁止在此抛错打断入库；可重试状态为 408/425/429/500/502/503/504 与网络层失败
+
+===E:/JXF-AI/src/lib/auth/===
+actions.ts[EI5T]: F:退出登录 Server Action，调用 signOut 并重定向到登录页 | R:code:src/auth.ts,code:src/components/shell/ProfileMenu.tsx | A:认证 | S:-
+password.ts[DS7T]: F:口令哈希与校验，使用 Node 内置 scrypt 并按固定参数生成与比对 | R:code:src/auth.ts,code:src/app/(app)/me/profile/actions.ts | A:认证安全 | S:存储格式固定为 scrypt$N$r$p$saltBase64$keyBase64；参数 N=16384、r=8、p=1、密钥 64 字节；校验用 timingSafeEqual
+session.ts[MI8T]: F:服务端会话校验，要求登录并检查账号状态，未登录或非 active 直接跳转登录页 | R:code:src/auth.ts,code:src/lib/db/pool.ts | A:认证 | S:同一请求内用 React cache 复用账号状态查询；非 active 状态以 reason 参数跳转登录页
+
+===E:/JXF-AI/src/lib/db/===
+drizzle.ts[PD5T]: F:Drizzle 客户端工厂，基于共享连接池懒加载实例 | R:code:src/lib/db/pool.ts,code:drizzle.config.ts | A:数据访问 | S:懒加载，避免构建期要求数据库环境变量
+pool.ts[PD8T]: F:应用连接池，使用受限业务角色连接并设置超时与错误日志 | R:code:src/lib/env.ts,code:src/lib/db/user-context.ts | A:数据访问 | S:只能使用 jxf_app 等受限业务角色，禁止 owner 或 superuser；连接上限 10、空闲 30s、连接与查询超时均为 3s；业务查询必须通过事务加 SET LOCAL 注入身份
+user-context.ts[MI9M]: F:用户上下文解析与 RLS 注入，装配任用、部门子树、等级与权限版本并提供 withUserContext | R:code:db/schema/memberships.ts,code:src/lib/db/pool.ts,code:src/lib/permissions/catalog.ts | A:数据访问 | S:上下文 Cookie 为 jxf_active_department；L1 的 departmentIds 与 subtreeDepartmentIds 为全租户部门，L2/L3 仅当前部门子树；所有业务查询必须在 withUserContext 内以 SET LOCAL 注入 app.* 变量
+
+===E:/JXF-AI/src/lib/handover/===
+adapters.ts[IW7S]: F:资产交接适配器，按表与列是否存在探测资产并给审批通过时的转移能力 | R:code:src/lib/handover/registry.ts | A:交接集成 | S:采用表/列存在才生效的探测方式，表不存在时返回空列表，移出流程不受影响；建表后无需改审批状态机
+export.ts[DW7M]: F:交接包导出，汇总成员资料、资产、工作项与 MCP 令牌成可离线归档的 JSON | R:code:src/lib/handover/registry.ts,code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:交接领域 | S:需要 member:manage 且只能在目标任用可见范围内导出；资产通过既有适配器汇总，不另建资产清单；导出不会绕过 RLS
+registry.ts[DW6T]: F:交接适配器注册表，汇总成员名下待交接资产并按类型分组 | R:code:src/lib/handover/adapters.ts | A:交接领域 | S:新增资产类型只需实现 AssetAdapter 并加入 HANDOVER_ADAPTERS，移出流程与审批状态机无需改动
+
+===E:/JXF-AI/src/lib/knowledge/===
+card-evidence.ts[DB7M]: F:卡片证据链编辑，从文档切片挑选原文并逐字核对后挂到知识卡上 | R:code:src/lib/knowledge/evidence.ts,code:src/lib/permissions/server.ts | A:知识库领域 | S:引文必须能在切片原文中逐字命中，对不上就拒绝落库；文档、切片与卡片都经 RLS 过滤，写操作再叠加 knowledge:write；只允许 verified=true 的证据
+cards.ts[DB8L]: F:知识卡生命周期，覆盖人工建卡、蒸馏与巡读生成、编辑、确认、丢弃、批量决策、换目录与筛选 | R:code:src/lib/knowledge/experience/dedupe.ts,code:src/lib/knowledge/experience/feedback.ts,code:src/lib/knowledge/folders.ts | A:知识库领域 | S:确认门槛在服务端重新校验：仍 pending、无冲突、未过期、人工编辑过或至少一条已核对证据、目录已裁决；批量操作一律逐卡调用单卡服务，禁止一条 UPDATE ... WHERE id = ANY
+chunk.ts[KB7T]: F:文档分块，把分页文本切成带绝对偏移、不跨页且可回溯的证据片段 | R:code:src/lib/knowledge/ingest.ts | A:知识库算法 | S:charStart/charEnd 是规范化全文的绝对偏移，证据链按此区间逐字校验；块上限 900 字、下限 300、重叠 80；不使用中文分词，检索由 pg_bigm 负责
+distill.ts[DA8L]: F:文档蒸馏，调用 AI 从切片生成待确认知识卡并做逐字证据校验、冲突检测与目录路由 | R:code:src/lib/ai/openai.ts,code:src/lib/knowledge/evidence.ts,code:src/lib/knowledge/experience/routing.ts,code:src/lib/permissions/server.ts | A:知识库领域 | S:没有 AI 就明确拒绝不伪造卡片；证据引文必须逐字命中，对不上的丢弃；一条证据都没有的候选不入库；同部门同一件事但数字不同标冲突且冲突卡不可确认；蒸馏多卡不写 source_document_id，改用 source_ref.documentId 与 dedupe_key
+evidence.ts[KB7S]: F:证据核对算法，抹平空白、全半角与标点差异后逐字比对并映射回原文字符区间 | R:code:src/lib/knowledge/card-evidence.ts,code:src/lib/knowledge/distill.ts | A:知识库算法 | S:只归一化写法差异，不做模糊匹配，对不上就是不对上；命中后必须能映射回切片原文的绝对区间
+folders.ts[CB7T]: F:知识库目录常量，定义 10 个标准业务目录、文档与卡片默认目录及 key 校验 | R:code:src/lib/knowledge/workspace.ts,code:src/lib/knowledge/experience/routing.ts | A:知识库基础 | S:key 落库、label 只用于展示；目录是规范视图不是真实文件夹表，空目录也会常驻
+gaps.ts[DB6S]: F:知识缺口，问答未命中时自动沉淀并支持手动记录、关闭与重开 | R:code:db/schema/knowledge.ts,code:src/lib/audit.ts | A:知识库领域 | S:状态为 open/answered/closed；来源为 manual/qa_miss/expired；追问次数由 qa_logs.gap_id 关联统计
+ingest.ts[DB8L]: F:入库流水线，完成上传、规则筛、解析、分块、向量化与落库 | R:code:src/lib/knowledge/parse.ts,code:src/lib/knowledge/chunk.ts,code:src/lib/ai/openai.ts,code:src/lib/ai/ocr.ts,code:src/lib/storage/local.ts | A:知识库领域 | S:解析、向量化与对象存储都在事务外完成，事务内只做去重与写入以避免长事务持锁；embedding 失败不阻断入库，切片保留空向量；扫描件落 needs_ocr 且不生成切片；单文件上限 20MB，单批次最多 20 个文件
+ocr.ts[DB7M]: F:扫描件补录，把 OCR 正文按页标记重建为切片并重新向量化 | R:code:src/lib/knowledge/chunk.ts,code:src/lib/ai/openai.ts,code:src/lib/ai/ocr.ts | A:知识库领域 | S:只允许待 OCR 或解析失败的文档补录，绝不覆盖已解析文档；补录后重建切片并重新向量化，向量失败不阻断；分页只认【第 N 页】标记，没有标记视为一页
+parse.ts[IB7T]: F:文档解析，把 PDF、DOCX 与文本类文件转成分页文本并如实标记是否需要 OCR | R:code:src/lib/knowledge/ingest.ts | A:知识库解析 | S:解析不出文字必须标 needs_ocr 或 failed，不假装读过；图片只接受 png/jpeg/webp；不支持的类型抛 UnsupportedDocumentError
+qa.ts[DA8M]: F:单轮 RAG 问答，混合检索已确认卡片后生成带编号引用的答案并做引用与数字校验 | R:code:src/lib/ai/openai.ts,code:src/lib/knowledge/evidence.ts,code:src/lib/permissions/server.ts | A:知识库领域 | S:只召回已确认卡片；没命中就如实说没查到并沉淀缺口；编号必须落在本轮召回集合内，否则记 invalid_cites；数字必须能在卡片正文或证据原文找到，否则记 unverified_numbers；未配置 AI 时只返回检索结果
+regression.ts[DQ7M]: F:检索回归门禁，用已确认卡标题生成基线题，改动分块或向量模型后验证召回没有退化 | R:code:src/lib/ai/openai.ts,code:src/lib/audit.ts | A:知识库领域 | S:每题保留率等于基线卡与召回卡交集除以基线卡数；保留率低于 0.9 或任一道未通过整轮判失败；题集最多 50 道
+share.ts[DS7M]: F:公司共享审批，处理文档与知识卡进入共享区前的申请、审批、收回与撤回 | R:code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:知识库领域 | S:visibility 只有 L1 审批通过后才允许变成 shared，申请期间保持 department 且不进入公共检索；L1 本人操作视为直接通过；收回或撤回后一律回到 department 并清空申请字段
+stats.ts[DB6S]: F:知识库统计聚合（只读），统计文档、切片、卡片、冲突、缺口、问答与回归结果 | R:code:src/lib/knowledge/workspace.ts,code:src/components/knowledge/StatBar.tsx | A:知识库领域 | S:所有计数必须在 withUserContext 的 jxf_app 连接内执行由 RLS 兜底，不能换成 owner 连接否则会算进兄弟部门数据；知识单元等于已解析文档加已确认卡片
+trash.ts[DB7M]: F:回收站，处理文档软删与还原、卡片作废后还原、彻底删除与清空 | R:code:src/lib/audit.ts,code:src/lib/storage/local.ts,code:src/lib/permissions/server.ts | A:知识库领域 | S:全部在 withUserContext 内执行，写范围只由 app.can_write 决定；彻底删除只对回收站内的行生效（文档 deleted_at 非空或卡片 status=dropped）；磁盘清理由事务提交后执行，失败只记日志不回滚数据库删除
+upload-target.ts[DI7S]: F:上传目标预填，把目录点击解析成部门、岗位、目录与共享范围并做权限校验 | R:code:src/lib/knowledge/folders.ts,code:src/lib/db/user-context.ts | A:知识库领域 | S:L1 可预填任意部门，L2 与普通成员只能预填当前部门且跨部门必须明确拒绝而不能静默回落；岗位必须是该部门在职岗位；公司资料共享的归属部门仍是上传者当前部门，非 L1 需 L1 审批后才真正共享
+workspace.ts[DB7L]: F:知识库工作区只读查询，组装共享区与部门、岗位、标准目录树并加载文档、卡片、图谱与检索 | R:code:src/lib/knowledge/cards.ts,code:src/lib/knowledge/folders.ts,code:src/lib/knowledge/share.ts | A:知识库领域 | S:全部在 withUserContext 内执行，隔离只由 RLS 决定；除 setDocumentVisibility 外均为只读；目录树按共享区、部门、岗位、10 个标准目录组装，空目录也常驻
+
+===E:/JXF-AI/src/lib/knowledge/experience/===
+capture.ts[DB8M]: F:经验采集入口，按去敏、截断、指纹、冷却与去重、限流顺序把来源写入经验 job 队列 | R:code:src/lib/knowledge/experience/fingerprint.ts,code:src/lib/knowledge/experience/dedupe.ts,code:src/lib/knowledge/experience/redact.ts,code:src/lib/knowledge/experience/truncate.ts | A:经验沉淀 | S:来源文本不足 200 字不采；指纹不含 channel，跨通道同一故障只做 related_job_id 关联；手动通道用 manual:<uuid> 桶，绕过冷却与滑动窗口但仍计配额；限流不拒绝入队，只把 not_before 推到下一小时
+collectors.ts[DW7S]: F:通道适配器，把产线终态整理成来源文本并入队经验 | R:code:src/lib/knowledge/experience/capture.ts,code:src/lib/pipeline-runner.ts | A:经验沉淀 | S:只读产线与工作项，不直接写卡；交付摘要截断到 800 字；来源文本必须包含失败步骤原文与验收备注，供模型引用为逐字证据
+dedupe.ts[KB7S]: F:去重与冷却纯函数，提供字符 shingle 的 Jaccard 相似度、冷却桶、手动桶与去重键 | R:code:src/lib/knowledge/evidence.ts | A:经验沉淀 | S:相似度 ≥0.92 合并、0.85 到 0.92 只标疑似；冷却桶统一 UTC YYYYMMDDHH24；numSignature 必须保留 titleKey 抹掉的数字，避免第 2 步失败与第 3 步失败被合并
+feedback.ts[DB6T]: F:目录路由纠偏样本写入，确认记 accepted、改目录记 overridden 或 pending_resolved | R:code:db/schema/experience.ts,code:src/lib/knowledge/cards.ts | A:经验沉淀 | S:只存规则命中特征，不存完整原文；离线统计纠偏率，不做在线自动学习
+fingerprint.ts[KB7T]: F:结构化指纹，抹掉 UUID、时间戳、请求 ID 与临时路径后生成稳定 hash | R:code:src/lib/knowledge/evidence.ts,code:src/lib/knowledge/experience/capture.ts | A:经验沉淀 | S:必须保留错误码、步骤名、状态码与异常类型，否则不同故障会被误判为重复；指纹包含租户与部门、不含 channel
+process.ts[DA8L]: F:经验提炼管线，LLM 生成候选卡后逐字校验引文、目录路由、冲突检测并写 pending 卡与 run 证据 | R:code:src/lib/ai/openai.ts,code:src/lib/knowledge/evidence.ts,code:src/lib/knowledge/experience/queue.ts,code:src/lib/knowledge/experience/routing.ts | A:经验沉淀 | S:没有 AI 就 skipped 不写占位卡；每条证据必须在去敏后的完整来源文本里逐字命中；一条证据都没有的候选不入库；经验卡只接受 case/viewpoint/fact，其他类型降级为 fact；已确认卡不被覆盖，人工编辑过的 pending 卡不被自动改写；每日最多 50 张卡、每 job 最多 3 个候选
+queue.ts[MR8M]: F:经验队列的 worker 侧操作，提供领取、心跳、巡检回收、延后、完成与失败进入死信 | R:code:src/lib/runtime/claim.ts,code:db/schema/experience.ts | A:经验沉淀 | S:只允许 app_worker 连接调用；SKIP LOCKED + 租约 90s + 30s 心跳；崩溃（租约过期）只回队列不计失败次数；失败 3 次进 dead
+redact.ts[DS8T]: F:去敏函数，按字段语义与值类型替换密钥、令牌、手机号、邮箱、证件与银行卡 | R:code:src/lib/knowledge/experience/capture.ts | A:经验沉淀 | S:保留字段名、URL 的 host/path、状态码、错误类型等技术信息；只去敏一次并在 LLM 输入、证据校验与人工工作台三处复用
+routing.ts[KB7M]: F:目录语义路由纯函数，按人工选择、来源目录、通道、内容规则与默认值决定卡片归档目录 | R:code:src/lib/knowledge/folders.ts,code:src/lib/knowledge/experience/process.ts | A:经验沉淀 | S:只有多个目录同分才标记 route_pending 要求人工裁决；无信号时按 02-cards 落地；置信度阈值 0.7
+truncate.ts[KB7S]: F:智能截断，先抽关键段再按头三成、关键段四成、尾三成拼装来源文本 | R:code:src/lib/knowledge/experience/capture.ts | A:经验沉淀 | S:禁止从中间粗暴切断，按行边界对齐；相邻重复行折叠并标注次数；上限按字符数而非字节，默认 12000 字
+
+===E:/JXF-AI/src/lib/mcp/===
+approvals.ts[DI8M]: F:MCP 逐工具审批闸门，命中的写类工具先落待审批单，由 L1 批准或驳回后按令牌绑定任用执行 | R:code:src/lib/mcp/tools.ts,code:src/lib/mcp/tokens.ts,code:src/lib/audit.ts | A:MCP 治理 | S:只有 L1（platform:settings）能批准或驳回；批准后按令牌绑定任用身份执行；离职任用审批后也无法执行，resolve 失败即拒绝
+clients.ts[CI5T]: F:MCP 客户端标识常量，声明 6 个受支持客户端的 key、标签与归一化函数 | R:code:src/lib/mcp/tokens.ts | A:MCP 基础 | S:前后端共用，禁止引入任何 server-only 依赖
+connectors.ts[IN8L]: F:外部 MCP 连接器管理，支持 http/stdio/sse 三种传输的注册、启停、工具刷新与调用 | R:code:src/lib/mcp/ssrf.ts,code:src/lib/permissions/server.ts,code:src/lib/audit.ts | A:MCP 集成 | S:仅 L1 可管理；http 连接器必须通过 SSRF 校验且拒绝跟随重定向；stdio 只允许 MCP_STDIO_ALLOWED_COMMANDS 白名单内的可执行文件且不使用 shell；每次调用写 mcp_server_calls，既是审计也是每分钟限流账本
+health.ts[OO7M]: F:MCP 连接器心跳体检，驱动 unknown、healthy、degraded、down 状态机并在迁移时写审计 | R:code:src/lib/mcp/connectors.ts,code:src/lib/audit.ts | A:MCP 可观测性 | S:连续失败 1 到 2 次为 degraded 仍参与运行，连续失败 3 次为 down 且运行时跳过；体检只更新健康列，不改 tools_cache 与 allowed_tools
+ssrf.ts[MS8S]: F:MCP 连接器的 SSRF 防护，解析域名后拒绝内网、回环、链路本地与保留地址 | R:code:src/lib/mcp/connectors.ts | A:MCP 安全 | S:只允许 http/https 且禁止 URL 内嵌账号密码；内网主机必须显式列入 MCP_TRUSTED_HOSTS；调用方必须禁止跟随重定向，避免 302 绕过校验
+tokens.ts[DI8L]: F:MCP 令牌签发、列表、续期、吊销与外部请求解析，令牌绑定任用与六维 scope | R:code:src/lib/mcp/clients.ts,code:src/lib/mcp/tools.ts,code:src/lib/audit.ts,code:src/lib/db/user-context.ts | A:MCP 治理 | S:明文只在签发时返回一次，库里只有 sha256；令牌绑定任用，离岗、停用、过期、吊销任一成立即失效；解析出的上下文按任用计算，L1 也不因令牌扩大范围
+tools.ts[DB8M]: F:MCP 工具注册表与六维 scope 判定，定义工具可见性、可调用性与审批要求 | R:code:src/lib/mcp/tokens.ts,code:src/lib/ai-employees.ts,code:src/lib/work-items.ts,code:src/lib/knowledge/qa.ts | A:MCP 治理 | S:六维为 skills、pipelines、tools、allowWrite、approvalTools、channels，空数组表示不额外限制；工具可见性与可调用性都由令牌 scope 决定；工具内部以令牌绑定任用身份执行，权限点与 RLS 照常校验；不读取客户端传来的部门或用户参数
+worker-tools.ts[IE8M]: F:worker 侧 MCP 工具计划与执行，从连接器快照生成工具定义并在调用时写运行审计与连接器账本 | R:code:src/lib/mcp/connectors.ts,code:src/lib/ai/openai.ts,code:src/lib/logger.ts | A:MCP 集成 | S:worker 只读 mcp_servers 快照，不碰业务表；员工 allowedTools 条目形如 mcp:<serverId>:<toolName>，模型看到的是单段别名；每次调用写 tool_calls 与 mcp_server_calls
+
+===E:/JXF-AI/src/lib/notifications/===
+events.ts[DM6S]: F:通知模板，把连接器异常与恢复、运维任务失败、产线失败事件转成纯文本邮件 | R:code:src/lib/notifications/mailer.ts | A:通知领域 | S:发送失败不上抛，避免影响心跳、runner 与业务主链路；主题前缀固定 [Jxf-AI]
+mailer.ts[IM7M]: F:SMTP 邮件通知，配置以设置面优先、环境变量兜底，并支持注入 transport | R:code:src/lib/settings/crypto.ts,code:src/lib/db/pool.ts | A:通知集成 | S:口令与模型 Key 一样加密入库；未配置时安静 skipped 不阻断业务；发送失败只落 warn 日志
+
+===E:/JXF-AI/src/lib/ops/===
+tasks.ts[DO7S]: F:运维任务领域层，L1 落单 backup 或 restore_verify 任务并查询状态 | R:code:src/lib/ops/types.ts,code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:运维领域 | S:Web 容器不持有 docker 权限，只落单，执行由宿主机 runner 完成；任务类型固定为 backup 与 restore_verify，参数只允许 cold 布尔值，不接受任意命令
+types.ts[CO4T]: F:运维任务共享类型与中文标签，客户端可安全导入 | R:code:src/lib/ops/tasks.ts | A:运维基础 | S:不含 Node 与数据库依赖
+
+===E:/JXF-AI/src/lib/org/===
+slug.ts[KI4T]: F:部门名称转拼音 slug，供内部唯一标识使用 | R:code:src/app/(app)/admin/organization/actions.ts | A:组织算法 | S:纯符号或空名称兜底为 dept，唯一性由调用方追加递增后缀；仅内部使用不出现在 UI
+
+===E:/JXF-AI/src/lib/permissions/===
+authorize.ts[DI9S]: F:单次动作判定纯函数，按等级上限、授权 Scope 与保护区能力决定是否放行 | R:code:src/lib/permissions/catalog.ts,code:src/lib/permissions/ceiling.ts,code:src/lib/permissions/scope.ts,code:src/types/permission.ts | A:权限领域 | S:调用方必须传入已从数据库读出的资源，不能把客户端参数当作用域依据；非 ALL 作用域必须传 resource；这是纯函数不访问数据库，服务端守卫在 guard.ts
+catalog.ts[CI9L]: F:权限目录唯一真相源，声明模块、权限节点、保护能力、等级上限与默认模板 | R:code:src/lib/permissions/scope.ts,code:src/types/permission.ts | A:权限基础 | S:等级只是上限不是权限集合；每个节点必须声明允许的 Scope，写类动作禁止 DEPT_TREE；保护区能力不在目录里且永远只绑定 L1；未启用模块只保留模块位不创建节点
+ceiling.ts[DI7T]: F:等级上限查询，返回 L1/L2/L3 各自最多可拥有的权限节点 | R:code:src/lib/permissions/catalog.ts | A:权限领域 | S:上限是硬规则，任何用户级授权都不能突破
+grant.ts[DI8T]: F:授权上限校验，判断操作者能否把指定节点与 Scope 授予目标成员 | R:code:src/lib/permissions/catalog.ts,code:src/lib/permissions/ceiling.ts,code:src/lib/permissions/scope.ts | A:权限领域 | S:v1 只允许 L1 修改授权；授予节点必须在目标等级上限内，Scope 必须合法
+guard.ts[MI9T]: F:服务端守卫，断言权限不通过时抛 403 PermissionDeniedError | R:code:src/lib/permissions/authorize.ts,code:src/lib/permissions/catalog.ts | A:权限守卫 | S:所有写入口必须在第一行调用；非 ALL 作用域的节点必须传 resource，避免只传 id 就跳过作用域校验；前端 usePermission 不能替代这里
+resolve.ts[DI9M]: F:有效权限解析，把等级上限、模板授权与用户授权合并成 ResolvedPermissions 并支持从数据库读取规则 | R:code:src/lib/permissions/catalog.ts,code:src/lib/permissions/ceiling.ts,code:src/lib/permissions/scope.ts | A:权限领域 | S:合并顺序为上限、模板 allow、用户 allow 取更宽 Scope、用户 deny 移除；超出上限、未知节点、非法 Scope 与过期授权一律忽略；L1 默认全量，保护区由 authorizeProtected 单独判定；数据库读取必须在 withUserContext 事务内执行
+scope.ts[CI8T]: F:权限作用域定义，声明 ALL、DEPT_TREE、DEPT、SELF 的层级与覆盖关系 | R:code:src/lib/permissions/catalog.ts | A:权限基础 | S:作用域是授权行的属性而非节点全局属性，同一节点在不同成员身上可授予不同 Scope；DEPT_TREE 只允许读类动作
+server.ts[MI9S]: F:服务端上下文鉴权，把 UserContext 解析为 ResolvedPermissions 并提供 requireContextPermission | R:code:src/lib/permissions/resolve.ts,code:src/lib/permissions/guard.ts,code:src/lib/db/user-context.ts | A:权限守卫 | S:所有写入口都应在 withUserContext 事务内调用；无有效任用直接抛 PermissionDeniedError；支持 JXF_PERMISSION_SHADOW=1 影子模式，只记录差异不阻断
+snapshot.ts[CI7T]: F:权限快照转换与客户端预检纯函数，只下发允许的 key、最宽 Scope 与显式拒绝 | R:code:src/lib/permissions/scope.ts,code:src/types/permission.ts | A:权限基础 | S:快照不下发目录元数据；客户端 can() 只是体验层，真正放行仍由服务端守卫与 RLS 决定
+
+===E:/JXF-AI/src/lib/profile/===
+access.ts[DI7M]: F:个人资料访问控制，按等级与权限计算可编辑字段并读取目标成员的有效任用 | R:code:src/lib/permissions/authorize.ts,code:src/types/profile.ts | A:个人资料领域 | S:读取目标任用受 RLS 约束（L1 全租户、L2 子树、L3 本人），因此查得到本身即等价于在可管理范围内；日期统一规范为 YYYY-MM-DD
+
+===E:/JXF-AI/src/lib/runtime/===
+accept.ts[DR9S]: F:运行受理，把一次用户回合变成 queued run 并立即返回 run_id | R:code:src/lib/db/user-context.ts,code:src/lib/permissions/server.ts | A:运行时领域 | S:长任务绝不挂在请求生命周期上，这里只建 run 不执行模型；同一 principal 与 client_turn_id 只产生一个 run，重复提交返回既有 run_id；AI 员工配置在受理时快照进 runs.input；权限仍按调用者当前部门判定（skill:use 与 knowledge:read）
+cancel.ts[DR8T]: F:运行取消，写入 cancel_requested_at 作为唯一取消信号 | R:code:src/lib/db/user-context.ts,code:src/lib/permissions/server.ts | A:运行时领域 | S:SSE 或轮询断开不等于取消；只有 queued/running/interrupted 状态可取消，worker 在 step 边界检查并写 cancelled 事件后结束
+claim.ts[MR9S]: F:运行队列领取，使用 SKIP LOCKED 与租约并收口尝试次数 | R:code:src/lib/runtime/emit.ts,code:db/schema/runtime.ts | A:运行时领域 | S:只允许 app_worker 连接调用；租约 90s，尝试上限 3 次；可领取 queued 或租约过期的 running，不自动领取 interrupted；达上限的由 sweepExhausted 收口为 failed
+emit.ts[PR8T]: F:运行事件写入，在同一事务内取单调递增 seq 并落 durable 事件 | R:code:db/schema/runtime.ts,code:src/lib/runtime/claim.ts | A:运行时持久化 | S:只有 status/step/tool/done/error/cancelled/deposited 落库；delta 等瞬时内容写 runs.partial_text 快照不产生事件行；事件流只追加，不提供删除或更新入口
+pricing.ts[DR5T]: F:模型价格解析与成本估算，按微元每百万 token 计算 | R:code:src/lib/runtime/usage.ts | A:运行时领域 | S:不用浮点存钱；价格未配置时如实记 0 不编造成本；价格不写死在调用处
+recover.ts[RR8T]: F:运行时收口，把进程重启或心跳超时的 running 运行置为 interrupted 并写事件 | R:code:src/lib/runtime/claim.ts,code:src/lib/runtime/emit.ts | A:运行时恢复 | S:interrupted 与 failed 必须分开，前者是被打断可继续、后者需要人介入；只有 running 状态会被收口，收口同时推进 seq 并写事件
+resume.ts[RR7T]: F:运行继续，把 interrupted 状态放回队列并清空租约、取消标记与完成时间 | R:code:src/lib/runtime/claim.ts,code:src/lib/permissions/server.ts | A:运行时恢复 | S:只有用户显式点继续才恢复，worker 重启后不会自动重跑，避免连环失败；非 interrupted 状态直接返回 false
+stream.ts[PR8S]: F:运行时事件订阅，为 SSE 路由提供受 RLS 约束的独立只读连接并支持按 seq 增量读取 | R:code:src/lib/db/user-context.ts,code:src/lib/runtime/emit.ts | A:运行时流 | S:SSE 生命周期长，不能占用请求事务，因此用独立连接加会话级 GUC；连接关闭即销毁，GUC 不会泄漏给连接池；断线带 Last-Event-ID 重连只补发缺口
+threads.ts[DR7M]: F:Agent 会话管理，提供列表、详情以及重命名、置顶、软删与加入知识库 | R:code:src/lib/runtime/accept.ts,code:src/lib/knowledge/cards.ts,code:src/lib/audit.ts | A:运行时领域 | S:列表只展示当前用户自己创建的会话；详情按 RLS 可读范围加载，同部门成员复制链接也能打开；重命名、固定、删除与加入知识库只允许创建者；删除是软删（archived_at），执行记录与审计保留
+usage.ts[PR7T]: F:用量账本，每次模型调用写一行 token 用量并同步累计到运行记录 | R:code:src/lib/runtime/pricing.ts | A:运行时持久化 | S:由 worker 使用 app_worker 连接调用；与 run_steps 一一对应便于按步对账；成本由 estimateCostMicros 统一计算
+
+===E:/JXF-AI/src/lib/settings/===
+ai.ts[CC7T]: F:模型配置诊断，展示当前进程实际生效的配置并发起一次最小连通测试 | R:code:src/lib/env.ts,code:src/lib/settings/crypto.ts,code:src/lib/permissions/server.ts | A:平台设置 | S:展示的是环境变量与数据库覆盖合并后的生效值，与库中原始值区分；Key 只展示末 4 位提示；测试需要 platform:settings
+crypto.ts[MS8T]: F:设置面密钥加密，使用 AES-256-GCM 加解密模型与 SMTP 密钥 | R:code:src/lib/settings/store.ts,code:src/lib/notifications/mailer.ts | A:设置安全 | S:密钥由 JXF_AUTH_SECRET 经 scrypt 派生；密文格式为 v1.iv.tag.ciphertext 的 base64url 分段；解密失败返回 null，由调用方回退到环境变量；轮换 secret 后旧密文不可解
+delivery-status.ts[OO6S]: F:交付状态只读视图，读取 backups 目录下的备份与升级状态产物 | R:code:scripts/backup.mjs,code:scripts/upgrade.mjs | A:交付运维 | S:Web 容器通过只读挂载看到宿主机 backups 目录；未挂载或没有备份时如实显示暂无，不伪造状态；最多展示 5 份备份
+runtime-server.ts[CC8T]: F:把数据库中的模型配置应用到当前进程，刷新 env 缓存并设置运行时覆盖 | R:code:src/lib/settings/store.ts,code:src/lib/settings/runtime.ts,code:src/lib/settings/crypto.ts,code:src/lib/env.ts | A:平台设置 | S:启动期由 instrumentation 调用一次，保存设置后由 Server Action 再调用；Worker 是独立进程，需重启才加载新配置；解密失败时保留环境变量配置，避免整站 AI 不可用
+runtime.ts[CC7T]: F:运行时 AI 覆盖的内存容器，供 env 解析时读取 | R:code:src/lib/env.ts,code:src/lib/settings/runtime-server.ts | A:平台设置 | S:纯内存不依赖数据库与 Next；明文 Key 只存在于进程内存，禁止落日志
+store.ts[DC8L]: F:平台设置领域层，读写品牌、模型 Key、审计留存与邮件通知配置并写审计 | R:code:src/lib/settings/crypto.ts,code:src/lib/settings/types.ts,code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:平台设置 | S:读写必须经 platform:settings 守卫（仅 L1），所有变更写审计；模型 Key 与 SMTP 口令加密后入库，前端只看末 4 位；登录页与启动期通过 SECURITY DEFINER 函数读取，不绕过 RLS 直接查表
+types.ts[CC5T]: F:设置面共享类型与默认值，声明品牌、AI、审计与通知配置结构 | R:code:src/lib/settings/store.ts | A:平台设置 | S:CLEAR_API_KEY 是前端清空已保存 Key 的显式指令，避免空字符串与不修改产生歧义；客户端可安全导入，不含 Node 与数据库依赖
+
+===E:/JXF-AI/src/lib/skills/===
+distribute.ts[DE7L]: F:多平台分发，维护账号分组、生成九平台文案副本、创建发布任务并支持发布机令牌领取 | R:code:src/lib/skills.ts,code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:技能领域 | S:平台固定为抖音、视频号、小红书等九个且各有标题、正文与标签长度上限；发布机用一次性令牌通过 SECURITY DEFINER 函数领取任务，业务角色不能直接改任务状态；服务端不保存平台口令
+learning-sources.ts[IE5T]: F:学习提炼知识库只读访问，按 INDEX.md 索引读取脱敏来源全文 | R:code:content/skills/learning-knowledge/INDEX.md | A:技能集成 | S:文件随镜像发布在 content/skills/learning-knowledge/；INDEX 缺失时用文件首个标题兜底
+meta-ads.ts[IE8L]: F:Meta 投放技能，保存连接、同步广告数据、生成调整草稿并在人工确认后写回 Meta | R:code:src/lib/settings/crypto.ts,code:src/lib/audit.ts,code:src/lib/permissions/server.ts | A:技能集成 | S:token 只存 AES-256-GCM 密文与末 4 位提示；规则只生成草稿，人确认后才写 Meta；失败如实记录不伪造成功；恢复动作生成反向草稿，不直接改历史记录
+
+===E:/JXF-AI/src/lib/storage/===
+local.ts[PD7T]: F:本地分级存储，按部门、岗位、标准目录把文件写入 public/uploads 并维护相对 key | R:code:src/lib/knowledge/ingest.ts,code:src/lib/knowledge/folders.ts | A:存储 | S:只允许写 public/uploads 之下，.. 与绝对路径一律拒绝以防路径穿越；数据库只存相对 key（uploads/...）；目录段规范化并兜底，保证每级目录都存在
+s3.ts[ID6T]: F:S3 兼容对象存储客户端，提供上传、下载与删除 | R:code:src/lib/env.ts | A:存储集成 | S:客户端懒加载，构建期不因缺少 S3 环境变量而失败；上传下载都走服务端转发，不暴露预签名地址；forcePathStyle 为 MinIO 默认寻址方式
+
+===E:/JXF-AI/src/types/===
+next-auth.d.ts[CI4T]: F:NextAuth 类型增强，声明会话用户 id 与 JWT 的 uid 字段 | R:code:src/auth.ts | A:类型声明 | S:只做类型声明，不产生运行时代码
+permission-admin.ts[CI5T]: F:权限管理面板数据结构，声明节点、模块、模板与成员授权映射 | R:code:src/types/permission.ts,code:src/lib/permissions/catalog.ts | A:类型声明 | S:服务端只下发渲染所需字段，客户端不回传目录元数据
+permission.ts[CI7T]: F:权限系统标准数据结构，声明授权、有效权限、快照与检查结果 | R:code:src/lib/permissions/catalog.ts,code:src/lib/permissions/scope.ts | A:类型声明 | S:快照不包含目录元数据，只带允许的节点与最宽作用域；DEPT 与 DEPT_TREE 授权必须带 scopeId
+profile.ts[CU5T]: F:个人资料与成员清单共享结构，声明邮箱身份、任用摘要与资料聚合 | R:code:src/app/(app)/me/profile/actions.ts | A:类型声明 | S:页面、Server Action 与资产交接都以这里为准，避免各处自定义形状；工号留空时由组织架构自动生成 JXF-0001
+
+===E:/JXF-AI/src/worker/===
+experience.ts[RR7T]: F:worker 侧经验消费者，领取一个 job、执行提炼并维护心跳与失败退避 | R:code:src/lib/knowledge/experience/process.ts,code:src/lib/knowledge/experience/queue.ts | A:运行时恢复 | S:与运行时队列共用同一 worker 进程，交互式 run 优先，无 run 可领才处理经验 job；执行期间 30s 心跳续租，崩溃由 sweepExperienceJobs 回队列；失败按尝试次数指数退避，3 次后进 dead
+main.ts[RR9L]: F:worker 进程入口，循环领取运行时 run 并执行流式模型调用、工具调用、事件与用量记账 | R:code:src/lib/runtime/claim.ts,code:src/lib/runtime/emit.ts,code:src/lib/runtime/recover.ts,code:src/lib/mcp/worker-tools.ts,code:src/lib/settings/runtime-server.ts | A:worker 运行 | S:只消费队列不承担 HTTP，使用 WORKER_DATABASE_URL 的 app_worker 受限角色；启动时把不属于本进程的 running 收口为 interrupted；心跳 30s、巡检 60s、空闲 800ms；经验沉淀后台单并发，不阻塞前台 run 领取

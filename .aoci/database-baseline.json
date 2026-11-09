@@ -1,0 +1,778 @@
+{
+  "version": "database-evidence-baseline/v1",
+  "sources": [
+    {
+      "source_id": "primary",
+      "engine": "postgresql",
+      "database": "jxf",
+      "namespaces": [
+        "public"
+      ],
+      "include_namespaces": [],
+      "exclude_namespaces": [],
+      "include_tables": [],
+      "exclude_tables": [],
+      "case_semantics": {
+        "identifier_case": "preserve_quoted_fold_unquoted_lower"
+      },
+      "evidence_version": "database-evidence/v1",
+      "source_snapshot_sha256": "4b89f8a09d7ccb88480ec629d756a4933fb479ec6dbf2a68b0d248f4e61fe7e1",
+      "tables": [
+        {
+          "object_ref": "database://primary/public/accounts",
+          "table_evidence_sha256": "1948dda3b9ca7e122e9d49262deaa4c1c666ff109f7c91df8874569601c54b68",
+          "component_hashes": {
+            "columns": "35c4751ac25d95c1b6cc36920d07f1f69b39edacd6ecf50fe8fd299e1d42eadf",
+            "primary_key": "2cacc73c6eaed43633f0d8c8cf83aeb512f88a36ce96a1fbbb80915ceba8a9e2",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "9b9de44edd04da8d01ca8e06b91740e74087eddd5bb1d5464606df7be1f32d90",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "07c592f829a233d6ad85a0c9c70e2cd9cf33ce21d5772971099ceb55c51387a4",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/ai_employee_grants",
+          "table_evidence_sha256": "60c6e775735f8884eaf6a5aeb51cf8a2766d3050a891a502e1ff48dde2b6bb37",
+          "component_hashes": {
+            "columns": "ecf11bc24637c73a178eee0c118f26f198c6473cda7e08f0c63e034793d771c5",
+            "primary_key": "a5da744dbf2dac5884cbd80dce32590edf1ed84efb0d4de3edcf26ffeacb683c",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "724e81975162c23d652627565e6dc9d304c723a07f8f87dc02b780be8c2ef4bb",
+            "checks": "41acf91adb3ab74ef7dc52c1b1e35c80b41916df1b7309b831315ece59443f36",
+            "indexes": "730267dd38d81fe5f490d79293345f12174fff56bcf8a325fbbd8c3f42da6cea",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/ai_employees",
+          "table_evidence_sha256": "a3c44bd321575e3eed4b57244aad20fcd54e69d52ed31b0815b8009f9338eebd",
+          "component_hashes": {
+            "columns": "96fa7eb0a5eb4c6c1071ac19796a5a235eee5a8198ce2e3f83196c4dd191613d",
+            "primary_key": "d38d473dde5bc6676e34d7ddbda704b4b109ac1e97534de891926826e5a5762c",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "2658ddfc0772e6de269edff10a5cce23e97e40ff6ac8d2ae57611fed46f686ce",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "1d33e33a6124e4c5016ca3177f58a376aee4d6758d21678f0bcebd77aa392620",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/app_settings",
+          "table_evidence_sha256": "372c031bec3665b037b798e7f2379a83f8c06d86c4559ae2a439d7a7306ab81a",
+          "component_hashes": {
+            "columns": "cac914753e4bedbd0918637e337b2584bc7bb19a19fbd45b8201395f301a5d54",
+            "primary_key": "61168cabc406da4cf2326ed41de26b9e96202749571ba72b8eb72d63afa201ac",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "ab10bcf585fbd6ee768c977153be5dff155f73577d961cced217179c09387795",
+            "checks": "f1c9fd0edde4ed7d9a3a83008b6bc8b21c0d5e176a4b9872f0432b114476409d",
+            "indexes": "8e972e17745d9dab48ec44240dfb49ef3f69057a87672d16095187545f71ca34",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/app_versions",
+          "table_evidence_sha256": "fa93305d9aa7ef5ad3ea8b602e811b43b372d17b4e1b317e29b59bdb76910b26",
+          "component_hashes": {
+            "columns": "c0dfd223436d63803ab9be09b64ab07f4dbdd28cd73a2afeac62712ba62726c1",
+            "primary_key": "e7d069f231e2aab953d90190d466906a3cd542acd67b18df1065b95bb275e351",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "7f9a62fcbdd4d1560fba30a02baa74a5ff16cf965ee9eb2415b905554833eddf",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/approval_requests",
+          "table_evidence_sha256": "1c2a5b9b7c93d63b09a17124eb2060adfe15e966dff5c2b6a66669eec001e80e",
+          "component_hashes": {
+            "columns": "e040e81e260f7fba397f1d983a83ae2237676c7cb4f82b52ccc129026ab5c308",
+            "primary_key": "90b878447578e3235c5f3040a46b794c86adb58864f60491499581b643e3df89",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "e292a807649a63ba47fb93a0a643ff918a4c7b389f676cd1e92b2433b46ada3f",
+            "checks": "b2e59b5f46386f185ac78bf83022e0a45bc33bc46cffe463bb287be4be365f80",
+            "indexes": "42ff967f26f689f41312c15f0d3283ccbf6c551420211f143f0db72cace6d563",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/assets",
+          "table_evidence_sha256": "9300979c07681fbdbd65372013d869c26419a8bd59cbbd4ee353a22e42385973",
+          "component_hashes": {
+            "columns": "2287168d0a1cc52178cedea89344786705bc8f8832a0a094e5f3f9fbd422ec03",
+            "primary_key": "5b097e8f182e1f7943d4eb072b091424bdd4058dc09f864188fe528de4038349",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "4012f66c0101864f363c1ca63db99c1f6947a00be0404786be13125de6b9d289",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "64bd9e88a306360a0d7f1f285e66e2963ed3f2ba5d69a20766c2d155069505bf",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/audit_events",
+          "table_evidence_sha256": "a7d8f43f8f3f122bb30b02f5a166f90255651a813ff1338c84eb7cafee7d7687",
+          "component_hashes": {
+            "columns": "6e9a2e78a71ec105e6d539798a2e302a90da134744167029bb76f1cf5da038b9",
+            "primary_key": "022fc26d5f5a15e4f270f4caa29543f8bb2f13a48c45a599c07df837a47a7edb",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "62ab87240557145c4d3b929ca65631995f6d0932c7b0d9beb4d9bdbb41577cbd",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "5b5cf342404c67d9ef2fbacb839c97c0b0bc87fb51a38aa700d3fcbc85cac5df",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/card_evidence",
+          "table_evidence_sha256": "8f848ca6facc5d97481bde2c609dd2b88bb9d1136754235fef981809d5aa151d",
+          "component_hashes": {
+            "columns": "ca140e3e725db85ba7e686cad9d8943f2e91f863b1ef6dd6f4b8c422462165df",
+            "primary_key": "5eb0242cafa8b4d1ac9800666ea4c6848ff411a77fb5fe034b6e29a95d1ec009",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "ff23f4d45d65044729e240eebbe0f0c31e4303918ecc5ab2bd732d46cca63394",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "4008f55e931d71370624fffbc52206055d09d0c24afb193921ce68062222dfa0",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/department_packs",
+          "table_evidence_sha256": "5fd0ce1dba5c18fef7100b725e0e06e0ec0860d7aa607e2fe2321a5c6c07586c",
+          "component_hashes": {
+            "columns": "e9375bc4e23752bea829340e78f190c722483e80fa68405ca96c4dc5600a27a7",
+            "primary_key": "6dac981abfb0af0b27dcc12e33d28204d854cf0000fcb607130bd648a104ec71",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "e0b79393490748f6cfc4fa1f6e9e773b677e36bc4e94c37748f901deb24b953f",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "ab9624cba772aef694e124369e20130947512066ed5d0f2692493425c45892ce",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/departments",
+          "table_evidence_sha256": "1d1ede4925543b64da022509136557064751be239dbbacfe63629decde1edd62",
+          "component_hashes": {
+            "columns": "9c9e451c76150bfc70238c55452e2c2b213a469922152d45d4d4eff82e11f045",
+            "primary_key": "422161f9c928a06efeb7f553b69f84d143aa183904cc43c7904a68c9e415266f",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "47f0d1ff14df8da7452a13bd9570792a22890984cb3805d0a61ef2289188ec02",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "65516d1f724df093c63e761a4af672fbb284bac8e7da5e92a4eda405462ee035",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/doc_chunks",
+          "table_evidence_sha256": "daf6484afac77a35884f58347c9a04d6ccd4d5f9f4882115b96e2d5ac9fbeeac",
+          "component_hashes": {
+            "columns": "2fd38b0d31237c9639fb327e80d7b356cce68052a2fff19f2776525ecaa3b462",
+            "primary_key": "84704e9b168ae3b58617beeb470c9726336f3855b1907acd33fa4583c02b13d1",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "a6f6d02eaeda71ebcc7a082f2f219a38918e31e053036193b4176805d2d9badf",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "e1412dabcb581396f258956a7afa958de491d770f2560ca44f7fe19e7489a972",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/documents",
+          "table_evidence_sha256": "c932e0a84523d3f6204a51635c8fb25dd5a44313ca7249b03e991b4b726edff3",
+          "component_hashes": {
+            "columns": "b98055aac0dc62f522866a77fb525503eb13624ae011790f5a0d3e3004d507f9",
+            "primary_key": "ec7dd2eb6fa1374693a4efd49cb85dc1afe05efcf322b97a45fccdf1df9327fd",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "d9c397909a262e2bf75fe89e668f419beda64485a634ddc81b183f174362bf75",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "b23b6912f176912ec4d94f5b4bfc16b5a35869d16c02e178118ccb00d17fd07e",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/experience_jobs",
+          "table_evidence_sha256": "946d0a21af48162b09faf2c4354b7f6601c3f7702866c79ecfa0c30adecd8f6d",
+          "component_hashes": {
+            "columns": "3f67972104d1616b9c7436cfcc4da94b8a04c4eebf863a8e4dbc5c5f362353c5",
+            "primary_key": "a5864188aeaea54f521dd11fad13e06c15ec6940d006d465a8dd984c82faf0d1",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "455fe3379f5775a25864f9aaad1b336e328684bf76a956dd24616096e537d53b",
+            "checks": "cd779263eb4841f1609360428af2113a8a437d329dfeb6599cb7a9eda9f06544",
+            "indexes": "177ca7a7004f7e6feccf8059207bbd1ef1ae64700ae2f53477a03c7cbcfbdf39",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/folder_route_feedback",
+          "table_evidence_sha256": "8ff87b2554a011d6aa3adf29ae6aa18153511deac1e907e8bdbd90acf60b78fd",
+          "component_hashes": {
+            "columns": "fca55fe6cb727a9e80236011c824b27bd4d99108a924225936df34902505e5d9",
+            "primary_key": "719104c226c294059b404331b066955cd4e443bb328a6d1f3f4cf2d2976fd92d",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "7637cdd0dc66d3ea9eee852f886567a1b8ee727d6b0e1b2ebcac92344def36ae",
+            "checks": "79ad4673a1e7ddd8d1055d81f545a5b8e556281f6bab944ca4deea188b6df712",
+            "indexes": "143bdee4110367fadc62e8ee77c7213f580b8f66df35bf370ebbcef7cab44ffd",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/handover_items",
+          "table_evidence_sha256": "908325689972defba969ace58ef6bdeff790c51fe9f28ba0d27d07ce7533bc96",
+          "component_hashes": {
+            "columns": "d1760513defd611ae448102f0827913d5e6f7c401652ffbafb2de3e67e7dc8d5",
+            "primary_key": "2a7c27c053ed292dc72496e7347019736f6caf8a66c41d245094d6695b036075",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "57b673851c7b272d0d031b4cfc39f62aa2389d430c2f8088cc3ef5b4e1e213b2",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "897a28a07b9dfdc9f2b4440e1f566e2e36e5f1467c3e905250a78f4e10850aa8",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/ingest_files",
+          "table_evidence_sha256": "0bc3eb0b1eb1d7f5aa7b3d64692d866a2cb36e7f79819b8e37aca1c1a2ff0eb1",
+          "component_hashes": {
+            "columns": "cf6cae7c2fe36e76f8547c61b0d30640c15fb70460b80c46d3b5ecf1b17ef98a",
+            "primary_key": "6c41535724614656d7dcf6e9557e7b29212efed0a2fdc613c06632514efb073e",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "bf1b59907ee4288f677698472d83e42207881a777cbfe350b7aacf3e57a71172",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "b76ab0377a6b02efaee5fb3e9aba866748cc173491d18fb0b89323c181faa283",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/ingest_runs",
+          "table_evidence_sha256": "b3a4bc87c4d600d9225726e08537df102d16eecf4eb4f107bbeacfd39089afed",
+          "component_hashes": {
+            "columns": "4a5f1bcd264990fba5a678779066054c99a574b164141f202d138b605a47f11a",
+            "primary_key": "e5656734f5d6aa59b37dec149802dd69b8afc7b751cb3792ac54ff1003571c8d",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "a3c634e629b4f91e066709155a4861e622f3c29ac2597113dcdc3f06c92ad116",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "4985283a1e1de5867c05100485b07b4eec1ff394e9f79d78a5eca3df77d0d2d8",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/knowledge_card_versions",
+          "table_evidence_sha256": "901593b2db30dc1897b5006b481807849dc34d7c60a503aa884c5b755705a974",
+          "component_hashes": {
+            "columns": "f687e19022f843cdc3d381286ae574b8dd6921477812f93a07edf385beadca56",
+            "primary_key": "e0a1ec628d7c9fdaaf2404acd5b6f8c8782c98a160740fabeb22af211a01cf27",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "1975079bcf49827c735daf685b8c4758d26098790338f1207468b7c0162f3afb",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "77e9c14a983b0eca6ac70e5cc49123cd5756743007839781217cc0c1207009d8",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/knowledge_cards",
+          "table_evidence_sha256": "2edc9304bcacb2ba7bc9949171701908622890d71035b5afd1968cb338e05f73",
+          "component_hashes": {
+            "columns": "fd96514b138a80e13ccd30f82a70a48bde1bac566337115422e4efaa17681ef8",
+            "primary_key": "e1ba32c0401d951a7fb8d10ce25e4ad58728531fe135eae9ad959a7e404859e7",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "29248908bd48910fe73724bee6b6f79ddaeba4e76d35c9fb9ba4a0022af5f6f3",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "17e1ee79683ad563de71d482b6fc6b01f0e36ce3d952cf438675e003c956e636",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/knowledge_gaps",
+          "table_evidence_sha256": "b44b46ace1b3602dd23117a78abd6f9125eebb956afb337f3237a26cfa8d68a6",
+          "component_hashes": {
+            "columns": "edc3cf3d85ff8ab36dd81b6adcc66d6ba6fb81197a1439c8c8cbbf22e9e0e05d",
+            "primary_key": "570657d4ed54207f0db6e71fe48ce4c439e34b799a12d8875ac77458c242dc96",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "5ab2b0cfef1939bc0c81c793431b7e83ed55cd5545d8002bd4c9a80edfc5c92e",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "275975792a05f16c2eb3b4140c4b6226c226b84cb5f2d6f815d10a295093091a",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/mcp_server_calls",
+          "table_evidence_sha256": "23020fbb96df83b3e33847894e60e021e88af392807552fad4dbb929f65f1cb3",
+          "component_hashes": {
+            "columns": "04c2e50a4ed40df49fe9fc0a1d4981445ebe1f1bb54c5711237d80c0583fa3ca",
+            "primary_key": "e6b2251195c2a46c4083733eb092f9a7570293e67f352fc08aff49ad5625cd95",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "a34e5c202b2b4f39b68fe5499cb01d1687fa161745d7a0c3f9c49646cdbfa525",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "88445d3cf66ebca0da7f8eac99b0e6b9eec38a892c971f9b0bb7eed8c44f3f08",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/mcp_servers",
+          "table_evidence_sha256": "e374463bdb0fbb9245ace7200dc802b0c038f9c0bbcdeaa8af488c313f37512f",
+          "component_hashes": {
+            "columns": "88e58f842e01295590d7ada1ddda3e31f8e29367c2adedde54c2efb06225729a",
+            "primary_key": "d103c47d481002e7f4bb2a04f865d038537b812bbe8f1e973faf7276e7473071",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "3bbaf838af4cd9c9107e6ddaeeaf5333b635c31e4b91b9ea02f408a695e32444",
+            "checks": "5788fa55d82c1508e7f7e8bdcf5383dd6959fc4053ed3304d373b6a88ee9183a",
+            "indexes": "31b84d8fc62e4b03fd1bc9ea99ccf0280a1d51a5728ec5f76980abdefef44d71",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/mcp_tokens",
+          "table_evidence_sha256": "476c254030e7ce0911a3074a3e18eae0153c7fbd83bf13a7068e482d3ea36f04",
+          "component_hashes": {
+            "columns": "761fd36730cdb6e0ad7b40ebab6029183af2b7236a55978ceb2d3a2ea8bbc666",
+            "primary_key": "080ccc7c11cfd3f8cb707c8d05e2144a58025d25e14c0401d9c078ba7df30f85",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "ee249c3534ee2212228066c152b13df271ce2aa6b8b1d8918f378adcb2c2a965",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "493c6f0e3ca6147a0edbae5845f8c0bbccbdfcbf9aa466a60b4c026abe918ac5",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/mcp_tool_approvals",
+          "table_evidence_sha256": "22250ea855f065fd6964bf168c05e6bb6b17f5001de985c04a02de8b972f931c",
+          "component_hashes": {
+            "columns": "17af89c4d5921a477d5cde679e458189e077c90146f1a5c644a51d1e76015f20",
+            "primary_key": "119e9c840309c3e2bdd89789b4d61fcfebc2206d67b70829ff4e4686b2cac368",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "f9ae464b15af995ed0f34f36a8a89eac50c47d6a76b6e4fb53c7f1440c27f9c3",
+            "checks": "d4990ea0ebdea9c4f519f9716ce8c8a6653d1b1dd9ea4a188b57052dc54e2e78",
+            "indexes": "1087dce64c433ff3e11c8cd9604816710a973214eb341a5d2d94565a5848bcf2",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/memberships",
+          "table_evidence_sha256": "0589eea862c985deb9bfa525de11ede18f02e02924ef31db901a00f509dc300e",
+          "component_hashes": {
+            "columns": "1fbb314508488f19267ccb8062fb8f084aacf0c343bd8bba71621409d5b2f219",
+            "primary_key": "f291ffee019ee6e51004cb212641b4975653b627ceb6266b724ccc16aea33f02",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "9a95183f65de71b23917f9114186ed753ac20548a28e7ce7c6828df40b64e268",
+            "checks": "0828959feaa63d77fc03676c99917b00f067087de09346c376de8ce89f0bb89c",
+            "indexes": "117b4500e561d09f11da14e5bcc3112c5acc3799a5fa9f209de6b46d52f55ed5",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/ops_tasks",
+          "table_evidence_sha256": "d818b70dabfc955412e6ead0f69750ebd664214cfb9410c4d3641df244bba6a7",
+          "component_hashes": {
+            "columns": "d033868f0a1aae3ea5232866218b2cab13cead069a831f65994dcddc66813262",
+            "primary_key": "0fbcaa35bef2a5301755beaefa2fb6f9a00d1893f6747f3f586b9d889a06f1fe",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "a08bfa0d6851b73ada0b6dd5d1b249eb3168bc69d01a6867689eb4c49da2033f",
+            "checks": "634a13aee74d82be9fee998b1815c3156e7de4c3ffd388eea7dac75194559111",
+            "indexes": "0956d74c5f7b1d42685df1eb7e2a74d37f814414d26d785897725f46a6c62965",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/permission_revisions",
+          "table_evidence_sha256": "0b4f9d20de4faec4d9a0b3f11750187b9edb4bc854b285bfa913c6afc76949aa",
+          "component_hashes": {
+            "columns": "69ec01d6b6b57d3faf427fc7e81b47bf0223598d57216352c8ebf0b443e2fc5e",
+            "primary_key": "fc2bce8dfd36b19ae1f65f4cd551c0f16a0b59137cdb26959c5a372f9da142cd",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "6a49a2af4a297f482113da2fa5adbee1977367a8964914db67edb3688e9b024e",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "798a6c8b795aeae0f5bea4e47aa6f96b527cdb2e2a2aebc0234a87b4c6d5e953",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/pipeline_event_subscriptions",
+          "table_evidence_sha256": "aef09aa2f5fd17193d3fe1452fd3fd6cd4b6d8d3c4fc9f328d32d3f0ce0ab419",
+          "component_hashes": {
+            "columns": "1fbb46a90a33dd26e59338231c2d9387ffb1df7e816d5a9fbcded05f904b5c2e",
+            "primary_key": "05d51961b42e789da4bb51d59d221a08b6f3ffe5cbcccc8b6471c7f499ef9a30",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "fa2ec918b98c62a636ba9fcf30b35761f5a6f19e6d6872e68762174eadd12129",
+            "checks": "788f098c45f751a96f0f503f34db9df8f7f00ebe9bf85eb1c420bafee5268c43",
+            "indexes": "8849e4dbf87c0aebd79162fed9f8f6b9f493b04a9781edf221b25da1d9efedcb",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/pipeline_events",
+          "table_evidence_sha256": "de124dd52fb115dab0aec596bbffa54c2b73e28f2794c7c3625489e427e78ec2",
+          "component_hashes": {
+            "columns": "7d3ca237895a7cc2a91c7abc86bba28d8c771eec7ac77bcbf7aad395ecfd756d",
+            "primary_key": "262a08fb6d5dd26011316d525f74895e79e73e2549b2c7b0506fc3a5e46d6e7f",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "checks": "1eb57e5b0fbc65609b41e8a068ac1524519b46a888bac907fc0314d0367aea98",
+            "indexes": "1625aff54deba6ba6edb87df949f18a0899a844ef171277d95d9eaff92fdfe48",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/pipeline_runs",
+          "table_evidence_sha256": "5d58c5726658f513fcddc21b568bea2e7f89da63d6f2d5156207fc7ae12343df",
+          "component_hashes": {
+            "columns": "11001e1af6f2ea75851127eeb0d53be0bfd38232ff7704c0e31d091a97051f83",
+            "primary_key": "9a9f770d4c3c39da5d6333807e14d6f39a8a0089d5a41782b3d76f1048e4198d",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "a2d657b28642c1ff2769b704a24e72f3a66660a1e78675a3181571a7c1c2fe11",
+            "checks": "5ebf509fdeb03efff2adde88c19330fb5927853dc365ae35f811a7b6652a55f1",
+            "indexes": "a7656778756c47aed60dd22785c32b434f6fc9b22d4e76bfa37c1ba9dec4d416",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/pipelines",
+          "table_evidence_sha256": "fbee4e1fa483166d6522ed944618e9a0402e65b9dd744c5202309290a0a26936",
+          "component_hashes": {
+            "columns": "773da75469bfc59b507a7f5f13ed133ad78ccf2920ffccae9b6fbd5e8b00d2c7",
+            "primary_key": "75602baa89c165126da6486611cb0ac7ee108b4d12dd7e4eb705280bf7c02a45",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "1fb02e383e5237e0c8216a0cb99203bac2abe2ccb6bea52d24e0c3b03cf596c0",
+            "checks": "84c65743c284b14f8df02a692470f2924165b60b2027f15c7998e906a6ec4645",
+            "indexes": "926ffd581ea9df39e97e825f52e5462a8278cf30b61e31403f09cb8fe32c5118",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/qa_logs",
+          "table_evidence_sha256": "d8b88fe2a289ef270f5c1284d2818da21074a5e60ba75850e99adac582fe1389",
+          "component_hashes": {
+            "columns": "4046c46eb8ecbc292a5b22bb5ff88b36b2545c872ec4ccbb4a1bed13885ad8f3",
+            "primary_key": "f59cd1bb96ee4c7fc411f894bd17b482b441f6395c9f25a91f15d5eb791f8b2c",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "6ee3de49bdc05cb865847afe82fb717d84062dc7d2d35ce113e7a2a0a5ee50a1",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "6cab22f96ab05a7108675945b4355233b799b73b9184b9a86cba2d933892f454",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/regression_items",
+          "table_evidence_sha256": "39a2fe3b5f4cdbada426e472cf4c25f2dd8317c7918740eea11ae113fc0c7147",
+          "component_hashes": {
+            "columns": "39b11fb26209958ec691899e87bfd8b37e9478a31fdb0aa081645dc465294af2",
+            "primary_key": "4a228f4a26594e3a8f45181658cac4d9f58516e44b1e4112edd7e4643f5fa948",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "68679ee1cdfd716c9da997ba5c4716e4024be9bf48df74ad3b317ac820dd4286",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "c6592f3f526a80cf02f37fb621f5bf3b6b4c925759311dc74b8fbf2f134ce92e",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/regression_questions",
+          "table_evidence_sha256": "9c0034361f18a5b2cc2798e9e2108271a086d5fd0100f9e1d177434dea173fb9",
+          "component_hashes": {
+            "columns": "b053f70309137771aaa76da3df5d22e83739fa2d3a77c2a1c00180a85196bf83",
+            "primary_key": "0012b3148d755ebda6b693a35d00d83c374e5dcac0c1f4c6ed769263d4bd55f0",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "4664a1bcebba4605fed2cbe226a3f614d120637f63b00416942e3c7f25ca2716",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "aaa213b88d117e6f9594c09771a6ad5c89fb7ff630471d79f8f747128081a26b",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/regression_runs",
+          "table_evidence_sha256": "eb907928c5adbcd02c07a9f9e6ad77acb4423181aafd5b848487461ac6d17f7b",
+          "component_hashes": {
+            "columns": "f90d825a7efa6cfc513be46131dec678b4fe827ac433a07abc81950d10631bc1",
+            "primary_key": "b721e58bd7eb9b97d7d861bc3e4e496304730faba19885192fc48ce94bfb887a",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "83586ff1235d676cc418aae7fe5a1ce1d7601dcabe541d2236b8d7c02f7d3612",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "4cbd3d8a3401fbac1353b33a9f22204cf9f479cb426c7ed03bd267ce27328869",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/role_template_grants",
+          "table_evidence_sha256": "dc97f2c36165d5c0a40c83445ed0c2ef47e1b589b56d8d6b5f3414af8899441c",
+          "component_hashes": {
+            "columns": "a686b019f2c664fa1bb2fe5466194652f75e2324e776f0f0d5c14f460555aca3",
+            "primary_key": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "00993df00e47714213b06e1dd78ad7bc68d757561743e7c2cd825c65c3ff58b5",
+            "checks": "6d20b0e9caebd01bbbbc22197e35ad3a664c75e44ce914ca9dc1d6a06156fd9d",
+            "indexes": "0cf3162d6bca5c70d9c66259383bcc691da7787a711fbab75cbb3715776841b9",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/role_templates",
+          "table_evidence_sha256": "4c5e7cd7ac80e2f33eba8331242499793064d5626118745b85e324e8eb766b9e",
+          "component_hashes": {
+            "columns": "a3b71c0f31ba0e604145538313402bfc2e0f8fa332ce983bcf0f644d908ebfe3",
+            "primary_key": "31791ac097eaefe79d6f0741625cb71dd4f81f5b58519b4b4356102b03d4a050",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "d93d7717b29ce919aeac23655fcd4ce4e6e1ae3574fd27af1d2d0dfabc953a44",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/run_events",
+          "table_evidence_sha256": "fa8dc85f03b2c4d11579b12590501564c46ddd44a25bb2cab712275c85174dc7",
+          "component_hashes": {
+            "columns": "5a039c02057cc2c02eee90f659f1a306259f985f273816fa34dc2f4aa2cea52e",
+            "primary_key": "d6f0d498d558e4dcc89bad324d2e6c825405b51c9f46a58e0ae49f519c81cac4",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "160e8eb66073c8af8d92289cdde24cf1c7a6f0bbda66870e783f2aa9742459ee",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "41a0e9fd7891c30b72693c83a5a962cea79c44b2d9600f880555c50f60ccf04c",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/run_steps",
+          "table_evidence_sha256": "3bf8329f5a284aba78a649f2cb0360c129dc2425c88e413fe67ff844681a47a4",
+          "component_hashes": {
+            "columns": "7a2f80694fb4f6ad2c2dc6ff3f1fc0673b1168c77e7646d683bc57a9681bcbab",
+            "primary_key": "32b27e48954475331aeb14b6201c0e2a73ba6894645e473d3190515bcebe74d9",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "037220a3aa9c992e789ab9da33ad30c7de3430dfdbc24959759d76fc276df0db",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "b25e9b8d83cd75c65f9809eab8789f21e1d82908fb0cf2895ee9791aa9a85331",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/runs",
+          "table_evidence_sha256": "455594a686e9184537cbccc9c63653baa71cc560b04a333fb345770c403495aa",
+          "component_hashes": {
+            "columns": "7ba32873baaa38973f06976f6f8e58f08a4d4937be550b3ad7225acb4c6c32cc",
+            "primary_key": "fd3c7c17c3180ddd2435338981a5bbd662f0d3e6b652f9ed2f0b92d7ba9a2174",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "a4f150c1881429ac3115ae1678c2c3edfa1fe34f35c20bdb7fa8295c75bd7897",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "7fa8669b453c4630cf7a5313b3a2ce81b4c5a63330a65c3ccbbf4a3dd02c2187",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/sessions",
+          "table_evidence_sha256": "1d2c40e6d52bfda703e152c4cf18652ce03bde382bd6d52208e04b46395cd05c",
+          "component_hashes": {
+            "columns": "fb68535adebeb4ceb3b514251d09c94fdcf6fea4777ef8769b97d0bfe7f259a9",
+            "primary_key": "fe43ef1b0ae8b379b445a727fe04b647346035fad8259dd8dfc84804241368e3",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "3bfd95fd10332640cca34379399bc9c830787d5aff54a84f521758ed8ccf7599",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "37a2b514587cc36904342fc5076a7eb15a69a90dd5f22ea5f144c0a8a5571e11",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/skill_distribute_accounts",
+          "table_evidence_sha256": "4af557552f113d912453287c63889f6eb5ecebc5c5a364c8a1e9475a1f7ba3dc",
+          "component_hashes": {
+            "columns": "5a12366ca3ca3463643a63a4635b5039f332e57edc1d7a3983bc52fbf8e63751",
+            "primary_key": "50dee9ae5bb3c39b443b807e84d3385b99a0fc25f651f473bcda73ea124711b9",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "29d0e411d1d452a38e7128ebfdc54db5cb8578ad1a1bac7ea0006c66e8867f5f",
+            "checks": "0d25aa04d838ca526c7f52ebb2448d14fa231347a52f0eeb9ae4c77155f87b43",
+            "indexes": "66bc92c26fb5f9325303c44f7f6832a2fa0415aeea9a99b4d032ab26589163da",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/skill_distribute_groups",
+          "table_evidence_sha256": "12aa41bcd794dacefc349542cda8d3c8e20bc5ac1d275a5efe116793f2ed4493",
+          "component_hashes": {
+            "columns": "303e2492b9d1acfb82a922188c45044184ae59850d84146e5e5a883df3629d9c",
+            "primary_key": "26172df7a11f754ea14be9f584da5e83534d960b6df0a16d943f55d587d68196",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "checks": "23d9afa0ae8169a3c93a8f7db51064f54221cb7aae6ff09aaa75b49ea3d1d3c0",
+            "indexes": "3961f787d7248991e4a338cd9f02f7238c953503880576c547023d5680a935c0",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/skill_distribute_jobs",
+          "table_evidence_sha256": "2b61cfdff0668da3f0f089c89bcc2e95f55785a662c427688e014196e3cef7e5",
+          "component_hashes": {
+            "columns": "c69877547896883629c6e3cc3fb397cb66811ba03753612e97a05a00699639f4",
+            "primary_key": "4c9a31cb13809665493d7cddc4368534d46807964c689806d515966c74f2c511",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "checks": "9229ec504e6c09252fea6c00c42433a191131e8c8252b8c585dfcf7db1b2858c",
+            "indexes": "e21b6ce8e406d71785ece6afaf2bd7efdbd6289540fe360d64f825b55d3e9db9",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/skill_meta_connections",
+          "table_evidence_sha256": "16068616bcb47f90ac2f540d0a86c92e0c34ef43334b1459e4f10b730cf24049",
+          "component_hashes": {
+            "columns": "4a86e2f4c0028e876d89c996ddf144cd2f1d551b162cb2ffb46d8ad98aa5798a",
+            "primary_key": "d72ac39bb4a8ba96306dc2e283094a24ca53eb514a7bcdcfae3a0d6ee462a226",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "checks": "8a5d4669de74d94cbc45859c5ae01d97500a4c72ac0d334112a95577d4093ee6",
+            "indexes": "8673db475cf42c81feee7b7c304d3b98dc721fb48bbef0a1fc84248b047d5d06",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/skill_meta_drafts",
+          "table_evidence_sha256": "f831e2d8470906c54c221927e16e6bc5f6ff298be47938ea61bcff0565245c61",
+          "component_hashes": {
+            "columns": "bad392ecf74cf26d9914de13646a34a1ee904ebd86ae1d20103e5fb53379f6a9",
+            "primary_key": "f037026195d11708231d853d77af50081255c8dd752b9c5c75b851cf6295714e",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "checks": "2cb4034ccc298e20f040818ca1e6519df00a03b621ad9a81a17195dedaa396d4",
+            "indexes": "59672549ac387a5d59d86fa4d086ee9542958e1251bd9e0347b8bcf19c9343f8",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/skill_runs",
+          "table_evidence_sha256": "3cf14d7ab1a66ff28f5c775eac50b865c82b53532259b43beab30b8e3fc55dff",
+          "component_hashes": {
+            "columns": "c8d44b2983190b923761e949eea1148f13f167698196482a70f3a29ceb85e891",
+            "primary_key": "e5037a3a457078e6188af5934aa11fe6f82c142101cd59b75c3dd65f7b2b0db1",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "8237db56e2996289d2da60524d31eb1d0abdb4936dcb99a22304e9df4e256105",
+            "checks": "aa3b8af4333d9b7c8f07db490bedf29e23fdbf952da6c0f6d00ee63eaadee95e",
+            "indexes": "b2fea3d5e56340f7ba5493f8f5e3f838c3692f0beae21cc2bb1b58e4c0e4ff2f",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/skill_runtime_tokens",
+          "table_evidence_sha256": "4bfa0ecc7773bfa8e167d9a6f9cb82cf02ab437e2b9daecc6a92bacb0b8d3a88",
+          "component_hashes": {
+            "columns": "3acb000f5351b68d6286a79f2d58aa16a9696c051d60693754115690cc099dde",
+            "primary_key": "b483c64d9c7c06d9c355014c1e9e3e280e162dccedcf84d87760a93520c8ecb9",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "b2bdfbdd6dc9089d6ad2f05d02cfe15f6689fc86edeb4a9a1faa54db27410ac0",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/skills",
+          "table_evidence_sha256": "d6ee06cbac93dff1e9add67cd1d4996e8efbce6775ddd0737055db25f41df1e3",
+          "component_hashes": {
+            "columns": "ff036f511346a36eafa5a8d0f712162ff5b5666708dafc718c47d2fe45b3ab9f",
+            "primary_key": "fd2bf7fe5ba468d6cc304f8a45ffed8266073313f4d8720366ea6c059bbcc2eb",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "checks": "4138a540a5abf14f15cfe8589dbc6a55950ad797165af5aa565fc8922d57c9f9",
+            "indexes": "8067ceb508be52fd658443ea855ccca54594686ec8e8bf2ebbee239684f499f8",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/threads",
+          "table_evidence_sha256": "005e02fd6a89f531e22a32c854067efc94d6027b9afc293e9e09fa8715e4afd1",
+          "component_hashes": {
+            "columns": "5b3a2fada27f79f2c422d0b25243bfd5dfad3bd228aaa098888b2e6d5cd2bbb0",
+            "primary_key": "f68944393a82f9668918546964d2c8fdd1611a4ef2207d480a93781b16c4dde7",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "a744d8b82e003e01878490a83e642704eb5e4f86d5ed6d73aaaafcf5a71da54b",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "e252a8e8e58b6b9d5dcab1c981f01b761f649ec368d860f1bc161ae2be09bd2b",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/token_usages",
+          "table_evidence_sha256": "a54b089ba527efe12c8d6d6de3796aa40e46aac7741823974df5b0b40d36e8bf",
+          "component_hashes": {
+            "columns": "0feb077c74a9dad38e7db70a1799b2f1999c61958dd241ea54b9afd47c81ad90",
+            "primary_key": "2e77448e140a91b6946eeb25090981eb4d30aed569cc52392850699567195ece",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "047ad710efb653cb0226387e8d63e057cd3090a98601e23b885bf5ebe1a373db",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "ddec85c4c9abe81bdd3a1c3ed828413d7aa43ed1006a12ecfaa3b545b5fe2dac",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/tool_calls",
+          "table_evidence_sha256": "449efe100c301321e9fdafbc38b7344c1777a50b34a8d963886ad3548bd14712",
+          "component_hashes": {
+            "columns": "df32e043264a2f29b0e9ff9acfebc7361b92ed904efa1a72589e15ebba8bcd69",
+            "primary_key": "2f09675edd32ce622a054be93bec86e08d58b8a7d71ddf885d80f17c6fea2400",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "bf112d84c57322149cbf42757a3e1ba1c566e347cca247af02c8068cbe2beb1a",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "4416a61951ef3b7d6292d6ecb502f98da754bef3556b863ec379340f8709dae3",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/user_email_identities",
+          "table_evidence_sha256": "28ad80dfe9df36b12b0969320b333ce81f16da735ae294e4ed96059fc4969b80",
+          "component_hashes": {
+            "columns": "f56b04226d5662d513b70d1b40673be124e1c7eea1485e7ee89f19376a6b0792",
+            "primary_key": "855a344d62821f0567fbeff80a42122c2457b53b76775fdfcc63d29c7533ab36",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "5f6e9c33a9d0788a7ff44eecde3aa37b6d600b0221b4c02f8958579f38c80ba3",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "b05361d934a09924f3e3126a9ea39a9461f7358d1e9606cceaed53490f30593e",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/user_permission_grants",
+          "table_evidence_sha256": "07e567342d23e22bb7824996be258f57684016c6881d4aacf8dafc7aa50aeb6b",
+          "component_hashes": {
+            "columns": "ea00350b7ee05f815936192135b89791ddf6193a2b70d410602cb5fc3a46fe1f",
+            "primary_key": "e14441c5d608ed4dd8fd471814ae45cd9ae2ad6831a49aaec5d5793a5ce6f9ae",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "a52f000795ece3169a8161f98261ead27608211ae1fcff0502abd67a4ba497ae",
+            "checks": "819f3bcaa9ed9ace17e5f356b602c52f772ebe85b1e55130c302f4f6953516e5",
+            "indexes": "699d52bc5c6aa97a2e5c21109a5cf7331ab38e43f5a7e276a23b7ab7de0106e3",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/users",
+          "table_evidence_sha256": "be58be817ceadab6d80c714a4983e2d46d5491c49cd0e5dc0d7cc6166b188359",
+          "component_hashes": {
+            "columns": "794b4a5c4e5816016dbccaa83a8da74535787d9e675aa59aab128bc0ba7690b4",
+            "primary_key": "d2c4cb3998067e6bae51e2cc9cb9ddda49a9cb2c527355b9f897165fefb59f07",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "30c289f5a0d39038d6068e113e4139f41608f38c1f99e89b6a37803a8a9ec46f",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/verification_tokens",
+          "table_evidence_sha256": "ea0bdbfd67c0563c8e07a08f4e9d43d03efc1aecde28a2cc7684e3adee7c79bb",
+          "component_hashes": {
+            "columns": "79c72dff88052027378251265fbd9b4a6199f4190558ce03b51b6a2c9e645dc2",
+            "primary_key": "7ae36d6335cae885a8ca8a8eee8bcc4b6929626110eb5de1a0835f0fc732ef16",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "fec9c97df9350fb0feaee425776ee3ab4c648c43cf785153c6d003cbf068f2a9",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        },
+        {
+          "object_ref": "database://primary/public/work_items",
+          "table_evidence_sha256": "ef2011cacc98c6d7c79502314970eaf82ddec4928f0b2ea2248d865e9e317f68",
+          "component_hashes": {
+            "columns": "cca70264a54d679f83a8dc3b604a520578ece40a64487a0a03f16c1233e0da35",
+            "primary_key": "5e2d8341e37b854299614a88f4a3f1a79e66b95cacfe545bde191bf9fa4f3e05",
+            "unique_constraints": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "foreign_keys": "420b60c0addd79bd0176cb5dbc8408bf00a29781517af5592bc80d8c03b38caf",
+            "checks": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+            "indexes": "9e03a254d7f16ed76410ee70d9872aa25d79a5530469810a9f0fb74f6bf12bdb",
+            "partition": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed"
+          }
+        }
+      ]
+    }
+  ]
+}
