@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-08T16:11:12Z",
-  "updated_at": "2026-11-09T10:22:52Z",
+  "updated_at": "2026-11-09T10:47:58Z",
   "files": {
     ".dockerignore": {
       "role": "index",
@@ -11,9 +11,9 @@
     },
     ".env.example": {
       "role": "index",
-      "sha256": "a78770cbbe5cb5b708c55786e5f60594e8d78c48e0894aeefb811fa3d0cd5904",
-      "size": 8959,
-      "normalized_sha256": "a78770cbbe5cb5b708c55786e5f60594e8d78c48e0894aeefb811fa3d0cd5904"
+      "sha256": "5d46540a0b46c5ef7abd45c398b17259affb0bfd89e60c3d2ac8977f58357832",
+      "size": 9314,
+      "normalized_sha256": "5d46540a0b46c5ef7abd45c398b17259affb0bfd89e60c3d2ac8977f58357832"
     },
     ".gitattributes": {
       "role": "index",
@@ -41,9 +41,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "b133a9f571f2e03078e071609415c90baf56e45d7f24e98e0ad3b8f46e3d4198",
-      "size": 161374,
-      "normalized_sha256": "b133a9f571f2e03078e071609415c90baf56e45d7f24e98e0ad3b8f46e3d4198"
+      "sha256": "bcdfcc95319af5ce35219d04f2d063b2f79ce0449b2c02656b8b72b0092ab213",
+      "size": 162014,
+      "normalized_sha256": "bcdfcc95319af5ce35219d04f2d063b2f79ce0449b2c02656b8b72b0092ab213"
     },
     "aoci.database.txt": {
       "role": "index",
@@ -953,9 +953,9 @@
     },
     "docker/docker-compose.yml": {
       "role": "index",
-      "sha256": "e56e672952c69cd55c7b32391b73802c21253dc6ae4c98beaa66985ab0fa184b",
-      "size": 12989,
-      "normalized_sha256": "e56e672952c69cd55c7b32391b73802c21253dc6ae4c98beaa66985ab0fa184b"
+      "sha256": "3a36102dd40ae89262014c2c569327f03b1cfaeb72639bf4180522f8cf912cf3",
+      "size": 13150,
+      "normalized_sha256": "3a36102dd40ae89262014c2c569327f03b1cfaeb72639bf4180522f8cf912cf3"
     },
     "docker/migrate/entrypoint.mjs": {
       "role": "index",
@@ -1055,15 +1055,15 @@
     },
     "docs/audit/2026-11-09-全面审计报告.md": {
       "role": "index",
-      "sha256": "835dbf8ee39c3097e6e637632773bf32a72ace580a720773adb2bf1517caf090",
-      "size": 24527,
-      "normalized_sha256": "835dbf8ee39c3097e6e637632773bf32a72ace580a720773adb2bf1517caf090"
+      "sha256": "5bfcf576d893ea0efeb7c8f5167bacc03826d0e6f791a646d1e23366fe976fb2",
+      "size": 25175,
+      "normalized_sha256": "5bfcf576d893ea0efeb7c8f5167bacc03826d0e6f791a646d1e23366fe976fb2"
     },
     "docs/development/P0-infrastructure.md": {
       "role": "index",
-      "sha256": "cc414d82a47c8318ea171d5af3792434bf3fd0167eef096e8fcecedb5e72a319",
-      "size": 28372,
-      "normalized_sha256": "cc414d82a47c8318ea171d5af3792434bf3fd0167eef096e8fcecedb5e72a319"
+      "sha256": "f55703a05914c74fe2549240c0044b4d031fc9205a78f94411ab36a11fa110c1",
+      "size": 28533,
+      "normalized_sha256": "f55703a05914c74fe2549240c0044b4d031fc9205a78f94411ab36a11fa110c1"
     },
     "docs/development/P1-auth-rls.md": {
       "role": "index",
@@ -1217,9 +1217,9 @@
     },
     "scripts/lib/setup.mjs": {
       "role": "index",
-      "sha256": "86028d25876f8025e3afb423ee8ad7834057492f74e75c848909e1da99ab5ec0",
-      "size": 2388,
-      "normalized_sha256": "86028d25876f8025e3afb423ee8ad7834057492f74e75c848909e1da99ab5ec0"
+      "sha256": "06c67fd7a7100840e0bd48e4cf602296c08741b19c5709597b5fdd82290322a8",
+      "size": 2417,
+      "normalized_sha256": "06c67fd7a7100840e0bd48e4cf602296c08741b19c5709597b5fdd82290322a8"
     },
     "scripts/ops-runner.mjs": {
       "role": "index",
@@ -1271,9 +1271,9 @@
     },
     "scripts/test-app-settings.mjs": {
       "role": "index",
-      "sha256": "10cc12380401c2eb9d8991c6769cf11590e687bf44286107dd2bc951022a4395",
-      "size": 8458,
-      "normalized_sha256": "10cc12380401c2eb9d8991c6769cf11590e687bf44286107dd2bc951022a4395"
+      "sha256": "c1dee90655ddb31e4613ef1053ea04396e98241455add6d2816cb0dd2dd7ef53",
+      "size": 9311,
+      "normalized_sha256": "c1dee90655ddb31e4613ef1053ea04396e98241455add6d2816cb0dd2dd7ef53"
     },
     "scripts/test-knowledge.mjs": {
       "role": "index",
@@ -2669,9 +2669,9 @@
     },
     "src/lib/settings/crypto.ts": {
       "role": "index",
-      "sha256": "70fd2f6b8806cc1564a9cecc07cf42af438057b444b1cb39f1fd65770f2bb515",
-      "size": 2092,
-      "normalized_sha256": "70fd2f6b8806cc1564a9cecc07cf42af438057b444b1cb39f1fd65770f2bb515"
+      "sha256": "96e757108d0497b1203b001aee54bd30c6c4486f167bdf6e3bba01aacdf3c5ed",
+      "size": 3343,
+      "normalized_sha256": "96e757108d0497b1203b001aee54bd30c6c4486f167bdf6e3bba01aacdf3c5ed"
     },
     "src/lib/settings/delivery-status.ts": {
       "role": "index",
