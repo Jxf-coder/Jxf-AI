@@ -16,6 +16,23 @@
   - 可选步骤失败则跳过并继续；非可选步骤失败则整条产线停止
 - runner 启动时把上次异常退出遗留的 `running` 任务收口为 `failed`
 
+## 与运行时队列（runs）的收口语义差异
+
+本进程只处理 `ops_tasks`。AI 运行时的 `runs` 队列由 `worker-app` 进程负责，两个队列都叫「收口」但终态不同，排障时不要混用：
+
+| 对象 | 负责进程 | 启动收口 | 超时巡检 | 收口结果 | 后续动作 |
+|---|---|---|---|---|---|
+| `ops_tasks` | `ops:runner` | 上次异常退出遗留的 `running` | — | `failed` | 重新发起运维任务 |
+| `runs` | `worker-app` | 不属于本进程的 `running`（`worker restarted`） | 60 秒未心跳 / 租约过期 | `interrupted` | 用户在界面点「继续」重新入队 |
+
+`runs` 侧的 `attempts` **只在领取时递增**，失败路径不消耗它：
+
+- 进程崩溃 / 心跳超时 → `interrupted`，不会自动重领，必须显式「继续」；
+- 执行器 catch 捕获的异常（模型报错、工具报错、解析失败）→ 直接 `failed`，不走重试；
+- 累计派发达 3 次 → 巡检置 `failed`（`max attempts reached`），「继续」也不再入队。
+
+因此看到 `failed` 时，先区分是「执行器异常」还是「重试耗尽」，前者直接排查错误原因并重发，后者说明连续中断已达上限。完整时序见 [Milestone3 §4.4–4.5](../architecture/Milestone3-运行态数据模型.md)。
+
 ## 前置条件
 
 1. 仓库已 `npm install`（runner 通过 `tsx` 直接加载 `src/lib/mcp/health.ts`）

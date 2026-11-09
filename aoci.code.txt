@@ -192,7 +192,7 @@ healthcheck.sh[OR6T]: F:PostgreSQL 容器健康检查，连接可用且三个扩
 MCP工具能力梳理报告.md[SN7M]: F:MCP 工具能力盘点：已注册 4 个工具、可扩展 50 多个后端能力与首批 18 个落地建议 | R:code:src/lib/mcp/tools.ts,code:docs/architecture/master-plan.md | A:架构文档 | S:只列代码中真实存在的函数与路由；需要新开发的能力单独标注
 Milestone1-岗位与授权数据模型.md[SI7M]: F:M1 组织与授权数据模型设计，定义租户、隔离粒度、岗位与 RLS 骨架的最小闭环 | R:code:db/migrations/0001_p1_org_departments.sql,code:docs/architecture/master-plan.md | A:架构文档 | S:实际实现已拆为部门树、memberships.title 与 access_level；DDL 以 0001 迁移与 policies 为准
 Milestone2-知识库数据模型.md[SB8L]: F:M2 知识库数据模型设计：证据链、确认门槛、批次血缘与回归评测四类资产 | R:code:db/migrations/0008_knowledge_base.sql,code:db/schema/knowledge.ts | A:架构文档 | S:明确不做文件系统当库、全量读 cards.json、TF-IDF 字面检索与两套卡库并存
-Milestone3-运行态数据模型.md[SW8M]: F:M3 AI 运行时数据模型设计：threads、runs、steps、events、tool_calls、token_usages | R:code:db/migrations/0016_runtime_tables.sql,code:db/schema/runtime.ts | A:架构文档 | S:threads 是会话、runs 是单次执行、ingest_runs 是入库批次，三者不合并；不做 DAG 与事件重放
+Milestone3-运行态数据模型.md[SW8L]: F:M3 AI 运行时数据模型设计：threads、runs、steps、events、tool_calls、token_usages | R:code:db/migrations/0016_runtime_tables.sql,code:db/schema/runtime.ts,code:src/lib/runtime/claim.ts,code:src/lib/runtime/recover.ts,code:src/lib/runtime/resume.ts | A:架构文档 | S:threads 是会话、runs 是单次执行、ingest_runs 是入库批次，三者不合并；不做 DAG 与事件重放；attempts 只在领取时递增，仅 queued 与租约过期的 running 会被重新派发，interrupted 必须由用户显式「继续」才回队；执行器 catch 到的异常直接 failed、不消耗 attempts，累计派发 3 次后由巡检置 failed（max attempts reached）
 WorkBuddy连接器清单.md[SN7L]: F:WorkBuddy 连接器盘点，共 619 个工具包、530 个含 MCP 服务，并给出接入字段映射 | R:code:src/lib/mcp/connectors.ts,code:db/schema/mcp-servers.ts | A:架构文档 | S:清单来自本机插件目录扫描；streamable-http 需映射为 http；接入前需按 SSRF 与命令白名单校验
 master-plan.md[SG9L]: F:工程架构与落地路线图，冻结 Docker 单机交付、Next.js 全栈、PostgreSQL 与 RLS 等选型 | R:code:docs/architecture/Milestone1-岗位与授权数据模型.md,code:docs/architecture/Milestone2-知识库数据模型.md | A:架构文档 | S:本文件是唯一实施基准；与对话记录冲突时以本文件为准；Python 仅作离线工具且不持数据库凭据
 permission-model.md[SI9M]: F:权限模型语义冻结稿，定义 L1–L3、PermissionNode、Scope 与本轮纳入范围 | R:code:docs/architecture/权限系统与UI落地实施计划.md,code:src/lib/permissions/catalog.ts | A:架构文档 | S:代码以本文件为唯一语义依据；财务、教学、市场投放本轮不纳入，仅保留扩展接口
@@ -219,7 +219,7 @@ P5-gate.md[SO8S]: F:P5 治理面与交付人工闸门，覆盖版本表、备份
 
 ===E:/JXF-AI/docs/operations/===
 observability.md[SO7S]: F:可观测性说明：存活/就绪探针、聚合指标端点与日志口径 | R:code:src/app/api/metrics/route.ts,code:src/app/api/health/route.ts | A:运维文档 | S:指标只返回聚合计数，不含用户/文档/令牌明细；JXF_ENV=production 且 METRICS_TOKEN 为空时端点固定返回 503（fail-closed），smoke 会记为 WARN
-ops-runner.md[SO7S]: F:宿主机运维 runner 部署说明：轮询运维任务、连接器心跳与产线推进 | R:code:scripts/ops-runner.mjs,code:deploy/systemd/jxf-ops-runner.service | A:运维文档 | S:Web 容器不持有 docker 权限；连续失败 1–2 次降级、3 次熔断；告警 webhook 可选
+ops-runner.md[SO7S]: F:宿主机运维 runner 部署说明：轮询运维任务、连接器心跳与产线推进 | R:code:scripts/ops-runner.mjs,code:deploy/systemd/jxf-ops-runner.service,code:docs/architecture/Milestone3-运行态数据模型.md | A:运维文档 | S:Web 容器不持有 docker 权限；连续失败 1–2 次降级、3 次熔断；告警 webhook 可选；ops_tasks 启动收口为 failed，而 runs 由 worker 收口为 interrupted 且需人工继续，两者不可混用
 pipeline-triggers.md[SW7T]: F:产线触发说明：外部 Webhook 令牌与内部事件订阅两种触发方式 | R:code:src/lib/pipelines-webhook.ts,code:src/lib/pipeline-events.ts | A:运维文档 | S:令牌只显示一次，库内只存 SHA-256 与末 4 位；宿主机 runner 必须常驻负责派发与推进
 
 ===E:/JXF-AI/public/brand/===
@@ -621,7 +621,7 @@ experience.ts[RR7T]: F:worker 侧经验消费者，领取一个 job、执行提�
 main.ts[RR9L]: F:worker 进程入口，循环领取运行时 run 并执行流式模型调用、工具调用、事件与用量记账 | R:code:src/lib/runtime/claim.ts,code:src/lib/runtime/emit.ts,code:src/lib/runtime/recover.ts,code:src/lib/mcp/worker-tools.ts,code:src/lib/settings/runtime-server.ts | A:worker 运行 | S:只消费队列不承担 HTTP，使用 WORKER_DATABASE_URL 的 app_worker 受限角色；启动时把不属于本进程的 running 收口为 interrupted；心跳 30s、巡检 60s、空闲 800ms；连接池 max 4，query_timeout 与服务端 statement_timeout 均为 60s，任务续跑靠租约而非超时；经验沉淀后台单并发，不阻塞前台 run 领取
 
 ===E:/JXF-AI/docs/audit/===
-2026-11-09-全面审计报告.md[SQ5M]: F:工作台项目静态全面审计报告，按六条线分级列出安全、认知、可靠性与交付问题，附真实库复核、处置记录与修复路线图 | R:code:src/auth.ts,code:src/lib/db/pool.ts,code:docker/postgres/00-init.sh | A:审计交付 | S:结论绑定 2026-11-09 的索引与库内只读目录查询，未读取业务行；SEC-01 已闭环：先拆 jxf_auth 再收权，users 行级策略加三个 SECURITY DEFINER 入口；CI 只跑无 DB 的 7 项，集成测试走 verify:delivery；SEC-02 支持 v1 密文平滑升级；IDX-02 已为 75 条同名 Entry 补路径；IDX-04 抽查无失效断言
+2026-11-09-全面审计报告.md[SQ5M]: F:工作台项目静态全面审计报告，按六条线分级列出安全、认知、可靠性与交付问题，附真实库复核、处置记录与修复路线图 | R:code:src/auth.ts,code:src/lib/db/pool.ts,code:docker/postgres/00-init.sh,code:docs/architecture/Milestone3-运行态数据模型.md,code:docs/operations/ops-runner.md | A:审计交付 | S:结论绑定 2026-11-09 的索引与只读目录查询，未读取业务行；SEC-01 已闭环：先拆 jxf_auth 再收权，users 行级策略加三个 SECURITY DEFINER 入口；CI 只跑无 DB 的 7 项，集成测试走 verify:delivery；SEC-02 支持 v1 密文平滑升级；IDX-02 已为 75 条同名 Entry 补路径；REL-02 重试语义见架构与运维文档
 
 ===E:/JXF-AI/db/ops/===
 auth-role-cutover.sql[OS8T]: F:jxf_auth 角色的人工切换脚本：超级用户建角色、部署后验证登录，再由 owner 对 jxf_app 收权 | R:code:db/policies/034_auth_role.sql,code:docker/postgres/00-init.sh | A:角色切换运维 | S:migrate 只读 db/policies，不会执行本文件；收权必须在 AUTH_DATABASE_URL 生效并验证登录之后，顺序颠倒会直接锁死登录；users 只收回 password_hash 列，其余展示列继续授予 jxf_app

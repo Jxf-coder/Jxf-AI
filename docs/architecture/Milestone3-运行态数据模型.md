@@ -270,13 +270,16 @@ update runs
 
 `interrupted` 与 `failed` 必须分开：前者可"继续执行"，后者需要人介入。
 
+**执行器异常不走重试。** worker 的 `execute()` 外层 catch 捕获到异常时（模型报错、工具报错、解析失败等），直接 `finish(..., 'failed')`；若此时已收到取消信号则记 `cancelled`。这类失败**不消耗** `attempts`，也不会被自动重放——这是刻意取舍：瞬时故障交给操作者判断是否「继续」，若把 catch 异常也交给自动重试，模型侧 5xx / 配额类错误会被无声重放三次，既烧钱又掩盖根因。
+
 ### 4.5 租约与领取
 
 ```sql
 with picked as (
   select id from runs
-   where status = 'queued'
-      or (status = 'running' and lease_until < now())      -- 过期回收
+   where (status = 'queued'
+          or (status = 'running' and lease_until < now()))  -- 过期回收
+     and attempts < 3                                       -- 达上限不再领取
    order by created_at
    for update skip locked
    limit 1
@@ -285,6 +288,7 @@ update runs r
    set status = 'running',
        worker_id = $1,
        lease_until = now() + interval '90 seconds',
+       heartbeat_at = now(),
        attempts = attempts + 1,
        started_at = coalesce(started_at, now())
   from picked p
@@ -292,7 +296,25 @@ update runs r
 returning r.*;
 ```
 
-执行期间每 30 秒续租一次。`attempts` 超过上限（建议 3）直接置 `failed`，不再无限重试。
+执行期间每 30 秒续租一次（同时刷新 `heartbeat_at`）。worker 每 60 秒巡检一次，把租约过期或心跳超时的 `running` 收口为 `interrupted`，并把 `attempts` 已达上限的排队项置 `failed`：
+
+```sql
+update runs
+   set status = 'failed', finished_at = now(),
+       error = coalesce(error, 'max attempts reached')
+ where (status in ('queued', 'interrupted') and attempts >= 3)
+    or (status = 'running' and lease_until < now() and attempts >= 3);
+```
+
+**`attempts` 的准确语义：只在领取时 +1，失败路径不递增。** 因此「上限 3 次」不是「任意失败自动重试 3 次」：
+
+| 场景 | 是否重试 | 说明 |
+|---|---|---|
+| 进程崩溃 / 心跳超时 / 租约过期 | 是（需人工确认） | 收口为 `interrupted`；`claimRun` **不会**自动领取 `interrupted`，必须由用户点「继续」把它改回 `queued` |
+| 执行器 catch 捕获异常 | 否，一次即 `failed` | 见 §4.4，瞬时故障需人介入重发 |
+| 累计派发已达 3 次 | 否 | 巡检置 `failed`（`max attempts reached`），「继续」也不再入队 |
+
+`interrupted` 不自动重领是防雪崩设计：worker 重启后如果立刻重跑所有中断任务，同一故障会被放大成连环失败。`attempts` 因此表示「这条 run 一共被派发给 worker 几次」，初始受理算 1 次，用户每点一次「继续」再算 1 次，第 3 次之后必须人工处理。另外，正常运行时心跳巡检（60 秒）总会先于租约到期（90 秒）触发，所以 `running + lease_until < now()` 的回收分支只是竞态兜底，不是常规重试路径。
 
 ### 4.6 取消
 
