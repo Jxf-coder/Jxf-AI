@@ -29,3 +29,6 @@ backups/
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# AOCI 项目级 MCP 配置：含本机绝对路径与数据库连接串，只保留在本地
+.trae/mcp.json
