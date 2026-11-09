@@ -23,6 +23,7 @@ import {
   Pin,
   Plus,
   Plug,
+  Puzzle,
   RefreshCw,
   Search,
   Settings,
@@ -75,6 +76,10 @@ export function FileTextIcon(props: IconProps) {
 
 export function LayersIcon(props: IconProps) {
   return <Icon icon={Layers} {...props} />;
+}
+
+export function SkillIcon(props: IconProps) {
+  return <Icon icon={Puzzle} {...props} />;
 }
 
 export function CloseIcon(props: IconProps) {

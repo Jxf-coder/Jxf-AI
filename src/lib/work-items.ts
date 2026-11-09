@@ -13,6 +13,8 @@ import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
 import { auditInTx } from "@/lib/audit";
 import { parseReviewConfig } from "@/lib/ai-employees";
+import { enqueueExperience } from "@/lib/knowledge/experience/capture";
+import { errorMessage, log } from "@/lib/logger";
 import { PermissionDeniedError } from "@/lib/permissions/guard";
 import { requireContextPermission } from "@/lib/permissions/server";
 import { acceptRun } from "@/lib/runtime/accept";
@@ -374,8 +376,13 @@ export async function reviewWorkItem(
       department_id: string;
       assigned_by: string;
       status: WorkItemStatus;
+      title: string;
+      brief: string;
+      deliverable_text: string | null;
+      current_run_id: string | null;
     }>(
-      `select id, department_id, assigned_by, status
+      `select id, department_id, assigned_by, status, title, brief,
+              deliverable->>'text' as deliverable_text, current_run_id
          from work_items
         where id = $1`,
       [workItemId],
@@ -403,15 +410,23 @@ export async function reviewWorkItem(
       throw new Error("只有待验收的工作项可以验收");
     }
 
+    const reviewedAt = new Date();
+
     await client.query(
       `update work_items
           set status = $2::work_item_status,
               review_note = $3,
               reviewed_by = $4,
-              reviewed_at = now(),
+              reviewed_at = $5,
               updated_at = now()
         where id = $1`,
-      [row.id, decision === "approve" ? "done" : "returned", trimmedNote || null, context.userId],
+      [
+        row.id,
+        decision === "approve" ? "done" : "returned",
+        trimmedNote || null,
+        context.userId,
+        reviewedAt,
+      ],
     );
 
     await auditInTx(client, context, {
@@ -422,5 +437,46 @@ export async function reviewWorkItem(
       departmentId: row.department_id,
       payload: { note: trimmedNote || null },
     });
+
+    // 退回必采、通过且写了备注也采：沉淀「什么交付算合格 / 常见返工点」
+    if (decision === "return" || trimmedNote.length > 0) {
+      const deliverableText = (row.deliverable_text ?? "").trim();
+      const sourceText = [
+        `工作项：${row.title}`,
+        `工作说明：${row.brief}`,
+        `验收结论：${decision === "return" ? "退回" : "通过"}`,
+        trimmedNote ? `验收备注：${trimmedNote}` : "",
+        deliverableText ? `交付摘要：\n${deliverableText.slice(0, 6000)}` : "",
+      ]
+        .filter((line) => line.length > 0)
+        .join("\n");
+
+      await client.query("savepoint experience_capture");
+      try {
+        await enqueueExperience(client, {
+          tenantId: context.tenantId,
+          departmentId: row.department_id,
+          channel: "review",
+          sourceType: decision === "return" ? "work_item_return" : "work_item_approve",
+          sourceId: row.id,
+          sourceVersion: reviewedAt.toISOString(),
+          title: `${row.title} · 验收${decision === "return" ? "退回" : "通过"}`,
+          text: sourceText,
+          meta: {
+            workItemId: row.id,
+            decision,
+            runId: row.current_run_id,
+          },
+        });
+        await client.query("release savepoint experience_capture");
+      } catch (error) {
+        await client.query("rollback to savepoint experience_capture");
+        log("warn", "experience_capture_failed", {
+          work_item_id: row.id,
+          decision,
+          error: errorMessage(error),
+        });
+      }
+    }
   });
 }

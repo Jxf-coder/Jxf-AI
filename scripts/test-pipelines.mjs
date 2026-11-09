@@ -15,6 +15,8 @@ import {
   runPipeline,
 } from "../src/lib/pipelines.ts";
 import { advancePipelineRuns, applyPrevious, sweepScheduledPipelines } from "../src/lib/pipeline-runner.ts";
+import { capturePipelineRunExperience } from "../src/lib/knowledge/experience/collectors.ts";
+import { reviewWorkItem } from "../src/lib/work-items.ts";
 import {
   dispatchPipelineEvents,
   publishPipelineEvent,
@@ -141,6 +143,8 @@ async function main() {
   const workItemIds = [];
   const runIds = [];
   const eventIds = [];
+  /** 经验队列清理：source_id 指向测试产线运行 / 工作项 */
+  const experienceSourceIds = [];
   let hooks = null;
 
   try {
@@ -281,8 +285,24 @@ async function main() {
     const strict = await createPipeline(l1, {
       name: `严格产线 ${stamp}`,
       steps: [
-        { title: `严格第一步 ${stamp}`, brief: "第一步", aiEmployeeId: employeeId, aiEmployeeName: "产线测试员工" },
-        { title: `严格第二步 ${stamp}`, brief: "第二步", aiEmployeeId: employeeId, aiEmployeeName: "产线测试员工" },
+        {
+          title: `严格第一步 ${stamp}`,
+          brief:
+            "第一步：核对合同条款、金额与交付节点，逐条比对附件与正文的一致性；" +
+            "发现不一致时必须引用原文位置说明差异，并给出可执行的修订建议，禁止直接改写原文结论。" +
+            "完成后输出核对清单与风险点，交付前自查数字是否都能在原文中找到出处。",
+          aiEmployeeId: employeeId,
+          aiEmployeeName: "产线测试员工",
+        },
+        {
+          title: `严格第二步 ${stamp}`,
+          brief:
+            "第二步：基于核对清单生成终稿，逐条回应风险点并标注引用位置；" +
+            "无法核对的内容必须显式标注待补充，不得编造数字或来源。" +
+            "输出前再次检查所有结论是否可由原文直接支撑。",
+          aiEmployeeId: employeeId,
+          aiEmployeeName: "产线测试员工",
+        },
       ],
     });
     pipelineIds.push(strict.id);
@@ -307,6 +327,79 @@ async function main() {
       strictRow.rows[0]?.failed_step === `严格第一步 ${stamp}` &&
         Boolean(strictRow.rows[0]?.finished_at) &&
         strictRow.rows[0]?.next_step_index === 1,
+    );
+
+    // ------------------------------------------------------------------
+    // 2.1 失败产线 → 经验队列（worker 异步提炼）
+    // ------------------------------------------------------------------
+    experienceSourceIds.push(strictRun.runId);
+    const pipelineJobs = await owner.query(
+      `select id, channel, source_type, status from experience_jobs
+        where tenant_id = $1 and source_id = $2`,
+      [TENANT, strictRun.runId],
+    );
+    check(
+      "失败产线入队经验 job",
+      pipelineJobs.rowCount === 1 && pipelineJobs.rows[0]?.channel === "pipeline",
+      JSON.stringify(pipelineJobs.rows),
+    );
+
+    await owner.query("begin");
+    try {
+      await capturePipelineRunExperience(owner, strictRun.runId);
+      await owner.query("commit");
+    } catch (error) {
+      await owner.query("rollback").catch(() => undefined);
+      throw error;
+    }
+    const pipelineJobsAgain = await owner.query(
+      `select count(*)::int as count from experience_jobs
+        where tenant_id = $1 and source_id = $2`,
+      [TENANT, strictRun.runId],
+    );
+    check("同一 run 重复采集只累计次数、不重复入队", pipelineJobsAgain.rows[0]?.count === 1);
+
+    // ------------------------------------------------------------------
+    // 2.2 工作项退回 → 经验队列（证据来自验收备注与交付原文）
+    // ------------------------------------------------------------------
+    const reviewItem = await owner.query(
+      `insert into work_items
+         (tenant_id, department_id, title, brief, input, ai_employee_id,
+          assigned_by, reviewer_id, status, deliverable)
+       values ($1, $2, $3, $4, '{}'::jsonb, $5, $6, $6, 'waiting_review', $7::jsonb)
+       returning id`,
+      [
+        TENANT,
+        l1Actor.department_id,
+        `验收测试工作项 ${stamp}`,
+        "核对交付物是否可引用、数字是否可核对",
+        employeeId,
+        l1Actor.user_id,
+        JSON.stringify({
+          text: `交付正文：${"本段用于模拟无法核对的数字与结论。".repeat(20)}`,
+        }),
+      ],
+    );
+    const reviewItemId = reviewItem.rows[0].id;
+    workItemIds.push(reviewItemId);
+    experienceSourceIds.push(reviewItemId);
+    await reviewWorkItem(
+      l1,
+      reviewItemId,
+      "return",
+      `退回原因：${"交付物缺少可核对来源，必须补充原文引用后再提交。".repeat(6)}`,
+    );
+    const reviewJobs = await owner.query(
+      `select id, channel, source_type from experience_jobs
+        where tenant_id = $1 and source_id = $2`,
+      [TENANT, reviewItemId],
+    );
+    check(
+      "退回工作项入队经验 job",
+      reviewJobs.rowCount === 1 &&
+        reviewJobs.rows[0]?.channel === "review" &&
+        reviewJobs.rows[0]?.source_type === "work_item_return",
+      JSON.stringify(reviewJobs.rows),
     );
 
     // ------------------------------------------------------------------
@@ -514,6 +607,26 @@ async function main() {
       check("L2 不能生成 Webhook 令牌", deniedRotate);
     }
   } finally {
+    if (experienceSourceIds.length > 0) {
+      const jobs = await owner
+        .query("select id from experience_jobs where source_id = any($1::uuid[])", [
+          experienceSourceIds.filter(Boolean),
+        ])
+        .catch(() => ({ rows: [] }));
+      const jobIds = jobs.rows.map((row) => row.id);
+      if (jobIds.length > 0) {
+        await owner
+          .query(
+            "delete from card_evidence where card_id in (select id from knowledge_cards where source_job_id = any($1::uuid[]))",
+            [jobIds],
+          )
+          .catch(() => undefined);
+        await owner
+          .query("delete from knowledge_cards where source_job_id = any($1::uuid[])", [jobIds])
+          .catch(() => undefined);
+        await owner.query("delete from experience_jobs where id = any($1::uuid[])", [jobIds]).catch(() => undefined);
+      }
+    }
     if (eventIds.length > 0) {
       await owner
         .query("delete from pipeline_events where id = any($1::uuid[])", [eventIds.filter(Boolean)])

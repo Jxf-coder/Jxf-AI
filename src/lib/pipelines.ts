@@ -14,6 +14,8 @@ import type { PoolClient } from "pg";
 
 import { auditInTx } from "@/lib/audit";
 import { withUserContext, type UserContext } from "@/lib/db/user-context";
+import { capturePipelineRunExperience } from "@/lib/knowledge/experience/collectors";
+import { errorMessage, log } from "@/lib/logger";
 import { requireContextPermission } from "@/lib/permissions/server";
 import type { PermissionResource } from "@/types/permission";
 import { assignWork } from "@/lib/work-items";
@@ -419,6 +421,22 @@ export async function runPipeline(
         trigger_ref: triggerRef,
       },
     });
+
+    if (failedStep) {
+      // 首步派发失败即为终态：入队经验；采集失败不影响产线记录
+      await client.query("savepoint experience_capture");
+      try {
+        await capturePipelineRunExperience(client, runId);
+        await client.query("release savepoint experience_capture");
+      } catch (error) {
+        await client.query("rollback to savepoint experience_capture");
+        log("warn", "experience_capture_failed", {
+          run_id: runId,
+          error: errorMessage(error),
+        });
+      }
+    }
+
     return runId;
   });
 

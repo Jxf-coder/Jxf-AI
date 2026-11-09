@@ -14,6 +14,7 @@ import {
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext } from "@/lib/db/user-context";
 import { listMcpToolOptions } from "@/lib/mcp/connectors";
+import { listSkillOptions } from "@/lib/skills";
 import { canAssignWork, listWorkItems } from "@/lib/work-items";
 
 import { AiEmployeesClient } from "./AiEmployeesClient";
@@ -33,11 +34,12 @@ export default async function AiEmployeesPage({
   const requested = typeof params.ai === "string" ? params.ai : undefined;
   const selectedId = employees.some((item) => item.id === requested) ? requested : employees[0]?.id;
 
-  const [detail, candidates, workItems, mcpTools] = await Promise.all([
+  const [detail, candidates, workItems, mcpTools, skillOptions] = await Promise.all([
     selectedId ? loadAiEmployee(context, selectedId) : Promise.resolve(null),
     canManage ? listAiEmployeeGrantCandidates(context) : Promise.resolve(null),
     selectedId ? listWorkItems(context, selectedId) : Promise.resolve([]),
     canManage ? listMcpToolOptions(context) : Promise.resolve([]),
+    canManage ? listSkillOptions(context).catch(() => []) : Promise.resolve([]),
   ]);
 
   return (
@@ -59,6 +61,8 @@ export default async function AiEmployeesPage({
         candidates={candidates}
         workItems={workItems}
         mcpTools={mcpTools}
+        skillOptions={skillOptions}
+        accessLevel={context.accessLevel}
         canManage={canManage}
         canAssign={canAssignWork(context)}
       />

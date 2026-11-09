@@ -5,8 +5,12 @@
  * - 没有 AI 就明确拒绝，不伪造卡片；
  * - 每条证据引文必须能在切片原文里逐字找到（verifyQuoteInChunk），找不到的证据直接丢弃；
  * - 一条证据都没有的候选卡不入库（否则永远过不了确认门槛）；
- * - 与同部门既有卡「同一件事但数字不同」时标记冲突，冲突卡不可确认。
+ * - 与同部门既有卡「同一件事但数字不同」时标记冲突，冲突卡不可确认；
+ * - 目录由路由决定（05 经验 / 04 案例 / 03 规范…），低置信度标记 route_pending；
+ * - 蒸馏多卡不写 source_document_id，改用 source_ref.documentId + dedupe_key。
  */
+
+import { createHash } from "node:crypto";
 
 import type { PoolClient } from "pg";
 
@@ -14,7 +18,9 @@ import { chatCompletion } from "@/lib/ai/openai";
 import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
-import { numbersDiffer, titleKey, verifyQuoteInChunk } from "@/lib/knowledge/evidence";
+import { distillDedupeKey } from "@/lib/knowledge/experience/dedupe";
+import { routeFolder } from "@/lib/knowledge/experience/routing";
+import { normalizeForMatch, numbersDiffer, titleKey, verifyQuoteInChunk } from "@/lib/knowledge/evidence";
 import { errorMessage, log } from "@/lib/logger";
 import { requireContextPermission } from "@/lib/permissions/server";
 
@@ -38,6 +44,16 @@ interface DistillCandidate {
   evidence?: Array<{ ord?: number; quote?: string }>;
 }
 
+interface EvidenceRow {
+  chunkId: string;
+  pageNo: number | null;
+  quote: string;
+  charStart: number;
+  charEnd: number;
+  sourceHash: string;
+  quoteHash: string;
+}
+
 export interface DistillResult {
   created: number;
   rejected: number;
@@ -52,15 +68,23 @@ const SYSTEM_PROMPT = [
   "要求：每张卡至少一条证据引文；引文必须来自对应切片的原文，不得改写、不得补全；宁缺毋滥，没有可靠结论就返回空数组。",
 ].join("\n");
 
+function hashOf(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
 export async function distillDocument(context: UserContext, documentId: string): Promise<DistillResult> {
   const loaded = await withUserContext(context, async (client) => {
     const document = await client.query<{
       id: string;
       title: string;
       department_id: string;
+      folder_key: string;
       ingest_run_id: string | null;
       status: string;
-    }>("select id, title, department_id, ingest_run_id, status from documents where id = $1", [documentId]);
+    }>(
+      "select id, title, department_id, folder_key, ingest_run_id, status from documents where id = $1",
+      [documentId],
+    );
 
     const row = document.rows[0];
     if (!row || row.status !== "parsed") {
@@ -123,6 +147,49 @@ export async function distillDocument(context: UserContext, documentId: string):
     let rejected = 0;
     let conflicts = 0;
 
+    const insertCard = async (input: {
+      kind: string;
+      title: string;
+      body: string;
+      conflictIds: string[];
+      folderKey: string;
+      routeReason: string;
+      routeConfidence: number;
+      suggestedFolder: string | null;
+      routePending: boolean;
+      dedupeKey: string;
+    }): Promise<string> => {
+      const card = await client.query<{ id: string }>(
+        `insert into knowledge_cards
+           (tenant_id, department_id, kind, title, body, status, origin, human_edited,
+            conflict_with, ingest_run_id, rev, role_key,
+            folder_key, source_channel, source_ref, route_reason, route_confidence,
+            suggested_folder, route_pending, dedupe_key)
+         values ($1, $2, $3, $4, $5, 'pending', 'distill', false, $6::uuid[], $7, 1,
+                 (select role_key from documents where id = $8::uuid),
+                 $9, 'document', $10::jsonb, $11, $12, $13, $14, $15)
+         returning id`,
+        [
+          context.tenantId,
+          loaded.document.department_id,
+          input.kind,
+          input.title,
+          input.body,
+          input.conflictIds,
+          loaded.document.ingest_run_id,
+          loaded.document.id,
+          input.folderKey,
+          JSON.stringify({ documentId: loaded.document.id }),
+          input.routeReason,
+          input.routeConfidence,
+          input.suggestedFolder,
+          input.routePending,
+          input.dedupeKey,
+        ],
+      );
+      return card.rows[0].id;
+    };
+
     for (const candidate of candidates) {
       const kind = candidate.kind && CARD_KINDS.has(candidate.kind) ? candidate.kind : null;
       const title = (candidate.title ?? "").trim();
@@ -132,13 +199,7 @@ export async function distillDocument(context: UserContext, documentId: string):
         continue;
       }
 
-      const evidenceRows: Array<{
-        chunkId: string;
-        pageNo: number | null;
-        quote: string;
-        charStart: number;
-        charEnd: number;
-      }> = [];
+      const evidenceRows: EvidenceRow[] = [];
 
       for (const evidence of candidate.evidence ?? []) {
         const quote = (evidence.quote ?? "").trim();
@@ -155,6 +216,8 @@ export async function distillDocument(context: UserContext, documentId: string):
               quote: match.quote,
               charStart: match.charStart,
               charEnd: match.charEnd,
+              sourceHash: hashOf(chunk.text),
+              quoteHash: hashOf(normalizeForMatch(match.quote)),
             });
             break;
           }
@@ -174,31 +237,87 @@ export async function distillDocument(context: UserContext, documentId: string):
         conflicts += 1;
       }
 
-      const card = await client.query<{ id: string }>(
-        `insert into knowledge_cards
-           (tenant_id, department_id, kind, title, body, status, origin, human_edited,
-            conflict_with, ingest_run_id, rev, role_key)
-         values ($1, $2, $3, $4, $5, 'pending', 'distill', false, $6::uuid[], $7, 1,
-                 (select role_key from documents where id = $8::uuid))
-         returning id`,
-        [
-          context.tenantId,
-          loaded.document.department_id,
+      const route = routeFolder({
+        channel: "document",
+        kind,
+        title,
+        body,
+        sourceFolder: loaded.document.folder_key,
+      });
+      const dedupeKey = distillDedupeKey(loaded.document.id, title, body);
+
+      // 同一去重键串行化：并发蒸馏不会撞唯一索引，也不会各写一张
+      await client.query("select pg_advisory_xact_lock(hashtext($1))", [dedupeKey]);
+      const existing = await client.query<{ id: string; status: string }>(
+        `select id, status::text as status
+           from knowledge_cards
+          where tenant_id = $1 and dedupe_key = $2
+          for update`,
+        [context.tenantId, dedupeKey],
+      );
+      const existingRow = existing.rows[0];
+
+      if (existingRow?.status === "confirmed") {
+        // 已确认的卡不被草稿覆盖
+        rejected += 1;
+        continue;
+      }
+
+      let cardId: string;
+      let isNew = false;
+
+      if (existingRow?.status === "pending") {
+        const updated = await client.query<{ id: string }>(
+          `update knowledge_cards
+              set kind = $2, title = $3, body = $4, folder_key = $5,
+                  source_channel = 'document', source_ref = $6::jsonb,
+                  route_reason = $7, route_confidence = $8, suggested_folder = $9,
+                  route_pending = $10, conflict_with = $11::uuid[],
+                  rev = rev + 1, updated_at = now(), updated_by = $12
+            where id = $1
+            returning id`,
+          [
+            existingRow.id,
+            kind,
+            title,
+            body,
+            route.folderKey,
+            JSON.stringify({ documentId: loaded.document.id }),
+            route.reason,
+            route.confidence,
+            route.suggestedFolder,
+            route.pending,
+            conflictIds,
+            context.userId,
+          ],
+        );
+        cardId = updated.rows[0].id;
+      } else {
+        if (existingRow) {
+          // 已作废：释放去重键后按新卡插入，不复用已作废记录
+          await client.query("update knowledge_cards set dedupe_key = null where id = $1", [existingRow.id]);
+        }
+        cardId = await insertCard({
           kind,
           title,
           body,
           conflictIds,
-          loaded.document.ingest_run_id,
-          loaded.document.id,
-        ],
-      );
-      const cardId = card.rows[0].id;
+          folderKey: route.folderKey,
+          routeReason: route.reason,
+          routeConfidence: route.confidence,
+          suggestedFolder: route.suggestedFolder,
+          routePending: route.pending,
+          dedupeKey,
+        });
+        isNew = true;
+      }
 
       for (const evidence of evidenceRows) {
         await client.query(
           `insert into card_evidence
-             (card_id, chunk_id, document_id, page_no, locator, quote, char_start, char_end, verified, verified_at)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, true, now())
+             (card_id, chunk_id, document_id, page_no, locator, quote, char_start, char_end,
+              source_kind, source_ref, source_hash, quote_hash, verified, verified_at)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, 'chunk', $9::jsonb, $10, $11, true, now())
            on conflict do nothing`,
           [
             cardId,
@@ -209,11 +328,16 @@ export async function distillDocument(context: UserContext, documentId: string):
             evidence.quote,
             evidence.charStart,
             evidence.charEnd,
+            JSON.stringify({ documentId: loaded.document.id, chunkId: evidence.chunkId }),
+            evidence.sourceHash,
+            evidence.quoteHash,
           ],
         );
       }
 
-      existingKeys.push({ id: cardId, key, body });
+      if (isNew) {
+        existingKeys.push({ id: cardId, key, body });
+      }
       created += 1;
     }
 

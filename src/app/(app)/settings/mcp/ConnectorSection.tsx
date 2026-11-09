@@ -1,9 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
-import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import {
   badge,
   btnBlue,
@@ -19,7 +18,9 @@ import {
   linkBtn,
   meta,
 } from "@/components/knowledge/tokens";
+import { toast } from "@/components/ui/toast";
 import type {
+  McpDirection,
   McpServerCallView,
   McpServerView,
   McpToolSummary,
@@ -70,6 +71,9 @@ interface ConnectorSectionProps {
   calls: McpServerCallView[];
   toolsByServer: Record<string, McpToolSummary[]>;
   stdioCommands: string[];
+  direction: McpDirection;
+  /** 顶部「新增」信号：每次递增时展开创建表单 */
+  createSignal?: number;
 }
 
 export function ConnectorSection({
@@ -77,27 +81,34 @@ export function ConnectorSection({
   calls,
   toolsByServer,
   stdioCommands,
+  direction,
+  createSignal = 0,
 }: ConnectorSectionProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState("");
-  const [failed, setFailed] = useState(false);
 
   const [creating, setCreating] = useState(false);
+  const [nodeKey, setNodeKey] = useState("");
   const [name, setName] = useState("");
-  const [transport, setTransport] = useState<McpTransport>("http");
-  const [url, setUrl] = useState("");
-  const [command, setCommand] = useState(stdioCommands[0] ?? "");
+  const [transport, setTransport] = useState<McpTransport>("stdio");
+  const [command, setCommand] = useState("npx");
   const [argsText, setArgsText] = useState("");
   const [envText, setEnvText] = useState("");
-  const [allowedToolsText, setAllowedToolsText] = useState("");
-  const [timeoutMs, setTimeoutMs] = useState("20000");
-  const [rateLimit, setRateLimit] = useState("60");
-  const [dailyQuota, setDailyQuota] = useState("0");
+  const [rolesText, setRolesText] = useState("");
 
   const [openId, setOpenId] = useState<string | null>(null);
   const [callTool, setCallTool] = useState("");
   const [callArgs, setCallArgs] = useState("{}");
+
+  const lastSignal = useRef(createSignal);
+  useEffect(() => {
+    if (createSignal !== lastSignal.current) {
+      lastSignal.current = createSignal;
+      if (createSignal > 0) {
+        setCreating(true);
+      }
+    }
+  }, [createSignal]);
 
   const unhealthy = servers.filter(
     (server) => server.enabled && (server.healthStatus === "degraded" || server.healthStatus === "down"),
@@ -106,8 +117,7 @@ export function ConnectorSection({
   function run(action: () => Promise<McpActionResult>, done?: () => void) {
     startTransition(async () => {
       const result = await action();
-      setFailed(!result.ok);
-      setMessage(result.message);
+      toast(result.message, result.ok ? "success" : "error");
       if (result.ok) {
         done?.();
         router.refresh();
@@ -116,67 +126,66 @@ export function ConnectorSection({
   }
 
   function submitCreate() {
-    let args: string[] = [];
-    if (transport === "stdio" && argsText.trim()) {
-      const parsed = argsText
-        .split(/\s+/)
-        .map((item) => item.trim())
-        .filter(Boolean);
-      args = parsed;
-    }
+    const args = argsText
+      .split(/\s+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    // 环境变量只登记名称；KEY=VALUE 形式也兼容，但值不落库（真实值走容器 env）
     const env: Record<string, string> = {};
-    if (transport === "stdio" && envText.trim()) {
-      for (const line of envText.split(/\r?\n/)) {
-        const index = line.indexOf("=");
-        if (index > 0) {
-          env[line.slice(0, index).trim()] = line.slice(index + 1).trim();
-        }
+    for (const token of envText.split(/[,，\s]+/)) {
+      const item = token.trim();
+      if (!item) {
+        continue;
+      }
+      const index = item.indexOf("=");
+      if (index > 0) {
+        env[item.slice(0, index)] = item.slice(index + 1);
+      } else {
+        env[item] = "";
       }
     }
 
     run(
       () =>
         createMcpServerAction({
+          nodeKey: nodeKey.trim() || name.trim(),
           name: name.trim(),
-          transport,
-          url: transport === "http" ? url.trim() : undefined,
-          command: transport === "stdio" ? command.trim() : undefined,
-          args,
-          env,
-          allowedTools: allowedToolsText
+          direction,
+          roles: rolesText
             .split(/[,，\n]/)
             .map((item) => item.trim())
             .filter(Boolean),
-          timeoutMs: Number(timeoutMs) || 20000,
-          rateLimitPerMin: Number(rateLimit) || 60,
-          dailyQuota: Number(dailyQuota) || 0,
+          transport,
+          command: command.trim() || undefined,
+          args,
+          env,
         }),
       () => {
         setCreating(false);
+        setNodeKey("");
         setName("");
-        setUrl("");
+        setCommand("npx");
         setArgsText("");
         setEnvText("");
-        setAllowedToolsText("");
+        setRolesText("");
       },
     );
   }
 
   return (
     <>
-      {message ? (
-        <InlineMessage tone={failed ? "error" : "info"} className="mb-0 mt-0">
-          {message}
-        </InlineMessage>
-      ) : null}
-
       <div className={card}>
         <div className={cardHead}>
           <div>
-            <h2 className={cardTitle}>外部连接器</h2>
+            <h2 className={cardTitle}>
+              {direction === "inbound" ? "接入节点" : "接出节点"}
+            </h2>
             <p className={`${meta} mt-1`}>
-              JXF 作为 MCP 客户端消费外部工具。http 连接器需通过 SSRF 校验，内网主机须加入
-              MCP_TRUSTED_HOSTS；stdio 仅允许白名单命令。
+              {direction === "inbound"
+                ? "本系统连接的外部 MCP 服务。http 需通过 SSRF 校验，stdio 仅允许白名单命令。"
+                : "本系统对外提供的 MCP 连接节点；细粒度令牌与审批请用右上角「签发令牌」。"
+              }
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-3">
@@ -187,13 +196,6 @@ export function ConnectorSection({
               disabled={pending}
             >
               批量体检
-            </button>
-            <button
-              type="button"
-              className={`${linkBtn} text-[11px]`}
-              onClick={() => setCreating((value) => !value)}
-            >
-              {creating ? "收起" : "新建连接器"}
             </button>
           </div>
         </div>
@@ -206,146 +208,151 @@ export function ConnectorSection({
         ) : null}
 
         {creating ? (
-          <div className="grid gap-3 rounded-2xl bg-apple-canvas p-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block">
-                <span className={fieldLabel}>名称</span>
-                <input
-                  className={input}
-                  value={name}
-                  maxLength={60}
-                  placeholder="例如：内部工单系统"
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className={fieldLabel}>传输方式</span>
-                <select
-                  className={input}
-                  value={transport}
-                  onChange={(event) => setTransport(event.target.value as McpTransport)}
+          <div className="fixed inset-0 z-50 flex justify-end">
+            <button
+              type="button"
+              aria-label="关闭"
+              className="absolute inset-0 bg-black/25"
+              onClick={() => setCreating(false)}
+            />
+            <aside
+              role="dialog"
+              aria-modal="true"
+              aria-label={direction === "inbound" ? "新增接入节点" : "新增接出节点"}
+              className="relative h-full w-full max-w-xl overflow-y-auto bg-white p-5 shadow-2xl"
+            >
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="text-base font-semibold tracking-tight text-zinc-900">
+                  {direction === "inbound" ? "新增接入节点" : "新增接出节点"}
+                </h2>
+                <button
+                  type="button"
+                  className={`${linkBtn} text-[12px]`}
+                  onClick={() => setCreating(false)}
                 >
-                  <option value="http">HTTP（Streamable HTTP）</option>
-                  <option value="stdio">stdio（本地进程）</option>
-                </select>
-              </label>
-            </div>
-
-            {transport === "http" ? (
-              <label className="block">
-                <span className={fieldLabel}>端点地址</span>
-                <input
-                  className={input}
-                  value={url}
-                  placeholder="https://mcp.example.com/mcp"
-                  onChange={(event) => setUrl(event.target.value)}
-                />
-              </label>
-            ) : stdioCommands.length === 0 ? (
-              <p className="text-[12px] leading-relaxed text-amber-600">
-                stdio 已禁用：请先在 MCP_STDIO_ALLOWED_COMMANDS 配置允许的可执行文件（逗号分隔）。
-              </p>
-            ) : (
-              <>
+                  关闭
+                </button>
+              </div>
+              <div className="grid gap-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block">
-                    <span className={fieldLabel}>可执行文件（白名单）</span>
-                    <select
-                      className={input}
-                      value={command}
-                      onChange={(event) => setCommand(event.target.value)}
-                    >
-                      {stdioCommands.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className={fieldLabel}>参数（空格分隔）</span>
+                    <span className={fieldLabel}>id（标识，小写）</span>
                     <input
                       className={input}
-                      value={argsText}
-                      placeholder="-y @modelcontextprotocol/server-filesystem /data"
-                      onChange={(event) => setArgsText(event.target.value)}
+                      value={nodeKey}
+                      maxLength={64}
+                      placeholder="descript"
+                      onChange={(event) => setNodeKey(event.target.value)}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className={fieldLabel}>显示名</span>
+                    <input
+                      className={input}
+                      value={name}
+                      maxLength={60}
+                      placeholder="Descript"
+                      onChange={(event) => setName(event.target.value)}
                     />
                   </label>
                 </div>
+
                 <label className="block">
-                  <span className={fieldLabel}>环境变量（每行 KEY=VALUE，可选）</span>
-                  <textarea
-                    className={`${input} min-h-[70px] resize-y font-mono text-[12px]`}
-                    value={envText}
-                    placeholder={"SHOP_API_KEY=xxx"}
-                    onChange={(event) => setEnvText(event.target.value)}
-                  />
+                  <span className={fieldLabel}>传输协议</span>
+                  <select
+                    className={input}
+                    value={transport}
+                    onChange={(event) => setTransport(event.target.value as McpTransport)}
+                  >
+                    <option value="stdio">stdio（本地进程）</option>
+                    <option value="http">http（Streamable HTTP）</option>
+                    <option value="sse">sse（Server-Sent Events）</option>
+                  </select>
                 </label>
-              </>
-            )}
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block">
-                <span className={fieldLabel}>允许工具（留空=全部）</span>
-                <input
-                  className={input}
-                  value={allowedToolsText}
-                  placeholder="search_tickets, get_ticket"
-                  onChange={(event) => setAllowedToolsText(event.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className={fieldLabel}>超时（毫秒）</span>
-                <input
-                  type="number"
-                  min={1000}
-                  max={120000}
-                  className={input}
-                  value={timeoutMs}
-                  onChange={(event) => setTimeoutMs(event.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className={fieldLabel}>每分钟调用上限</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={600}
-                  className={input}
-                  value={rateLimit}
-                  onChange={(event) => setRateLimit(event.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className={fieldLabel}>每日调用配额（0=不限）</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={1000000}
-                  className={input}
-                  value={dailyQuota}
-                  onChange={(event) => setDailyQuota(event.target.value)}
-                />
-              </label>
-            </div>
+                <label className="block">
+                  <span className={fieldLabel}>command（启动命令）</span>
+                  <input
+                    className={input}
+                    value={command}
+                    list="mcp-stdio-commands"
+                    placeholder="如 npx 或 node"
+                    onChange={(event) => setCommand(event.target.value)}
+                  />
+                  <datalist id="mcp-stdio-commands">
+                    {stdioCommands.map((item) => (
+                      <option key={item} value={item} />
+                    ))}
+                  </datalist>
+                  {transport === "stdio" && stdioCommands.length === 0 ? (
+                    <span className="mt-1 block text-[12px] leading-relaxed text-amber-600">
+                      stdio 已禁用：请先在 MCP_STDIO_ALLOWED_COMMANDS 配置允许的可执行文件（逗号分隔）。
+                    </span>
+                  ) : null}
+                </label>
 
-            <div>
-              <button
-                type="button"
-                className={btnBlue}
-                disabled={pending || name.trim().length === 0}
-                onClick={submitCreate}
-              >
-                {pending ? "创建中…" : "创建连接器"}
-              </button>
-            </div>
+                <label className="block">
+                  <span className={fieldLabel}>args（启动参数）</span>
+                  <input
+                    className={input}
+                    value={argsText}
+                    placeholder="空格分隔"
+                    onChange={(event) => setArgsText(event.target.value)}
+                  />
+                  {transport !== "stdio" ? (
+                    <span className="mt-1 block text-[12px] leading-relaxed text-zinc-400">
+                      http / sse：第一个参数填端点地址，例如 https://mcp.example.com/mcp
+                    </span>
+                  ) : null}
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className={fieldLabel}>角色限制</span>
+                    <input
+                      className={input}
+                      value={rolesText}
+                      placeholder="逗号分隔；空=全角色"
+                      onChange={(event) => setRolesText(event.target.value)}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className={fieldLabel}>环境变量名</span>
+                    <input
+                      className={input}
+                      value={envText}
+                      placeholder="如 DESCRIPT_API_KEY"
+                      onChange={(event) => setEnvText(event.target.value)}
+                    />
+                  </label>
+                </div>
+                <p className="-mt-1 text-[12px] leading-relaxed text-zinc-400">
+                  环境变量多个用逗号分隔；只登记变量名，真实值从运行容器的环境变量读取，不落库。
+                </p>
+
+                <div>
+                  <button
+                    type="button"
+                    className={btnBlue}
+                    disabled={pending || name.trim().length === 0}
+                    onClick={submitCreate}
+                  >
+                    {pending ? "保存中…" : "保存"}
+                  </button>
+                </div>
+              </div>
+            </aside>
           </div>
         ) : null}
 
         <div className={divider} />
 
         {servers.length === 0 ? (
-          <p className={emptyState}>还没有外部连接器。创建后可「探测工具」并测试调用。</p>
+          <p className={emptyState}>
+            {direction === "inbound"
+              ? "还没有接入节点。点底部「+ 新增接入」创建。"
+              : "还没有接出节点。点底部「+ 新增接出」创建。"}
+          </p>
         ) : (
           <ul className="grid list-none gap-2 p-0">
             {servers.map((server) => {
@@ -379,6 +386,9 @@ export function ConnectorSection({
                         {server.dailyQuota > 0 ? `${server.dailyQuota}/日` : "不限"}
                       </span>
                       <span className={`${meta} mt-0.5 block`}>
+                        角色限制 {server.roles.length > 0 ? server.roles.join(" / ") : "全角色"}
+                      </span>
+                      <span className={`${meta} mt-0.5 block`}>
                         体检 {HEALTH_LABEL[server.healthStatus]} · 最近 {formatTime(server.healthCheckedAt)}
                         {server.healthLatencyMs !== null ? ` · ${server.healthLatencyMs}ms` : ""}
                         {server.healthConsecutiveFailures > 0
@@ -396,27 +406,35 @@ export function ConnectorSection({
                     </span>
                   </button>
 
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className={`${linkBtn} text-[12px]`}
+                      disabled={pending}
+                      onClick={() => run(() => runMcpHealthCheckAction())}
+                    >
+                      刷新状态
+                    </button>
+                    <button
+                      type="button"
+                      className={`${linkBtn} text-[12px]`}
+                      disabled={pending}
+                      onClick={() => run(() => refreshMcpServerToolsAction(server.id))}
+                    >
+                      探测工具
+                    </button>
+                    <button
+                      type="button"
+                      className={btnGhost}
+                      disabled={pending}
+                      onClick={() => run(() => toggleMcpServerAction(server.id, !server.enabled))}
+                    >
+                      {server.enabled ? "关闭" : "启用"}
+                    </button>
+                  </div>
+
                   {open ? (
                     <div className="mt-2 border-t border-hairline pt-2">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className={`${btnGhost} !px-3 !py-1 text-[12px]`}
-                          disabled={pending}
-                          onClick={() => run(() => refreshMcpServerToolsAction(server.id))}
-                        >
-                          探测工具
-                        </button>
-                        <button
-                          type="button"
-                          className={`${btnGhost} !px-3 !py-1 text-[12px]`}
-                          disabled={pending}
-                          onClick={() => run(() => toggleMcpServerAction(server.id, !server.enabled))}
-                        >
-                          {server.enabled ? "停用" : "启用"}
-                        </button>
-                      </div>
-
                       {serverTools.length > 0 ? (
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {serverTools.map((tool) => (

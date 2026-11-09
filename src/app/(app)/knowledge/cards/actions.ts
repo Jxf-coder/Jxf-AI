@@ -7,6 +7,7 @@ import { resolveUserContext } from "@/lib/db/user-context";
 import {
   bulkDecideCards,
   CardConflictError,
+  changeCardFolder,
   confirmCard,
   createManualCard,
   dropCard,
@@ -27,6 +28,7 @@ import {
   type EvidenceDocumentOption,
 } from "@/lib/knowledge/card-evidence";
 import { distillDocument } from "@/lib/knowledge/distill";
+import { isFolderKey } from "@/lib/knowledge/folders";
 import { isUuid } from "@/lib/knowledge/workspace";
 import { toPermissionMessage } from "@/lib/permissions/guard";
 
@@ -105,6 +107,23 @@ export async function dropCardAction(cardId: string): Promise<ActionResult> {
     await dropCard(await contextOf(), cardId);
     revalidateKnowledge();
     return { ok: true, message: "已作废" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 人工改目录：同时写审计与纠偏样本 */
+export async function changeCardFolderAction(cardId: string, folderKey: string): Promise<ActionResult> {
+  if (!isUuid(cardId)) {
+    return { ok: false, message: "知识卡标识不合法" };
+  }
+  if (!isFolderKey(folderKey)) {
+    return { ok: false, message: "目标目录不合法" };
+  }
+  try {
+    await changeCardFolder(await contextOf(), cardId, folderKey);
+    revalidateKnowledge();
+    return { ok: true, message: "已调整目录" };
   } catch (error) {
     return { ok: false, message: toPermissionMessage(error) };
   }

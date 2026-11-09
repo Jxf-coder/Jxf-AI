@@ -21,6 +21,8 @@ import {
   type WorkerToolPlan,
 } from "@/lib/mcp/worker-tools";
 import { claimRun, heartbeatRun, sweepExhausted, type ClaimedRun } from "@/lib/runtime/claim";
+import { sweepExperienceJobs } from "@/lib/knowledge/experience/queue";
+import { processOneExperienceJob } from "@/worker/experience";
 import { isCancelRequested } from "@/lib/runtime/cancel";
 import { emitEvent, savePartialText } from "@/lib/runtime/emit";
 import { markInterruptedForOthers, sweepStaleHeartbeat } from "@/lib/runtime/recover";
@@ -33,6 +35,22 @@ const HEARTBEAT_MS = 30_000;
 const SWEEP_EVERY_MS = 60_000;
 
 let stopping = false;
+/** 后台经验沉淀：同一时刻最多 1 个，不阻塞前台 run 领取 */
+let experienceTask: Promise<void> | null = null;
+
+function pumpExperience(pool: Pool): void {
+  if (experienceTask) {
+    return;
+  }
+  experienceTask = processOneExperienceJob(pool, WORKER_ID)
+    .then(() => undefined)
+    .catch((error) => {
+      log("warn", "experience_pump_failed", { error: errorMessage(error) });
+    })
+    .finally(() => {
+      experienceTask = null;
+    });
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -611,10 +629,16 @@ async function main(): Promise<void> {
         if (exhausted.length > 0) {
           log("warn", "runtime_runs_exhausted", { count: exhausted.length });
         }
+        const experienceSweep = await sweepExperienceJobs(pool);
+        if (experienceSweep.requeued > 0 || experienceSweep.dead > 0) {
+          log("warn", "experience_jobs_swept", experienceSweep);
+        }
       }
 
       const run = await claimRun(pool, WORKER_ID);
       if (!run) {
+        // 前台 run 优先；空闲时在后台推进经验沉淀（LLM 调用不阻塞交互）
+        pumpExperience(pool);
         await sleep(IDLE_SLEEP_MS);
         continue;
       }
@@ -627,6 +651,9 @@ async function main(): Promise<void> {
     }
   }
 
+  if (experienceTask) {
+    await experienceTask.catch(() => undefined);
+  }
   await pool.end();
   log("info", "runtime_worker_stopped", { worker: WORKER_ID });
 }

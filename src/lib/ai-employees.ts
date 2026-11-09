@@ -14,6 +14,7 @@ import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
 import { PermissionDeniedError } from "@/lib/permissions/guard";
+import { findInvalidSkillKeys } from "@/lib/skills";
 
 export type AiEmployeeStatus = "draft" | "active" | "disabled";
 
@@ -90,6 +91,7 @@ export interface CreateAiEmployeeInput {
   slug: string;
   name: string;
   description?: string | null;
+  skillKeys?: string[];
 }
 
 function assertCanManage(context: UserContext): void {
@@ -247,6 +249,7 @@ export async function createAiEmployee(
   const slug = input.slug.trim().toLowerCase();
   const name = input.name.trim();
   const description = normalizeDescription(input.description);
+  const skillKeys = normalizeKeys(input.skillKeys);
 
   if (!SLUG_RE.test(slug)) {
     throw new Error("标识只能是小写字母、数字与连字符（2-64 位，且以字母或数字开头）");
@@ -259,13 +262,18 @@ export async function createAiEmployee(
   }
 
   return withUserContext(context, async (client) => {
+    const invalidSkills = await findInvalidSkillKeys(client, context, skillKeys);
+    if (invalidSkills.length > 0) {
+      throw new Error(`以下技能不存在或已停用：${invalidSkills.join("、")}`);
+    }
+
     let id: string;
     try {
       const inserted = await client.query<{ id: string }>(
-        `insert into ai_employees (tenant_id, slug, name, description, status, created_by)
-         values ($1, $2, $3, $4, 'draft', $5)
+        `insert into ai_employees (tenant_id, slug, name, description, status, skill_keys, created_by)
+         values ($1, $2, $3, $4, 'draft', $5::text[], $6)
          returning id`,
-        [context.tenantId, slug, name, description, context.userId],
+        [context.tenantId, slug, name, description, skillKeys, context.userId],
       );
       id = inserted.rows[0].id;
     } catch (error) {
@@ -287,7 +295,7 @@ export async function createAiEmployee(
       action: "ai_employee.created",
       targetType: "ai_employee",
       targetId: id,
-      payload: { slug, name },
+      payload: { slug, name, skillKeys },
     });
     await auditInTx(client, context, {
       actorUserId: context.userId,
@@ -350,6 +358,11 @@ export async function updateAiEmployee(
     );
     if (!existing.rows[0]) {
       throw new Error("AI 员工不存在或无权操作");
+    }
+
+    const invalidSkills = await findInvalidSkillKeys(client, context, skillKeys);
+    if (invalidSkills.length > 0) {
+      throw new Error(`以下技能不存在或已停用：${invalidSkills.join("、")}`);
     }
 
     await client.query(

@@ -6,6 +6,7 @@
  *   2. 无冲突
  *   3. 未过期
  *   4. 人工编辑过 或 至少一条已核对证据
+ *   5. 目录已裁决（route_pending = false）
  *
  * 批量操作一律逐卡调用单卡服务，禁止写成一条 UPDATE ... WHERE id = ANY(...)。
  */
@@ -15,6 +16,9 @@ import type { PoolClient } from "pg";
 import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
+import { documentDedupeKey } from "@/lib/knowledge/experience/dedupe";
+import { recordRouteFeedback } from "@/lib/knowledge/experience/feedback";
+import { isFolderKey, type FolderKey } from "@/lib/knowledge/folders";
 import { requireContextPermission } from "@/lib/permissions/server";
 
 export type CardStatus = "pending" | "confirmed" | "dropped";
@@ -51,6 +55,12 @@ export interface CardView {
   rev: number;
   ingestRunId: string | null;
   extra: Record<string, unknown>;
+  folderKey: string;
+  sourceChannel: string | null;
+  suggestedFolder: string | null;
+  routePending: boolean;
+  routeReason: string | null;
+  routeConfidence: number | null;
   /** 至少一条已核对证据；用于「证据没对上」与确认预检 */
   hasVerifiedEvidence: boolean;
   evidence: CardEvidenceView[];
@@ -152,6 +162,12 @@ interface CardRow {
   rev: number;
   ingest_run_id: string | null;
   extra: Record<string, unknown> | null;
+  folder_key: string;
+  source_channel: string | null;
+  suggested_folder: string | null;
+  route_pending: boolean;
+  route_reason: string | null;
+  route_confidence: string | null;
   has_verified_evidence: boolean;
   evidence: CardEvidenceView[] | null;
 }
@@ -295,7 +311,8 @@ export async function listCards(context: UserContext, filters: CardFilters = {})
       `select c.id, c.kind, c.title, c.body, c.status, c.origin, c.human_edited,
               c.conflict_with, c.valid_until, c.department_id, d.name as department_name,
               c.confirmed_at, c.created_at, c.category, c.product, c.external_ok, c.rev,
-              c.ingest_run_id, c.extra,
+              c.ingest_run_id, c.extra, c.folder_key, c.source_channel, c.suggested_folder,
+              c.route_pending, c.route_reason, c.route_confidence,
               exists (select 1 from card_evidence e
                        where e.card_id = c.id and e.verified and btrim(e.quote) <> '') as has_verified_evidence,
               (select coalesce(json_agg(json_build_object(
@@ -333,6 +350,12 @@ export async function listCards(context: UserContext, filters: CardFilters = {})
       rev: row.rev,
       ingestRunId: row.ingest_run_id,
       extra: row.extra ?? {},
+      folderKey: row.folder_key,
+      sourceChannel: row.source_channel,
+      suggestedFolder: row.suggested_folder,
+      routePending: row.route_pending,
+      routeReason: row.route_reason,
+      routeConfidence: row.route_confidence === null ? null : Number(row.route_confidence),
       hasVerifiedEvidence: row.has_verified_evidence,
       evidence: row.evidence ?? [],
     }));
@@ -463,9 +486,9 @@ export async function createManualCard(
       const inserted = await client.query<{ id: string; rev: number }>(
         `insert into knowledge_cards
            (tenant_id, department_id, kind, title, body, status, origin, human_edited, rev,
-            category, product, external_ok, valid_until, extra, role_key, updated_by)
+            category, product, external_ok, valid_until, extra, role_key, updated_by, source_channel)
          values ($1, $2, $3, $4, $5, 'pending', 'manual', true, 1, $6, $7, $8, $9, $10::jsonb,
-                 ${roleKeySql}, $11)
+                 ${roleKeySql}, $11, 'manual')
          returning id, rev`,
         [
           context.tenantId,
@@ -508,10 +531,20 @@ export async function createManualCard(
         `update knowledge_cards
             set title = $2, body = $3, human_edited = true, rev = rev + 1,
                 updated_at = now(), updated_by = $4, status = $5,
-                extra = extra || $6::jsonb
+                extra = extra || $6::jsonb,
+                source_channel = 'manual', source_ref = $7::jsonb, dedupe_key = $8
           where id = $1
           returning rev`,
-        [state.id, title, body, context.userId, nextStatus, JSON.stringify(extra)],
+        [
+          state.id,
+          title,
+          body,
+          context.userId,
+          nextStatus,
+          JSON.stringify(extra),
+          JSON.stringify({ documentId: sourceDocumentId }),
+          documentDedupeKey(sourceDocumentId),
+        ],
       );
       const rev = updated.rows[0].rev;
       await snapshotCardVersion(client, context, {
@@ -566,9 +599,10 @@ export async function createManualCard(
     const inserted = await client.query<{ id: string; rev: number }>(
       `insert into knowledge_cards
          (tenant_id, department_id, kind, title, body, status, origin, human_edited, rev,
-          category, product, external_ok, valid_until, extra, role_key, source_document_id, updated_by)
+          category, product, external_ok, valid_until, extra, role_key, source_document_id, updated_by,
+          source_channel, source_ref, dedupe_key)
        values ($1, $2, $3, $4, $5, 'pending', 'manual', true, 1, $6, $7, $8, $9, $10::jsonb,
-               ${roleKeySql}, $12::uuid, $11)
+               ${roleKeySql}, $12::uuid, $11, 'manual', jsonb_build_object('documentId', $12::uuid), $13)
        on conflict (tenant_id, source_document_id) where source_document_id is not null do nothing
        returning id, rev`,
       [
@@ -584,6 +618,7 @@ export async function createManualCard(
         JSON.stringify(extra),
         context.userId,
         sourceDocumentId,
+        documentDedupeKey(sourceDocumentId),
       ],
     );
 
@@ -635,6 +670,7 @@ interface GateRow {
   conflict_with: string[];
   valid_until: string | null;
   human_edited: boolean;
+  route_pending: boolean;
   verified_evidence: string;
 }
 
@@ -647,6 +683,7 @@ export interface CardGate {
 export async function checkConfirmable(client: PoolClient, cardId: string): Promise<CardGate> {
   const { rows } = await client.query<GateRow>(
     `select c.id, c.status, c.department_id, c.conflict_with, c.valid_until, c.human_edited,
+            c.route_pending,
             (select count(*) from card_evidence e
               where e.card_id = c.id and e.verified and btrim(e.quote) <> '')::text as verified_evidence
        from knowledge_cards c
@@ -664,6 +701,9 @@ export async function checkConfirmable(client: PoolClient, cardId: string): Prom
   if ((row.conflict_with ?? []).length > 0) {
     return { ok: false, reason: "存在冲突卡，需先处理冲突" };
   }
+  if (row.route_pending) {
+    return { ok: false, reason: "目录待定：请先选择知识卡所属目录再确认" };
+  }
   if (row.valid_until) {
     const today = new Date().toISOString().slice(0, 10);
     if (row.valid_until < today) {
@@ -678,12 +718,25 @@ export async function checkConfirmable(client: PoolClient, cardId: string): Prom
 
 export async function confirmCard(context: UserContext, cardId: string): Promise<void> {
   await withUserContext(context, async (client) => {
-    const { rows } = await client.query<{ department_id: string }>(
-      "select department_id from knowledge_cards where id = $1",
+    const { rows } = await client.query<{
+      department_id: string;
+      folder_key: string;
+      suggested_folder: string | null;
+      source_channel: string | null;
+      kind: CardKind;
+      source_job_id: string | null;
+      route_confidence: string | null;
+      route_reason: string | null;
+    }>(
+      `select department_id, folder_key, suggested_folder, source_channel, kind,
+              source_job_id, route_confidence, route_reason
+         from knowledge_cards
+        where id = $1`,
       [cardId],
     );
-    const departmentId = rows[0]?.department_id;
-    if (!departmentId) {
+    const row = rows[0];
+    const departmentId = row?.department_id;
+    if (!row || !departmentId) {
       throw new Error("知识卡不存在");
     }
 
@@ -704,6 +757,23 @@ export async function confirmCard(context: UserContext, cardId: string): Promise
         where id = $1`,
       [cardId, context.userId],
     );
+
+    // 人工未改目录直接确认 → 记一条 accepted 样本；人工建卡没有建议目录，不记
+    if (row.suggested_folder) {
+      await recordRouteFeedback(client, context, {
+        departmentId,
+        cardId,
+        jobId: row.source_job_id,
+        channel: row.source_channel ?? "manual",
+        kind: row.kind,
+        action: "accepted",
+        suggestedFolder: row.suggested_folder,
+        chosenFolder: row.folder_key,
+        routeConfidence: row.route_confidence === null ? null : Number(row.route_confidence),
+        routeReason: row.route_reason,
+        routePending: false,
+      });
+    }
 
     await auditInTx(client, context, {
       actorUserId: context.userId,
@@ -744,6 +814,95 @@ export async function dropCard(context: UserContext, cardId: string): Promise<vo
       targetType: "knowledge_card",
       targetId: cardId,
       departmentId,
+    });
+  });
+}
+
+/**
+ * 人工改目录：更新 folder_key、清除 route_pending，并写审计与纠偏样本。
+ * 已确认卡也允许调整（目录是组织方式，不改变知识内容）。
+ */
+export async function changeCardFolder(
+  context: UserContext,
+  cardId: string,
+  folderKey: FolderKey,
+): Promise<void> {
+  if (!isFolderKey(folderKey)) {
+    throw new Error("目标目录不合法");
+  }
+
+  await withUserContext(context, async (client) => {
+    const { rows } = await client.query<{
+      department_id: string;
+      folder_key: string;
+      suggested_folder: string | null;
+      route_pending: boolean;
+      route_confidence: string | null;
+      route_reason: string | null;
+      source_channel: string | null;
+      kind: CardKind;
+      source_job_id: string | null;
+    }>(
+      `select department_id, folder_key, suggested_folder, route_pending, route_confidence,
+              route_reason, source_channel, kind, source_job_id
+         from knowledge_cards
+        where id = $1
+        for update`,
+      [cardId],
+    );
+    const row = rows[0];
+    if (!row) {
+      throw new Error("知识卡不存在");
+    }
+
+    await requireContextPermission(client, context, "knowledge:write", {
+      kind: "knowledge_card",
+      id: cardId,
+      departmentId: row.department_id,
+    });
+
+    if (row.folder_key === folderKey) {
+      if (!row.route_pending) {
+        return;
+      }
+      // 同目录但仍在待定：只清除标记，不动 rev 之外的字段
+    }
+
+    await client.query(
+      `update knowledge_cards
+          set folder_key = $2, route_pending = false, rev = rev + 1,
+              updated_at = now(), updated_by = $3
+        where id = $1`,
+      [cardId, folderKey, context.userId],
+    );
+
+    await auditInTx(client, context, {
+      actorUserId: context.userId,
+      action: "knowledge.card_folder_changed",
+      targetType: "knowledge_card",
+      targetId: cardId,
+      departmentId: row.department_id,
+      payload: {
+        from: row.folder_key,
+        to: folderKey,
+        suggested: row.suggested_folder,
+        route_pending: row.route_pending,
+      },
+    });
+
+    await recordRouteFeedback(client, context, {
+      departmentId: row.department_id,
+      cardId,
+      jobId: row.source_job_id,
+      channel: row.source_channel ?? "manual",
+      kind: row.kind,
+      action: row.route_pending ? "pending_resolved" : "overridden",
+      suggestedFolder: row.suggested_folder,
+      chosenFolder: folderKey,
+      routeConfidence: row.route_confidence === null ? null : Number(row.route_confidence),
+      routeReason: row.route_reason,
+      routePending: row.route_pending,
+      features: { from: row.folder_key, to: folderKey },
     });
   });
 }

@@ -10,7 +10,7 @@
 import type { Pool } from "pg";
 
 import type { ToolDefinition } from "@/lib/ai/openai";
-import { executeConnectorTool, type ConnectorCallConfig } from "@/lib/mcp/connectors";
+import { executeConnectorTool, toTransport, type ConnectorCallConfig } from "@/lib/mcp/connectors";
 import { errorMessage, log } from "@/lib/logger";
 
 export interface PlannedTool {
@@ -140,7 +140,7 @@ export async function loadWorkerToolPlan(
       rateLimitPerMin: server.rate_limit_per_min,
       dailyQuota: server.daily_quota,
       config: {
-        transport: server.transport === "stdio" ? "stdio" : "http",
+        transport: toTransport(server.transport),
         url: server.url,
         command: server.command,
         args: server.args ?? [],

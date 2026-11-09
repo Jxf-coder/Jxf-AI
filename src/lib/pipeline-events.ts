@@ -125,6 +125,106 @@ export async function setPipelineEventSubscription(
   });
 }
 
+export interface PipelineBridgeEventView {
+  id: string;
+  eventType: string;
+  status: string;
+  attempts: number;
+  lastError: string | null;
+  createdAt: string;
+  processedAt: string | null;
+}
+
+export interface PipelineBridgeSubscriptionView {
+  pipelineId: string;
+  pipelineName: string;
+  eventType: string;
+  enabled: boolean;
+}
+
+export interface PipelineBridgeWebhookView {
+  id: string;
+  name: string;
+  enabled: boolean;
+}
+
+export interface PipelineEventBridgeView {
+  events: PipelineBridgeEventView[];
+  subscriptions: PipelineBridgeSubscriptionView[];
+  webhooks: PipelineBridgeWebhookView[];
+}
+
+/** MCP「订阅桥」视图：事件总线、订阅关系与外部 Webhook 触发入口 */
+export async function listPipelineEventBridge(
+  context: UserContext,
+  limit = 20,
+): Promise<PipelineEventBridgeView> {
+  const capped = Math.min(Math.max(limit, 1), 50);
+  return withUserContext(context, async (client) => {
+    await requireContextPermission(client, context, "platform:settings");
+    const events = await client.query<{
+      id: string;
+      event_type: string;
+      status: string;
+      attempts: number;
+      last_error: string | null;
+      created_at: Date;
+      processed_at: Date | null;
+    }>(
+      `select id, event_type, status, attempts, last_error, created_at, processed_at
+         from pipeline_events
+        where tenant_id = $1
+        order by created_at desc
+        limit $2`,
+      [context.tenantId, capped],
+    );
+    const subscriptions = await client.query<{
+      pipeline_id: string;
+      pipeline_name: string;
+      event_type: string;
+      enabled: boolean;
+    }>(
+      `select s.pipeline_id, p.name as pipeline_name, s.event_type, s.enabled
+         from pipeline_event_subscriptions s
+         join pipelines p on p.id = s.pipeline_id
+        where s.tenant_id = $1
+        order by s.created_at desc
+        limit 50`,
+      [context.tenantId],
+    );
+    const webhooks = await client.query<{ id: string; name: string; enabled: boolean }>(
+      `select id, name, enabled
+         from pipelines
+        where tenant_id = $1 and webhook_enabled
+        order by created_at desc
+        limit 50`,
+      [context.tenantId],
+    );
+    return {
+      events: events.rows.map((row) => ({
+        id: row.id,
+        eventType: row.event_type,
+        status: row.status,
+        attempts: Number(row.attempts),
+        lastError: row.last_error,
+        createdAt: row.created_at.toISOString(),
+        processedAt: row.processed_at?.toISOString() ?? null,
+      })),
+      subscriptions: subscriptions.rows.map((row) => ({
+        pipelineId: row.pipeline_id,
+        pipelineName: row.pipeline_name,
+        eventType: row.event_type,
+        enabled: row.enabled,
+      })),
+      webhooks: webhooks.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        enabled: row.enabled,
+      })),
+    };
+  });
+}
+
 interface PendingEventRow {
   id: string;
   tenant_id: string;
