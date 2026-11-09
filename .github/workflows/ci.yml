@@ -1,0 +1,52 @@
+name: CI
+
+# 只跑不依赖数据库、不依赖容器的检查；需要真实库的 suites 走 verify:delivery 在部署机执行。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: 类型检查与本地测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # legacy-peer-deps 由仓库根 .npmrc 提供，无需额外参数
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 权限守卫扫描
+        run: npm run verify:guards
+
+      - name: 权限目录自检
+        run: npm run test:permissions
+
+      - name: 权限核心判定
+        run: npm run test:permission-core
+
+      - name: 权限快照
+        run: npm run test:snapshot
+
+      - name: 经验沉淀
+        run: npm run test:experience
+
+      - name: 安装向导
+        run: npm run test:setup
