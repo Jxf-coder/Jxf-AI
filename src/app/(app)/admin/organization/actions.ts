@@ -415,39 +415,6 @@ export async function addMember(
       userId = created.rows[0].id;
     }
 
-    if (email) {
-      const identityOwner = await client.query<{ user_id: string }>(
-        "select user_id from user_email_identities where tenant_id = $1 and email = $2",
-        [context.tenantId, email],
-      );
-      if (identityOwner.rows.length > 0 && identityOwner.rows[0].user_id !== userId) {
-        throw new Error("该邮箱已绑定其他成员");
-      }
-
-      const emailOwner = await client.query<{ id: string }>("select id from users where email = $1", [
-        email,
-      ]);
-      if (emailOwner.rows.length > 0 && emailOwner.rows[0].id !== userId) {
-        throw new Error("该邮箱已被其他账号使用");
-      }
-
-      if (identityOwner.rows.length === 0) {
-        // 首个邮箱自动成为默认主邮箱，保证「默认发件箱」始终有值
-        await client.query(
-          `insert into user_email_identities (tenant_id, user_id, email, is_primary)
-           values ($1, $2, $3,
-                   not exists (select 1 from user_email_identities where user_id = $2))
-           on conflict do nothing`,
-          [context.tenantId, userId, email],
-        );
-      }
-
-      await client.query("update users set email = coalesce(email, $1) where id = $2", [
-        email,
-        userId,
-      ]);
-    }
-
     const employeeNo = employeeNoInput || (await nextEmployeeNo(client));
     let membershipId: string;
     try {
@@ -479,6 +446,41 @@ export async function addMember(
         throw new Error("无权限在该部门添加成员");
       }
       throw error;
+    }
+
+    // 必须在任用写入之后再绑定邮箱：user_email_identities 的 RLS 以目标用户的
+    // 在岗任用判定可见性，新成员此时才刚具备第一个任用。
+    if (email) {
+      const identityOwner = await client.query<{ user_id: string }>(
+        "select user_id from user_email_identities where tenant_id = $1 and email = $2",
+        [context.tenantId, email],
+      );
+      if (identityOwner.rows.length > 0 && identityOwner.rows[0].user_id !== userId) {
+        throw new Error("该邮箱已绑定其他成员");
+      }
+
+      const emailOwner = await client.query<{ id: string }>("select id from users where email = $1", [
+        email,
+      ]);
+      if (emailOwner.rows.length > 0 && emailOwner.rows[0].id !== userId) {
+        throw new Error("该邮箱已被其他账号使用");
+      }
+
+      if (identityOwner.rows.length === 0) {
+        // 首个邮箱自动成为默认主邮箱，保证「默认发件箱」始终有值
+        await client.query(
+          `insert into user_email_identities (tenant_id, user_id, email, is_primary)
+           values ($1, $2, $3,
+                   not exists (select 1 from user_email_identities where user_id = $2))
+           on conflict do nothing`,
+          [context.tenantId, userId, email],
+        );
+      }
+
+      await client.query("update users set email = coalesce(email, $1) where id = $2", [
+        email,
+        userId,
+      ]);
     }
 
     await auditInTx(client, context, {
