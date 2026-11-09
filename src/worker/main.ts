@@ -606,6 +606,11 @@ async function main(): Promise<void> {
     connectionString,
     application_name: "jxf-worker",
     max: 4,
+    connectionTimeoutMillis: 5_000,
+    // 任务级续跑由租约、心跳与巡检兜底；这里只防单条语句永久挂住 4 个连接之一。
+    // 服务端 60s 中止，客户端同为 60s，给批量入库留足余量。
+    query_timeout: 60_000,
+    options: "-c statement_timeout=60000",
   });
 
   log("info", "runtime_worker_started", { worker: WORKER_ID });
