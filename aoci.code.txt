@@ -2,7 +2,7 @@
 
 ===E:/JXF-AI/===
 .dockerignore[FV5T]: F:定义镜像构建上下文排除项：依赖、构建产物、Git、文档脚本、环境变量与上传件不进镜像，仅白名单放行学习知识库 Markdown | R:code:docker/Dockerfile.web,code:docker/Dockerfile.worker,code:docker/Dockerfile.migrate | A:Docker 构建 | S:content/skills/learning-knowledge/*.md 的例外必须保留，否则学习知识库不会进入镜像；*.md 先全局排除再白名单放行
-.env.example[FC8S]: F:环境变量模板，覆盖通用、安全、PostgreSQL（含 Auth.js 专用角色）、MinIO、AI、Embedding、OCR、MCP、产线与邮件通知，默认关闭外部 AI 与 OCR | R:code:scripts/install.mjs,code:docker/docker-compose.yml,code:src/lib/env.ts | A:安装向导与部署 | S:JXF_AUTH_SECRET 缺失或少于 32 字符会拒绝启动；数据库与 MinIO 口令只能使用字母数字，因为会直接拼进连接串；JXF_AUTH_PASSWORD 用于创建 jxf_auth，容器内 AUTH_DATABASE_URL 由 compose 构造；.env 禁止入库
+.env.example[FC8S]: F:环境变量模板，覆盖通用、安全、PostgreSQL（含 Auth.js 专用角色）、MinIO、AI、Embedding、OCR、MCP、产线与邮件通知，默认关闭外部 AI 与 OCR | R:code:scripts/install.mjs,code:docker/docker-compose.yml,code:src/lib/env.ts | A:安装向导与部署 | S:JXF_AUTH_SECRET 缺失或少于 32 字符会拒绝启动；数据库与 MinIO 口令只能使用字母数字，因为会直接拼进连接串；JXF_AUTH_PASSWORD 用于创建 jxf_auth，容器内 AUTH_DATABASE_URL 由 compose 构造；METRICS_TOKEN 留空会让生产环境直接关闭 /api/metrics，安装向导会生成随机值；.env 禁止入库
 .gitattributes[CG3T]: F:统一文本检出为 LF，并把 png/jpg/jpeg/gif/webp/ico 标记为二进制 | R:- | A:Git 检出 | S:CRLF 会改变文本字节与哈希，导致跨平台构建和 AOCI 基线漂移
 .gitignore[CG5T]: F:忽略依赖、构建产物、上传件、环境变量、运行数据与本地 AOCI MCP 配置，同时保留 .env.example | R:code:.env.example,code:docker/docker-compose.yml | A:Git 边界 | S:.trae/mcp.json 含本机二进制绝对路径与数据库连接串，必须保持本地；AOCI 认知资产不能被忽略，否则 scan 会静默跳过
 AGENTS.md[SG8S]: F:定义 Agent 在本仓库的 AOCI 认知建立、复用、维护与收尾合同，并声明静态文档不能覆盖机器事实 | R:code:aoci.txt,code:aoci.meta.txt | A:AOCI 会话 | S:aoci 区块由 AOCI 管理，手工改写会脱离 init/scan 的一致性；Live Guide、工具 Schema、Spec 与 Validator 始终优先于本文件
@@ -217,7 +217,7 @@ P4-gate.md[SN8T]: F:P4 MCP Hub 人工闸门，覆盖对外令牌、MCP 端点、
 P5-gate.md[SO8S]: F:P5 治理面与交付人工闸门，覆盖版本表、备份恢复、审计导出、设置面、运维任务与连接器心跳 | R:code:docs/operations/ops-runner.md,code:db/policies/028_ops_tasks_rls.sql | A:验收文档 | S:业务角色只能落单，任务状态只能由 owner runner 回写；设置面密钥只存密文与末 4 位
 
 ===E:/JXF-AI/docs/operations/===
-observability.md[SO7S]: F:可观测性说明：存活/就绪探针、聚合指标端点与日志口径 | R:code:src/app/api/metrics/route.ts,code:src/app/api/health/route.ts | A:运维文档 | S:指标只返回聚合计数，不含用户/文档/令牌明细；METRICS_TOKEN 非空时强制 Bearer 校验
+observability.md[SO7S]: F:可观测性说明：存活/就绪探针、聚合指标端点与日志口径 | R:code:src/app/api/metrics/route.ts,code:src/app/api/health/route.ts | A:运维文档 | S:指标只返回聚合计数，不含用户/文档/令牌明细；JXF_ENV=production 且 METRICS_TOKEN 为空时端点固定返回 503（fail-closed），smoke 会记为 WARN
 ops-runner.md[SO7S]: F:宿主机运维 runner 部署说明：轮询运维任务、连接器心跳与产线推进 | R:code:scripts/ops-runner.mjs,code:deploy/systemd/jxf-ops-runner.service | A:运维文档 | S:Web 容器不持有 docker 权限；连续失败 1–2 次降级、3 次熔断；告警 webhook 可选
 pipeline-triggers.md[SW7T]: F:产线触发说明：外部 Webhook 令牌与内部事件订阅两种触发方式 | R:code:src/lib/pipelines-webhook.ts,code:src/lib/pipeline-events.ts | A:运维文档 | S:令牌只显示一次，库内只存 SHA-256 与末 4 位；宿主机 runner 必须常驻负责派发与推进
 
@@ -235,7 +235,7 @@ probe-embedding.mjs[OO6S]: F:Embedding 连通探针（只读），验证向量�
 prune-audit.mjs[OO7S]: F:审计留存清理脚本，按保留天数删除过期 audit_events 并追加 audit.retention_pruned 留痕 | R:code:db/schema/audit-events.ts,code:db/policies/009_audit_scope.sql | A:运维清理 | S:业务角色对 audit_events 只能 insert，清理必须由 owner 执行；默认只演练，--yes 才真正删除；每 10000 条一批
 restore.mjs[OR8M]: F:恢复脚本，--verify 在影子库演练校验，--yes 执行停应用、覆盖恢复、卷还原、migrate 与健康等待 | R:code:scripts/lib/delivery.mjs,code:scripts/backup.mjs,code:docker/docker-compose.yml | A:交付运维 | S:默认只做影子库演练；覆盖生产必须显式 --yes；恢复后必须 migrate 补齐策略与版本并等待健康检查通过
 rollback.mjs[OR7T]: F:回滚脚本，读升级状态文件把旧镜像改回正式标签，再覆盖恢复备份、migrate 与健康检查 | R:code:scripts/lib/delivery.mjs,code:scripts/restore.mjs,code:docker/docker-compose.yml | A:交付运维 | S:必须用 --state 指定 upgrade 写下的状态文件，缺失即失败；只有 --yes 才执行，--dry-run 仅打印计划
-smoke.mjs[OQ7M]: F:部署冒烟脚本，检查 compose 配置、容器健康、存活/就绪探针、版本表、未认证接口 401 与最近备份 | R:code:scripts/lib/delivery.mjs,code:docker/docker-compose.yml,code:src/lib/health.ts | A:部署验收 | S:只读检查、不写业务数据，可重复执行；必须在能执行 docker compose 的部署机上运行
+smoke.mjs[OQ7M]: F:部署冒烟脚本，检查 compose 配置、容器健康、存活/就绪探针、版本表、未认证接口 401、指标端点与最近备份 | R:code:scripts/lib/delivery.mjs,code:docker/docker-compose.yml,code:src/lib/health.ts,code:src/app/api/metrics/route.ts | A:部署验收 | S:只读检查、不写业务数据，可重复执行；必须在能执行 docker compose 的部署机上运行；指标检查在 web 容器内读取 METRICS_TOKEN 带 Bearer，未配置时把 503 记为 WARN 而不是失败
 test-active-context.mjs[TI7M]: F:P3 单部门上下文验收，验证多任用用户在不同部门上下文下的 RLS 作用域 | R:code:db/policies/012_active_membership_context.sql,code:scripts/test-rls.mjs | A:权限验收 | S:需要真实 PostgreSQL 与 jxf_app 角色；使用独立测试租户 22222222-2222-4222-8222-222222222222，断言全部走 SET LOCAL 身份，不依赖超管权限
 test-ai-employees.mjs[TB7L]: F:M2 AI 员工目录与授权验收，覆盖 fail-closed 可见性、草稿语义、部门子树继承、个人例外与 L1 独占写权限 | R:code:db/policies/020_ai_employee_visibility.sql,code:src/lib/ai-employees.ts | A:业务验收 | S:写入用 owner 连接播种绕过 RLS，断言全部以 jxf_app + SET LOCAL 身份执行；离职后必须立即不可见，授权表不得泄露
 test-app-settings.mjs[TC7M]: F:P5 设置面验收，覆盖 RLS 边界、单行配置约束、公开读取函数与密钥加密 | R:code:db/policies/027_app_settings_rls.sql,code:src/lib/settings/store.ts | A:配置验收 | S:需要 .env 与已应用的 0022 迁移；owner 仅用于播种，断言以 jxf_app 身份执行
@@ -251,17 +251,17 @@ test-permissions.mjs[TI6S]: F:权限目录自检，验证 L1/L2/L3 上限、模�
 test-pipelines.mjs[TW7L]: F:自动化产线验收，覆盖定义、首步派活、链式推进、可选步骤、产物传递、定时与 Webhook/事件触发 | R:code:src/lib/pipelines.ts,code:src/lib/pipeline-runner.ts,code:src/lib/pipeline-events.ts,code:db/policies/029_pipelines_rls.sql | A:流程验收 | S:会创建真实 work_item 与 queued run，测试前必须停 worker 避免被领取；结束后清理测试数据
 test-rls.mjs[TI8L]: F:P1 越权验收，使用真实 PostgreSQL + jxf_app 逐条验证无身份、越权与离岗时 RLS fail-closed | R:code:db/policies/002_rls_policies.sql,code:src/lib/db/user-context.ts | A:安全验收 | S:依赖真实库与 jxf_app；使用独立测试租户 11111111-1111-4111-8111-111111111111；清理必须按部门闭包深度由深到浅，否则外键失败
 test-runtime.mjs[TR8L]: F:M3 运行时验收，覆盖受理幂等、队列租约、事件 seq、取消/续跑、收口、成本账本与 RLS 隔离 | R:code:src/lib/runtime/accept.ts,code:src/lib/runtime/claim.ts,code:src/lib/runtime/recover.ts,code:src/lib/runtime/resume.ts,code:src/lib/runtime/usage.ts | A:运行时验收 | S:写入以 owner 连接播种，业务断言用 jxf_app + SET LOCAL，队列断言用受限角色 app_worker；知识卡已由经验通道授予 worker，越权断言改用 documents；必须先停掉常驻 worker，否则会抢占 queued run 导致误报；结束后清理测试租户数据
-test-setup.mjs[TC5T]: F:安装向导验收，验证模板替换、随机性、CHANGE_ME 占位符检测与 .env 覆盖保护 | R:code:scripts/lib/setup.mjs,code:scripts/install.mjs | A:安装验收 | S:不启动容器、不连接数据库；在临时目录生成 .env 后清理
+test-setup.mjs[TC5T]: F:安装向导验收，验证模板替换、随机性、CHANGE_ME 占位符检测与 .env 覆盖保护 | R:code:scripts/lib/setup.mjs,code:scripts/install.mjs | A:安装验收 | S:不启动容器、不连接数据库；在临时目录生成 .env 后清理；断言按 PASSWORD_KEYS 全量遍历，新增口令或令牌字段会被自动纳入强度与唯一性检查
 test-skills.mjs[TE7M]: F:技能注册表与绑定校验，覆盖技能增删改、状态切换、prompt 拼装与 AI 员工绑定 | R:code:src/lib/skills.ts,code:src/lib/ai-employees.ts,code:src/lib/skills/distribute.ts | A:业务验收 | S:需要先执行 0030_skills 迁移；会创建临时技能、分发任务与员工绑定，结束后清理
 upgrade.mjs[OR8S]: F:M5 交付底座升级，按备份、旧镜像打回滚标签、构建、迁移门禁、拉起、健康检查与写状态文件推进 | R:code:scripts/lib/delivery.mjs,code:scripts/backup.mjs,code:scripts/rollback.mjs,code:docker/docker-compose.yml | A:交付运维 | S:失败时不拉起新 web/worker，必须按输出提示执行 rollback；状态文件是 rollback 的唯一依据
 verify-delivery.mjs[TQ6T]: F:一键交付验收清单，串联权限守卫、类型检查、冒烟、设置面、心跳、产线、邮件、指标与授权体检 | R:code:scripts/smoke.mjs,code:scripts/verify-permission-guards.mjs,code:scripts/verify-skills.mjs | A:交付验收 | S:--quick 跳过 typecheck；不执行破坏性数据库测试，test:runtime 需单独运行
 verify-p0.sh[TQ6S]: F:Phase 0 验收脚本，校验 compose 配置、首次构建启动、健康检查、扩展与角色、迁移记录与重复 up 幂等 | R:code:docker/docker-compose.yml,code:scripts/install.mjs,code:scripts/smoke.mjs | A:部署验收 | S:必须在具备 Docker 的 Linux 宿主机或 WSL 执行；首次运行会自动生成 .env；set -euo pipefail 遇错即停
-verify-permission-guards.mjs[TI8M]: F:守卫覆盖检查，扫描所有 Server Action 与 Route Handler，要求每个导出入口都经过权限校验 | R:code:src/lib/permissions/server.ts,code:src/lib/permissions/guard.ts | A:权限验收 | S:跨文件追踪只沿本地导入，不做正则猜名字；公开探针、认证入口与仅靠 RLS 的入口必须进白名单并注明原因
+verify-permission-guards.mjs[TI8M]: F:守卫覆盖检查，扫描所有 Server Action、Route Handler 与 MCP 工具定义，要求每个可执行入口都经过权限校验 | R:code:src/lib/permissions/server.ts,code:src/lib/permissions/guard.ts,code:src/lib/mcp/tools.ts | A:权限验收 | S:跨文件追踪只沿本地导入，不做正则猜名字；MCP 能力按 const X: McpToolDefinition 识别（不在 src/app 下），改写工具定义形态会被漏扫；公开探针、认证入口与仅靠 RLS 的入口必须进白名单并注明原因
 verify-skills.mjs[TQ5T]: F:技能与授权体检门禁，把技能注册验收与授权收口体检合成一个步骤 | R:code:scripts/test-skills.mjs,code:scripts/audit-grants.mjs | A:质量门禁 | S:保持 verify:delivery 仍为 10 个步骤；任一步失败即整体非零退出
 
 ===E:/JXF-AI/scripts/lib/===
 delivery.mjs[OR8M]: F:备份/恢复/升级/回滚共用工具，统一封装 docker compose 调用、产物路径、校验和与版本信息 | R:code:scripts/backup.mjs,code:scripts/restore.mjs,code:scripts/rollback.mjs,code:scripts/smoke.mjs,code:docker/docker-compose.yml | A:交付运维 | S:容器操作一律走 docker compose --env-file .env，不硬编码容器名；恢复默认只做影子库演练，覆盖生产必须显式 --yes；升级失败不拉起新 web/worker，回滚依赖升级前备份与旧镜像标签
-setup.mjs[OC6T]: F:安装向导纯函数模块，定义必须随机化的口令与种子字段（含 jxf_auth），生成 .env 内容并检测 CHANGE_ME 占位 | R:code:scripts/install.mjs,code:.env.example | A:安装部署 | S:口令会直接拼进数据库连接串，只能用字母数字；新增的 JXF_AUTH_PASSWORD 必须同时加入 PASSWORD_KEYS，否则安装向导会残留占位值；纯函数不写文件、不启动容器
+setup.mjs[OC6T]: F:安装向导纯函数模块，定义必须随机化的口令与令牌字段（含 jxf_auth 与指标令牌），生成 .env 内容并检测 CHANGE_ME 占位 | R:code:scripts/install.mjs,code:.env.example | A:安装部署 | S:口令会直接拼进数据库连接串，只能用字母数字；新增的 JXF_AUTH_PASSWORD、METRICS_TOKEN 必须同时加入 PASSWORD_KEYS，否则安装向导会残留 CHANGE_ME 占位值；纯函数不写文件、不启动容器
 
 ===E:/JXF-AI/src/app/(app)/===
 actions.ts[EI6T]: F:切换当前部门上下文的 Server Action，只允许切到自己有效任用内的部门并写入 httpOnly Cookie | R:code:src/lib/db/user-context.ts,code:src/lib/auth/session.ts | A:部门上下文 | S:Cookie 必须 httpOnly，客户端无法伪造到其他部门；切换后 revalidatePath("/", "layout") 刷新全站上下文
@@ -413,7 +413,7 @@ route.ts[EB6T]: F:批量文档入库接口，接收 files[] 与目标说明并�
 route.ts[EE8M]: F:MCP Hub 入口，以 Bearer 令牌认证并处理 tools/list 与 tools/call，每次调用都写审计 | R:code:src/lib/mcp/tokens.ts,code:src/lib/mcp/tools.ts,code:src/lib/mcp/approvals.ts,code:src/lib/audit.ts | A:MCP 服务 | S:令牌绑定任用，离岗即失效；tools/list 只返回 scope 内工具，tools/call 再校验一次；无状态不维护 Mcp-Session-Id
 
 ===E:/JXF-AI/src/app/api/metrics/===
-route.ts[OO7S]: F:聚合指标端点，输出 JSON 或 Prometheus 文本形式的运行、工作项、运维、连接器与产线计数 | R:code:src/lib/db/pool.ts,code:db/migrations/0028_metrics.sql | A:可观测性 | S:只返回聚合计数不含明细；数据来自 SECURITY DEFINER 的 app.metrics_snapshot()，不受应用角色 RLS 部门范围影响；配置 METRICS_TOKEN 后要求 Bearer 认证
+route.ts[OO7S]: F:聚合指标端点，输出 JSON 或 Prometheus 文本形式的运行、工作项、运维、连接器与产线计数 | R:code:src/lib/db/pool.ts,code:db/migrations/0028_metrics.sql | A:可观测性 | S:只返回聚合计数不含明细；数据来自 SECURITY DEFINER 的 app.metrics_snapshot()，不受应用角色 RLS 部门范围影响；JXF_ENV=production 且 METRICS_TOKEN 为空时返回 503（fail-closed），只有非生产环境才允许匿名读取
 
 ===E:/JXF-AI/src/app/api/runs/[id]/cancel/===
 route.ts[ER7T]: F:运行中止接口，写入 cancel_requested_at 由 worker 感知并停止上游流 | R:code:src/lib/runtime/cancel.ts | A:运行时取消 | S:只接受同源请求，跨站返回 403；SSE 断开不触发中止，语义与关闭页面区分
@@ -504,7 +504,7 @@ session.ts[MI8T]: F:服务端会话校验，要求登录并检查账号状态，
 
 ===E:/JXF-AI/src/lib/db/===
 drizzle.ts[PD5T]: F:Drizzle 客户端工厂，基于认证连接池懒加载实例，仅服务 Auth.js 适配器 | R:code:src/lib/db/auth-pool.ts,code:drizzle.config.ts | A:数据访问 | S:懒加载，避免构建期要求数据库环境变量；业务查询不要复用该实例，否则会绕过 withUserContext 与 RLS
-pool.ts[PD8T]: F:应用连接池，使用受限业务角色连接并设置超时与错误日志 | R:code:src/lib/env.ts,code:src/lib/db/user-context.ts | A:数据访问 | S:只能使用 jxf_app 等受限业务角色，禁止 owner 或 superuser；连接上限 10、空闲 30s、连接与查询超时均为 3s；业务查询必须通过事务加 SET LOCAL 注入身份
+pool.ts[PD8T]: F:应用连接池，使用受限业务角色连接并设置超时与错误日志 | R:code:src/lib/env.ts,code:src/lib/db/user-context.ts | A:数据访问 | S:只能使用 jxf_app 等受限业务角色，禁止 owner 或 superuser；连接上限 10、空闲 30s、连接超时 3s；查询超时 30s 是客户端兜底，服务端 statement_timeout=15s 先中止，两层缺一都会让慢查询长期占住连接；业务查询必须通过事务加 SET LOCAL 注入身份
 user-context.ts[MI9M]: F:用户上下文解析与 RLS 注入，装配任用、部门子树、等级与权限版本并提供 withUserContext | R:code:db/schema/memberships.ts,code:src/lib/db/pool.ts,code:src/lib/permissions/catalog.ts | A:数据访问 | S:上下文 Cookie 为 jxf_active_department；L1 的 departmentIds 与 subtreeDepartmentIds 为全租户部门，L2/L3 仅当前部门子树；所有业务查询必须在 withUserContext 内以 SET LOCAL 注入 app.* 变量
 auth-pool.ts[PI9T]: F:Auth.js 专用连接池，使用 jxf_auth 最小权限角色承载适配器与凭证校验查询 | R:code:src/lib/env.ts,code:src/lib/db/drizzle.ts | A:认证数据访问 | S:只允许认证链路使用，业务查询必须走 withUserContext；AUTH_DATABASE_URL 缺失时回退业务连接串，保证旧部署可登录；max 5、query_timeout 3s
 
@@ -617,10 +617,10 @@ profile.ts[CU5T]: F:个人资料与成员清单共享结构，声明邮箱身份
 
 ===E:/JXF-AI/src/worker/===
 experience.ts[RR7T]: F:worker 侧经验消费者，领取一个 job、执行提炼并维护心跳与失败退避 | R:code:src/lib/knowledge/experience/process.ts,code:src/lib/knowledge/experience/queue.ts | A:运行时恢复 | S:与运行时队列共用同一 worker 进程，交互式 run 优先，无 run 可领才处理经验 job；执行期间 30s 心跳续租，崩溃由 sweepExperienceJobs 回队列；失败按尝试次数指数退避，3 次后进 dead
-main.ts[RR9L]: F:worker 进程入口，循环领取运行时 run 并执行流式模型调用、工具调用、事件与用量记账 | R:code:src/lib/runtime/claim.ts,code:src/lib/runtime/emit.ts,code:src/lib/runtime/recover.ts,code:src/lib/mcp/worker-tools.ts,code:src/lib/settings/runtime-server.ts | A:worker 运行 | S:只消费队列不承担 HTTP，使用 WORKER_DATABASE_URL 的 app_worker 受限角色；启动时把不属于本进程的 running 收口为 interrupted；心跳 30s、巡检 60s、空闲 800ms；经验沉淀后台单并发，不阻塞前台 run 领取
+main.ts[RR9L]: F:worker 进程入口，循环领取运行时 run 并执行流式模型调用、工具调用、事件与用量记账 | R:code:src/lib/runtime/claim.ts,code:src/lib/runtime/emit.ts,code:src/lib/runtime/recover.ts,code:src/lib/mcp/worker-tools.ts,code:src/lib/settings/runtime-server.ts | A:worker 运行 | S:只消费队列不承担 HTTP，使用 WORKER_DATABASE_URL 的 app_worker 受限角色；启动时把不属于本进程的 running 收口为 interrupted；心跳 30s、巡检 60s、空闲 800ms；连接池 max 4，query_timeout 与服务端 statement_timeout 均为 60s，任务续跑靠租约而非超时；经验沉淀后台单并发，不阻塞前台 run 领取
 
 ===E:/JXF-AI/docs/audit/===
-2026-11-09-全面审计报告.md[SQ5M]: F:工作台项目静态全面审计报告，按六条线分级列出安全、认知、可靠性与交付问题，附真实库复核、处置记录与修复路线图 | R:code:src/auth.ts,code:src/lib/db/pool.ts,code:docker/postgres/00-init.sh | A:审计交付 | S:结论绑定 2026-11-09 的索引与库内只读目录查询，未读取业务行；SEC-01 修复必须先拆 Auth.js 专用角色再对 jxf_app 收权，顺序颠倒会导致登录不可用；CI 只覆盖无 DB 的 7 项检查，集成测试走部署机 verify:delivery
+2026-11-09-全面审计报告.md[SQ5M]: F:工作台项目静态全面审计报告，按六条线分级列出安全、认知、可靠性与交付问题，附真实库复核、处置记录与修复路线图 | R:code:src/auth.ts,code:src/lib/db/pool.ts,code:docker/postgres/00-init.sh | A:审计交付 | S:结论绑定 2026-11-09 的索引与库内只读目录查询，未读取业务行；SEC-01 修复必须先拆 Auth.js 专用角色再对 jxf_app 收权，顺序颠倒会导致登录不可用；CI 只覆盖无 DB 的 7 项检查，集成测试走部署机 verify:delivery；已处置项含角色拆分、指标 fail-closed、守卫扫描面与查询超时分级
 
 ===E:/JXF-AI/db/ops/===
 auth-role-cutover.sql[OS8T]: F:jxf_auth 角色的人工切换脚本：超级用户建角色、部署后验证登录，再由 owner 对 jxf_app 收权 | R:code:db/policies/034_auth_role.sql,code:docker/postgres/00-init.sh | A:角色切换运维 | S:migrate 只读 db/policies，不会执行本文件；收权必须在 AUTH_DATABASE_URL 生效并验证登录之后，顺序颠倒会直接锁死登录；users 只收回 password_hash 列，其余展示列继续授予 jxf_app
