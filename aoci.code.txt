@@ -2,7 +2,7 @@
 
 ===E:/JXF-AI/===
 .dockerignore[FV5T]: F:定义镜像构建上下文排除项：依赖、构建产物、Git、文档脚本、环境变量与上传件不进镜像，仅白名单放行学习知识库 Markdown | R:code:docker/Dockerfile.web,code:docker/Dockerfile.worker,code:docker/Dockerfile.migrate | A:Docker 构建 | S:content/skills/learning-knowledge/*.md 的例外必须保留，否则学习知识库不会进入镜像；*.md 先全局排除再白名单放行
-.env.example[FC8S]: F:环境变量模板，覆盖通用、安全、PostgreSQL（含 Auth.js 专用角色）、MinIO、AI、Embedding、OCR、MCP、产线与邮件通知，默认关闭外部 AI 与 OCR | R:code:scripts/install.mjs,code:docker/docker-compose.yml,code:src/lib/env.ts | A:安装向导与部署 | S:JXF_AUTH_SECRET 缺失或少于 32 字符会拒绝启动；数据库与 MinIO 口令只能使用字母数字，因为会直接拼进连接串；JXF_AUTH_PASSWORD 用于创建 jxf_auth，容器内 AUTH_DATABASE_URL 由 compose 构造；METRICS_TOKEN 留空会让生产环境直接关闭 /api/metrics，安装向导会生成随机值；.env 禁止入库
+.env.example[FC8S]: F:环境变量模板，覆盖通用、安全、PostgreSQL（含 Auth.js 专用角色）、MinIO、AI、Embedding、OCR、MCP、产线与邮件通知，默认关闭外部 AI 与 OCR | R:code:scripts/install.mjs,code:docker/docker-compose.yml,code:src/lib/env.ts | A:安装向导与部署 | S:JXF_AUTH_SECRET 缺失或少于 32 字符会拒绝启动；数据库与 MinIO 口令只能使用字母数字，因为会直接拼进连接串；JXF_AUTH_PASSWORD 用于创建 jxf_auth，容器内 AUTH_DATABASE_URL 由 compose 构造；METRICS_TOKEN 留空会让生产环境直接关闭 /api/metrics，安装向导会生成随机值；配置 JXF_DATA_ENCRYPTION_KEY 后设置面密文写为 v2，留空则回退 JXF_AUTH_SECRET 派生的 v1；.env 禁止入库
 .gitattributes[CG3T]: F:统一文本检出为 LF，并把 png/jpg/jpeg/gif/webp/ico 标记为二进制 | R:- | A:Git 检出 | S:CRLF 会改变文本字节与哈希，导致跨平台构建和 AOCI 基线漂移
 .gitignore[CG5T]: F:忽略依赖、构建产物、上传件、环境变量、运行数据与本地 AOCI MCP 配置，同时保留 .env.example | R:code:.env.example,code:docker/docker-compose.yml | A:Git 边界 | S:.trae/mcp.json 含本机二进制绝对路径与数据库连接串，必须保持本地；AOCI 认知资产不能被忽略，否则 scan 会静默跳过
 AGENTS.md[SG8S]: F:定义 Agent 在本仓库的 AOCI 认知建立、复用、维护与收尾合同，并声明静态文档不能覆盖机器事实 | R:code:aoci.txt,code:aoci.meta.txt | A:AOCI 会话 | S:aoci 区块由 AOCI 管理，手工改写会脱离 init/scan 的一致性；Live Guide、工具 Schema、Spec 与 Validator 始终优先于本文件
@@ -178,7 +178,7 @@ Dockerfile.migrate[OV7T]: F:一次性迁移镜像，安装生产依赖后运行 
 Dockerfile.postgres[OV8T]: F:自建 PostgreSQL 16 镜像，从源码编译 pgvector 与 pg_bigm，并内置初始化与健康检查脚本 | R:code:docker/postgres/00-init.sh,code:docker/postgres/healthcheck.sh | A:运维部署 | S:pg_bigm 使用 Debian 而非 Alpine；扩展版本固定；数据卷为空时才执行初始化
 Dockerfile.web[OV7T]: F:Next.js standalone 生产镜像，三阶段构建 web 服务 | R:code:docker/docker-compose.yml,code:.dockerignore | A:运维部署 | S:public/uploads 必须先建目录并 chown，否则命名卷属主错误；content 目录必须复制，否则学习知识库缺失
 Dockerfile.worker[OV7T]: F:worker 运行镜像，复用同一份源码与依赖，CMD 启动 src/worker/main.ts | R:code:src/worker/main.ts,code:docker/docker-compose.yml | A:运维部署 | S:worker 与 web 共用源码但使用独立角色环境变量；不暴露端口
-docker-compose.yml[OV9M]: F:单机编排：postgres、migrate、minio、minio-init、web、worker、caddy，定义严格依赖与健康检查 | R:code:docker/Dockerfile.web,code:docker/Dockerfile.worker,code:docker/Dockerfile.postgres,code:docker/Dockerfile.migrate | A:运维部署 | S:web 必须等 migrate 成功；postgres 只绑定 127.0.0.1；worker 使用 app_worker 角色；AUTH_DATABASE_URL 在容器内由 JXF_AUTH_PASSWORD 与 postgres 服务名构造，缺失时 compose 直接报错；日志 json-file 限 20m×5
+docker-compose.yml[OV9M]: F:单机编排：postgres、migrate、minio、minio-init、web、worker、caddy，定义严格依赖与健康检查 | R:code:docker/Dockerfile.web,code:docker/Dockerfile.worker,code:docker/Dockerfile.postgres,code:docker/Dockerfile.migrate | A:运维部署 | S:web 必须等 migrate 成功；postgres 只绑定 127.0.0.1；worker 使用 app_worker 角色；AUTH_DATABASE_URL 在容器内由 JXF_AUTH_PASSWORD 与 postgres 服务名构造，缺失时 compose 直接报错；JXF_DATA_ENCRYPTION_KEY 可选，留空时设置面密文回退到 JXF_AUTH_SECRET 派生；日志 json-file 限 20m×5
 
 ===E:/JXF-AI/docker/migrate/===
 entrypoint.mjs[OV8M]: F:迁移容器入口：连接 jxf_owner，执行 drizzle 迁移、按文件名重放全部策略、断言三个扩展并记录应用版本 | R:code:db/migrations/meta/_journal.json,code:db/policies/001_app_functions.sql | A:迁移执行 | S:每个策略文件独立事务且必须幂等；扩展缺失 fail-closed；未登记 journal 的迁移文件会被静默跳过
@@ -203,7 +203,7 @@ permission-model.md[SI9M]: F:权限模型语义冻结稿，定义 L1–L3、Perm
 知识库经验沉淀融合方案.md[SW8L]: F:知识库与经验沉淀融合方案：单一卡库、多通道采集、目录语义路由与确认门槛，Phase 0–2 已落地 | R:code:src/lib/knowledge/experience/capture.ts,code:src/lib/knowledge/experience/process.ts,code:db/schema/experience.ts | A:架构文档 | S:所有 AI 卡必须 pending 且至少一条逐字证据；05 经验不进事实问答；来源文本去敏截断后 90 天清理
 
 ===E:/JXF-AI/docs/development/===
-P0-infrastructure.md[SV7L]: F:P0 环境底座开发记录：容器编排、自建 PG 镜像、反向代理与健康检查 | R:code:docs/gates/P0-gate.md,code:docker/docker-compose.yml | A:开发文档 | S:自建 PG 镜像锁定扩展版本；迁移容器为一次性任务，退出码即结果
+P0-infrastructure.md[SV7L]: F:P0 环境底座开发记录：容器编排、自建 PG 镜像、反向代理与健康检查 | R:code:docs/gates/P0-gate.md,code:docker/docker-compose.yml | A:开发文档 | S:自建 PG 镜像锁定扩展版本；迁移容器为一次性任务，退出码即结果；JXF_DATA_ENCRYPTION_KEY 为可选专用加密密钥，留空回退 JXF_AUTH_SECRET
 P1-auth-rls.md[SI8M]: F:P1 组织治理与身份链路开发记录：部门树、闭包、成员、RLS 与会话上下文 | R:code:docs/gates/P1-gate.md,code:db/policies/001_app_functions.sql | A:开发文档 | S:jxf_app 非 owner、非 superuser、非 bypassrls；策略文件每次 migrate 重放
 P1-progress.md[SG6L]: F:P1 推进账本，按日期追加需求、代码迁移、验收证据与方案偏差 | R:code:docs/development/P1-auth-rls.md,code:docs/gates/P1-gate.md | A:开发文档 | S:只追加不改写历史；未提交改动必须显式标注；闸门步骤过时先记偏差
 P6-阶段交付与验收报告.md[SI7M]: F:P6 权限管理面板交付报告，记录三个 Tab、授权模型与自动化验证结果 | R:code:docs/architecture/permission-model.md,code:src/app/(app)/admin/permissions/page.tsx | A:开发文档 | S:面板仅 L1 可访问与编辑；镜像重建与截图级人工验收为待补项
@@ -238,7 +238,7 @@ rollback.mjs[OR7T]: F:回滚脚本，读升级状态文件把旧镜像改回正�
 smoke.mjs[OQ7M]: F:部署冒烟脚本，检查 compose 配置、容器健康、存活/就绪探针、版本表、未认证接口 401、指标端点与最近备份 | R:code:scripts/lib/delivery.mjs,code:docker/docker-compose.yml,code:src/lib/health.ts,code:src/app/api/metrics/route.ts | A:部署验收 | S:只读检查、不写业务数据，可重复执行；必须在能执行 docker compose 的部署机上运行；指标检查在 web 容器内读取 METRICS_TOKEN 带 Bearer，未配置时把 503 记为 WARN 而不是失败
 test-active-context.mjs[TI7M]: F:P3 单部门上下文验收，验证多任用用户在不同部门上下文下的 RLS 作用域 | R:code:db/policies/012_active_membership_context.sql,code:scripts/test-rls.mjs | A:权限验收 | S:需要真实 PostgreSQL 与 jxf_app 角色；使用独立测试租户 22222222-2222-4222-8222-222222222222，断言全部走 SET LOCAL 身份，不依赖超管权限
 test-ai-employees.mjs[TB7L]: F:M2 AI 员工目录与授权验收，覆盖 fail-closed 可见性、草稿语义、部门子树继承、个人例外与 L1 独占写权限 | R:code:db/policies/020_ai_employee_visibility.sql,code:src/lib/ai-employees.ts | A:业务验收 | S:写入用 owner 连接播种绕过 RLS，断言全部以 jxf_app + SET LOCAL 身份执行；离职后必须立即不可见，授权表不得泄露
-test-app-settings.mjs[TC7M]: F:P5 设置面验收，覆盖 RLS 边界、单行配置约束、公开读取函数与密钥加密 | R:code:db/policies/027_app_settings_rls.sql,code:src/lib/settings/store.ts | A:配置验收 | S:需要 .env 与已应用的 0022 迁移；owner 仅用于播种，断言以 jxf_app 身份执行
+test-app-settings.mjs[TC7M]: F:P5 设置面验收，覆盖 RLS 边界、单行配置约束、公开读取函数与密钥加解密 | R:code:db/policies/027_app_settings_rls.sql,code:src/lib/settings/store.ts | A:配置验收 | S:需要 .env 与已应用的 0022 迁移；owner 仅用于播种，断言以 jxf_app 身份执行；密文版本断言随 JXF_DATA_ENCRYPTION_KEY 是否存在切换 v1/v2，并覆盖旧 v1 可解与移除专用密钥后 v2 不可解
 test-knowledge.mjs[TB7L]: F:M2-A3 知识库验收，覆盖 RLS 隔离、sha256 去重、批次撤回、确认门槛与混合检索降级 | R:code:db/policies/017_knowledge_rls.sql,code:src/lib/knowledge/ingest.ts,code:src/lib/knowledge/qa.ts | A:业务验收 | S:真实 PostgreSQL + jxf_app；写入走 owner 播种，断言走应用角色 SET LOCAL，确保测的是策略而不是超管权限
 test-mcp-health.mjs[TO6S]: F:P5 MCP 连接器心跳体检验收，用假 probe 驱动 unknown→degraded→down→healthy 状态机 | R:code:src/lib/mcp/health.ts,code:scripts/ops-runner.mjs | A:可靠性验收 | S:不访问任何外部网络；同时校验健康列、审计事件、告警回调与 worker 降级 SQL 条件
 test-metrics.mjs[TO6T]: F:可观测性验收，验证 app.metrics_snapshot() 以 jxf_app 角色可读且只返回聚合计数 | R:code:db/migrations/0028_metrics.sql | A:可观测性验收 | S:返回结果不得包含任何明细字段；需要真实 PostgreSQL 与应用角色连接
@@ -261,7 +261,7 @@ verify-skills.mjs[TQ5T]: F:技能与授权体检门禁，把技能注册验收�
 
 ===E:/JXF-AI/scripts/lib/===
 delivery.mjs[OR8M]: F:备份/恢复/升级/回滚共用工具，统一封装 docker compose 调用、产物路径、校验和与版本信息 | R:code:scripts/backup.mjs,code:scripts/restore.mjs,code:scripts/rollback.mjs,code:scripts/smoke.mjs,code:docker/docker-compose.yml | A:交付运维 | S:容器操作一律走 docker compose --env-file .env，不硬编码容器名；恢复默认只做影子库演练，覆盖生产必须显式 --yes；升级失败不拉起新 web/worker，回滚依赖升级前备份与旧镜像标签
-setup.mjs[OC6T]: F:安装向导纯函数模块，定义必须随机化的口令与令牌字段（含 jxf_auth 与指标令牌），生成 .env 内容并检测 CHANGE_ME 占位 | R:code:scripts/install.mjs,code:.env.example | A:安装部署 | S:口令会直接拼进数据库连接串，只能用字母数字；新增的 JXF_AUTH_PASSWORD、METRICS_TOKEN 必须同时加入 PASSWORD_KEYS，否则安装向导会残留 CHANGE_ME 占位值；纯函数不写文件、不启动容器
+setup.mjs[OC6T]: F:安装向导纯函数模块，定义必须随机化的口令与令牌字段（含 jxf_auth、指标令牌与数据加密密钥），生成 .env 内容并检测 CHANGE_ME 占位 | R:code:scripts/install.mjs,code:.env.example | A:安装部署 | S:口令会直接拼进数据库连接串，只能用字母数字；新增的 JXF_AUTH_PASSWORD、METRICS_TOKEN、JXF_DATA_ENCRYPTION_KEY 必须同时加入 PASSWORD_KEYS，否则安装向导会残留 CHANGE_ME 占位值；纯函数不写文件、不启动容器
 
 ===E:/JXF-AI/src/app/(app)/===
 actions.ts[EI6T]: F:切换当前部门上下文的 Server Action，只允许切到自己有效任用内的部门并写入 httpOnly Cookie | R:code:src/lib/db/user-context.ts,code:src/lib/auth/session.ts | A:部门上下文 | S:Cookie 必须 httpOnly，客户端无法伪造到其他部门；切换后 revalidatePath("/", "layout") 刷新全站上下文
@@ -593,7 +593,7 @@ usage.ts[PR7T]: F:用量账本，每次模型调用写一行 token 用量并同�
 
 ===E:/JXF-AI/src/lib/settings/===
 ai.ts[CC7T]: F:模型配置诊断，展示当前进程实际生效的配置并发起一次最小连通测试 | R:code:src/lib/env.ts,code:src/lib/settings/crypto.ts,code:src/lib/permissions/server.ts | A:平台设置 | S:展示的是环境变量与数据库覆盖合并后的生效值，与库中原始值区分；Key 只展示末 4 位提示；测试需要 platform:settings
-crypto.ts[MS8T]: F:设置面密钥加密，使用 AES-256-GCM 加解密模型与 SMTP 密钥 | R:code:src/lib/settings/store.ts,code:src/lib/notifications/mailer.ts | A:设置安全 | S:密钥由 JXF_AUTH_SECRET 经 scrypt 派生；密文格式为 v1.iv.tag.ciphertext 的 base64url 分段；解密失败返回 null，由调用方回退到环境变量；轮换 secret 后旧密文不可解
+crypto.ts[MS8T]: F:设置面密钥加密，使用 AES-256-GCM 加解密模型、SMTP 与技能令牌，并按密文版本选择 v1 回退密钥或 v2 专用密钥 | R:code:src/lib/settings/store.ts,code:src/lib/notifications/mailer.ts | A:设置安全 | S:新密文优先用 JXF_DATA_ENCRYPTION_KEY 写 v2，未配置时回退 JXF_AUTH_SECRET 写 v1；读取按密文版本选钥，所以配了专用密钥后旧 v1 仍可解，而移除专用密钥后 v2 解不开并返回 null；密文为 v1 或 v2 前缀加 base64url 的 iv.tag.ciphertext 三段
 delivery-status.ts[OO6S]: F:交付状态只读视图，读取 backups 目录下的备份与升级状态产物 | R:code:scripts/backup.mjs,code:scripts/upgrade.mjs | A:交付运维 | S:Web 容器通过只读挂载看到宿主机 backups 目录；未挂载或没有备份时如实显示暂无，不伪造状态；最多展示 5 份备份
 runtime-server.ts[CC8T]: F:把数据库中的模型配置应用到当前进程，刷新 env 缓存并设置运行时覆盖 | R:code:src/lib/settings/store.ts,code:src/lib/settings/runtime.ts,code:src/lib/settings/crypto.ts,code:src/lib/env.ts | A:平台设置 | S:启动期由 instrumentation 调用一次，保存设置后由 Server Action 再调用；Worker 是独立进程，需重启才加载新配置；解密失败时保留环境变量配置，避免整站 AI 不可用
 runtime.ts[CC7T]: F:运行时 AI 覆盖的内存容器，供 env 解析时读取 | R:code:src/lib/env.ts,code:src/lib/settings/runtime-server.ts | A:平台设置 | S:纯内存不依赖数据库与 Next；明文 Key 只存在于进程内存，禁止落日志
@@ -620,7 +620,7 @@ experience.ts[RR7T]: F:worker 侧经验消费者，领取一个 job、执行提�
 main.ts[RR9L]: F:worker 进程入口，循环领取运行时 run 并执行流式模型调用、工具调用、事件与用量记账 | R:code:src/lib/runtime/claim.ts,code:src/lib/runtime/emit.ts,code:src/lib/runtime/recover.ts,code:src/lib/mcp/worker-tools.ts,code:src/lib/settings/runtime-server.ts | A:worker 运行 | S:只消费队列不承担 HTTP，使用 WORKER_DATABASE_URL 的 app_worker 受限角色；启动时把不属于本进程的 running 收口为 interrupted；心跳 30s、巡检 60s、空闲 800ms；连接池 max 4，query_timeout 与服务端 statement_timeout 均为 60s，任务续跑靠租约而非超时；经验沉淀后台单并发，不阻塞前台 run 领取
 
 ===E:/JXF-AI/docs/audit/===
-2026-11-09-全面审计报告.md[SQ5M]: F:工作台项目静态全面审计报告，按六条线分级列出安全、认知、可靠性与交付问题，附真实库复核、处置记录与修复路线图 | R:code:src/auth.ts,code:src/lib/db/pool.ts,code:docker/postgres/00-init.sh | A:审计交付 | S:结论绑定 2026-11-09 的索引与库内只读目录查询，未读取业务行；SEC-01 修复必须先拆 Auth.js 专用角色再对 jxf_app 收权，顺序颠倒会导致登录不可用；CI 只覆盖无 DB 的 7 项检查，集成测试走部署机 verify:delivery；已处置项含角色拆分、指标 fail-closed、守卫扫描面与查询超时分级
+2026-11-09-全面审计报告.md[SQ5M]: F:工作台项目静态全面审计报告，按六条线分级列出安全、认知、可靠性与交付问题，附真实库复核、处置记录与修复路线图 | R:code:src/auth.ts,code:src/lib/db/pool.ts,code:docker/postgres/00-init.sh | A:审计交付 | S:结论绑定 2026-11-09 的索引与库内只读目录查询，未读取业务行；SEC-01 修复必须先拆 Auth.js 专用角色再对 jxf_app 收权，顺序颠倒会导致登录不可用；CI 只覆盖无 DB 的 7 项检查，集成测试走部署机 verify:delivery；SEC-02 已拆出专用数据加密密钥，v1 密文仍可解密并在下次保存时升级为 v2
 
 ===E:/JXF-AI/db/ops/===
 auth-role-cutover.sql[OS8T]: F:jxf_auth 角色的人工切换脚本：超级用户建角色、部署后验证登录，再由 owner 对 jxf_app 收权 | R:code:db/policies/034_auth_role.sql,code:docker/postgres/00-init.sh | A:角色切换运维 | S:migrate 只读 db/policies，不会执行本文件；收权必须在 AUTH_DATABASE_URL 生效并验证登录之后，顺序颠倒会直接锁死登录；users 只收回 password_hash 列，其余展示列继续授予 jxf_app
