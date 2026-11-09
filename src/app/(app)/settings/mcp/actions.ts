@@ -15,7 +15,14 @@ import {
 } from "@/lib/mcp/connectors";
 import { checkConnectorsAsL1 } from "@/lib/mcp/health";
 import { notifyHealthAlert } from "@/lib/notifications/events";
-import { issueMcpToken, revokeMcpToken } from "@/lib/mcp/tokens";
+import {
+  cleanupInvalidMcpTokens,
+  deleteMcpToken,
+  issueMcpToken,
+  renewMcpToken,
+  revokeMcpToken,
+  type McpClientKey,
+} from "@/lib/mcp/tokens";
 import { toPermissionMessage } from "@/lib/permissions/guard";
 
 export interface McpActionResult {
@@ -33,6 +40,7 @@ async function contextOf() {
 export async function issueMcpTokenAction(input: {
   name: string;
   membershipId: string;
+  client?: McpClientKey | null;
   skills: string[];
   pipelines: string[];
   tools: string[];
@@ -59,6 +67,39 @@ export async function revokeMcpTokenAction(tokenId: string): Promise<McpActionRe
     await revokeMcpToken(await contextOf(), tokenId);
     revalidatePath("/settings/mcp");
     return { ok: true, message: "令牌已停用" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+export async function renewMcpTokenAction(
+  tokenId: string,
+  input: { expiresAt?: string | null; reactivate?: boolean },
+): Promise<McpActionResult> {
+  try {
+    await renewMcpToken(await contextOf(), tokenId, input);
+    revalidatePath("/settings/mcp");
+    return { ok: true, message: input.reactivate ? "令牌已重新激活" : "有效期已更新" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+export async function deleteMcpTokenAction(tokenId: string): Promise<McpActionResult> {
+  try {
+    await deleteMcpToken(await contextOf(), tokenId);
+    revalidatePath("/settings/mcp");
+    return { ok: true, message: "令牌已删除" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+export async function cleanupInvalidTokensAction(): Promise<McpActionResult> {
+  try {
+    const count = await cleanupInvalidMcpTokens(await contextOf());
+    revalidatePath("/settings/mcp");
+    return { ok: true, message: count > 0 ? `已清理 ${count} 个失效令牌` : "没有需要清理的失效令牌" };
   } catch (error) {
     return { ok: false, message: toPermissionMessage(error) };
   }

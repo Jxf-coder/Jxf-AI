@@ -7,9 +7,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3000",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3000",
     "typecheck": "tsc --noEmit",
     "seed": "node --env-file=.env --import tsx db/seed/dev.ts",
     "test:rls": "node --env-file=.env scripts/test-rls.mjs",
@@ -27,6 +27,8 @@
     "test:pipelines": "node --env-file=.env --import tsx scripts/test-pipelines.mjs",
     "test:notifications": "node --env-file=.env --import tsx scripts/test-notifications.mjs",
     "test:metrics": "node --env-file=.env scripts/test-metrics.mjs",
+    "test:skills": "node --env-file=.env --import tsx scripts/test-skills.mjs",
+    "test:experience": "node --import tsx --test src/lib/knowledge/experience/experience.test.ts",
     "test:setup": "node scripts/test-setup.mjs",
     "setup": "node scripts/install.mjs",
     "backup": "node --env-file=.env scripts/backup.mjs",
@@ -38,6 +40,7 @@
     "audit:grants": "node --env-file=.env --import tsx scripts/audit-grants.mjs",
     "ops:runner": "node --env-file=.env --import tsx scripts/ops-runner.mjs",
     "verify:delivery": "node --env-file=.env scripts/verify-delivery.mjs",
+    "verify:skills": "node scripts/verify-skills.mjs",
     "worker": "node --env-file=.env --import tsx src/worker/main.ts",
     "probe:embedding": "node --env-file=.env scripts/probe-embedding.mjs",
     "backfill:embeddings": "node --env-file=.env scripts/backfill-embeddings.mjs",

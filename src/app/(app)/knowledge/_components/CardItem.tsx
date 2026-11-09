@@ -13,13 +13,20 @@ import {
   evidenceList,
   fieldLabel,
   input,
+  inputInline,
   linkBtn,
   meta,
   quote,
 } from "@/components/knowledge/tokens";
 import type { CardView } from "@/lib/knowledge/cards";
+import { folderLabel, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
 
-import { confirmCardAction, dropCardAction, updateCardAction } from "../cards/actions";
+import {
+  changeCardFolderAction,
+  confirmCardAction,
+  dropCardAction,
+  updateCardAction,
+} from "../cards/actions";
 import { CARD_KIND_LABEL, CARD_ORIGIN_LABEL, CARD_STATUS_LABEL, today } from "./card-labels";
 
 const STATUS_TONE = {
@@ -63,6 +70,7 @@ export function CardItem({ card, selected, onToggle, canWrite, canConfirm }: Car
     version ? `版本 ${version}` : "",
     owner ? `负责人 ${owner}` : "",
     card.validUntil ? `有效至 ${card.validUntil}` : "",
+    card.routePending && card.routeReason ? `路由：${card.routeReason}` : "",
     `来自 ${CARD_ORIGIN_LABEL[card.origin] ?? card.origin}`,
   ]
     .filter(Boolean)
@@ -93,6 +101,15 @@ export function CardItem({ card, selected, onToggle, canWrite, canConfirm }: Car
         <div className="flex flex-wrap items-center gap-1.5">
           <Pill tone="blue">{CARD_KIND_LABEL[card.kind] ?? card.kind}</Pill>
           <Pill tone={STATUS_TONE[card.status]}>{CARD_STATUS_LABEL[card.status] ?? card.status}</Pill>
+          <Pill>{folderLabel(card.folderKey)}</Pill>
+          {card.routePending ? (
+            <span title={card.routeReason ?? "目录规则冲突，需人工选定"}>
+              <Pill tone="error">目录待定</Pill>
+            </span>
+          ) : null}
+          {!card.routePending && card.suggestedFolder && card.suggestedFolder !== card.folderKey ? (
+            <Pill>建议 {folderLabel(card.suggestedFolder)}</Pill>
+          ) : null}
           {card.category ? <Pill>{card.category}</Pill> : null}
           {card.product ? <Pill>{card.product}</Pill> : null}
           {card.externalOk ? <Pill tone="blue">可对外</Pill> : null}
@@ -203,6 +220,21 @@ export function CardItem({ card, selected, onToggle, canWrite, canConfirm }: Car
       </div>
 
       <div className="flex shrink-0 flex-col items-end gap-1.5">
+        {canWrite ? (
+          <select
+            className={`${inputInline} w-auto`}
+            value={card.folderKey}
+            aria-label="调整知识卡目录"
+            disabled={pending}
+            onChange={(event) => run(() => changeCardFolderAction(card.id, event.target.value))}
+          >
+            {STANDARD_FOLDERS.filter((folder) => folder.key !== "99-trash").map((folder) => (
+              <option key={folder.key} value={folder.key}>
+                {folder.label}
+              </option>
+            ))}
+          </select>
+        ) : null}
         {!editing && canWrite ? (
           <button type="button" className={linkBtn} onClick={() => setEditing(true)}>
             改
@@ -212,8 +244,14 @@ export function CardItem({ card, selected, onToggle, canWrite, canConfirm }: Car
           <button
             type="button"
             className={linkBtn}
-            disabled={pending || unverified}
-            title={unverified ? "证据没对上，先改正文或来源" : "确认这张知识卡"}
+            disabled={pending || unverified || card.routePending}
+            title={
+              card.routePending
+                ? "目录待定，先在上方选择目录"
+                : unverified
+                  ? "证据没对上，先改正文或来源"
+                  : "确认这张知识卡"
+            }
             onClick={() => run(() => confirmCardAction(card.id))}
           >
             确认

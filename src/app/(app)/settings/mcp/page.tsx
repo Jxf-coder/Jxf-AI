@@ -7,7 +7,6 @@ import {
   pageTitle,
   pageWrap,
 } from "@/components/knowledge/tokens";
-import { listAiEmployees } from "@/lib/ai-employees";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext } from "@/lib/db/user-context";
 import { listToolApprovals } from "@/lib/mcp/approvals";
@@ -20,6 +19,7 @@ import {
 } from "@/lib/mcp/connectors";
 import { MCP_TOOLS } from "@/lib/mcp/tools";
 import { listMcpTokenCandidates, listMcpTokens } from "@/lib/mcp/tokens";
+import { listPipelineEventBridge } from "@/lib/pipeline-events";
 
 import { McpClient } from "./McpClient";
 
@@ -31,15 +31,20 @@ export default async function McpSettingsPage() {
 
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost";
   const proto = requestHeaders.get("x-forwarded-proto") ?? "http";
-  const endpoint = `${proto}://${host}/api/mcp`;
+  // 本地开发固定走 3000，避免 Endpoint 随 Host 头或代理变化
+  const base =
+    process.env.NODE_ENV === "production"
+      ? `${proto}://${host}`
+      : `http://127.0.0.1:${process.env.PORT ?? "3000"}`;
+  const endpoint = `${base}/api/mcp`;
 
   const header = (
     <header className={headerRow}>
       <div>
-        <h1 className={pageTitle}>MCP 连接</h1>
+        <h1 className={pageTitle}>MCP 连接器</h1>
         <p className={pageSubtitle}>
-          给外部客户端（IDE、机器人、自动化脚本）签发 MCP 令牌。令牌绑定成员任用，
-          只能看到并使用 scope 内的工具，数据范围由该任用决定。
+          Agent 与外部工具的通道。接入：本系统接入的外部 MCP 服务；接出：本系统对外提供的 MCP 节点；订阅桥：事件订阅与触发。
+          密钥只走服务端或 .env，不写进页面。
         </p>
       </div>
     </header>
@@ -54,13 +59,13 @@ export default async function McpSettingsPage() {
     );
   }
 
-  const [tokens, candidates, servers, calls, approvals, employees] = await Promise.all([
+  const [tokens, candidates, servers, calls, approvals, bridge] = await Promise.all([
     listMcpTokens(context),
     listMcpTokenCandidates(context),
     listMcpServers(context),
     listMcpServerCalls(context, 10),
     listToolApprovals(context, 20),
-    listAiEmployees(context),
+    listPipelineEventBridge(context),
   ]);
 
   const toolsByServer: Record<string, McpToolSummary[]> = {};
@@ -71,9 +76,6 @@ export default async function McpSettingsPage() {
   return (
     <section className={pageWrap}>
       {header}
-      <p className="mt-3 text-[11px] text-zinc-500">
-        端点 <code className="font-mono">{endpoint}</code> · 传输：Streamable HTTP（JSON 响应，无会话）
-      </p>
       <McpClient
         tokens={tokens}
         candidates={candidates}
@@ -88,10 +90,9 @@ export default async function McpSettingsPage() {
           action: tool.action,
           skill: tool.skill,
         }))}
-        employees={employees
-          .filter((employee) => employee.status === "active")
-          .map((employee) => ({ id: employee.id, name: employee.name }))}
         endpoint={endpoint}
+        projectId={context.tenantId}
+        bridge={bridge}
       />
     </section>
   );

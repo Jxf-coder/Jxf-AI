@@ -35,6 +35,13 @@ const ITEMS: CommandItem[] = [
     permission: "knowledge:read",
   },
   {
+    label: "Skill 技能台",
+    hint: "技能卡片 · 注册与绑定",
+    href: "/skills",
+    keywords: ["skill", "skills", "技能", "卡片", "客户调研", "IMA", "Meta", "分发"],
+    permission: "skill:use",
+  },
+  {
     label: "AI 员工",
     hint: "目录 · 使用授权",
     href: "/ai-employees",

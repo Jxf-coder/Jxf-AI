@@ -35,6 +35,7 @@ export async function createAiEmployeeAction(input: {
   slug: string;
   name: string;
   description?: string;
+  skillKeys?: string[];
 }): Promise<ActionResult> {
   try {
     const result = await createAiEmployee(await contextOf(), input);

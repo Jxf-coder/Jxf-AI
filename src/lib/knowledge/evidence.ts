@@ -114,6 +114,14 @@ export function verifyQuoteInChunk(chunkText: string, chunkCharStart: number, ra
   };
 }
 
+/**
+ * 校验引文是否落在任意来源文本中（运行产物 / 人工粘贴）。
+ * 与 verifyQuoteInChunk 同一套归一化规则，返回的下标相对该文本。
+ */
+export function verifyQuoteInText(text: string, rawQuote: string): QuoteMatch {
+  return verifyQuoteInChunk(text, 0, rawQuote);
+}
+
 /** 抽出带单位的数字串（价格 / 参数 / 年份），用于冲突判定与答案数字校验 */
 const NUMBER_RE =
   /\d+(?:[.,]\d+)*(?:\s*[-~～至到]\s*\d+(?:[.,]\d+)*)?\s*(?:l\/min|万元|mm²|mesh|ppm|ppb|rpm|cfu|kpa|mpa|bar|min|kg|mg|μg|ug|ml|mm|cm|km|m²|m2|m³|m3|kw|kv|ma|hz|db|μm|um|nm|iu|°c|pa|小时|分钟|%|％|‰|℃|°|元|万|亿|千|百|天|日|周|月|年|秒|岁|度|倍|次|台|套|件|个|家|人|款|种|批|目|㎡|㎜|㎝|㎏|m|g|t|l|w|v|a|h|s)?/gi;

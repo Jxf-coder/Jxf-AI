@@ -23,7 +23,7 @@ const steps = [
   { name: "自动化产线校验", args: ["run", "test:pipelines"] },
   { name: "邮件通知校验", args: ["run", "test:notifications"] },
   { name: "可观测性校验", args: ["run", "test:metrics"] },
-  { name: "授权收口体检", args: ["run", "audit:grants"] },
+  { name: "技能与授权体检", args: ["run", "verify:skills"] },
 ];
 
 const results = [];

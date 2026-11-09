@@ -9,6 +9,7 @@
  */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
@@ -18,13 +19,22 @@ import { withUserContext } from "@/lib/db/user-context";
 import { assertSafeHttpUrl } from "@/lib/mcp/ssrf";
 import { requireContextPermission } from "@/lib/permissions/server";
 
-export type McpTransport = "http" | "stdio";
+export type McpTransport = "http" | "stdio" | "sse";
+export type McpDirection = "inbound" | "outbound";
+
+/** 数据库中的 transport 是 text，统一收敛到支持的三种协议 */
+export function toTransport(raw: string): McpTransport {
+  return raw === "stdio" ? "stdio" : raw === "sse" ? "sse" : "http";
+}
 
 export type McpHealthStatus = "unknown" | "healthy" | "degraded" | "down";
 
 export interface McpServerView {
   id: string;
+  nodeKey: string;
   name: string;
+  direction: McpDirection;
+  roles: string[];
   transport: McpTransport;
   target: string;
   enabled: boolean;
@@ -60,7 +70,10 @@ export interface McpServerCallView {
 }
 
 export interface CreateMcpServerInput {
+  nodeKey?: string;
   name: string;
+  direction?: McpDirection;
+  roles?: string[];
   transport: McpTransport;
   url?: string;
   command?: string;
@@ -79,7 +92,10 @@ const MAX_TOOL_NAME = 100;
 
 interface ServerRow {
   id: string;
+  node_key: string;
   name: string;
+  direction: string;
+  roles: string[] | null;
   transport: string;
   url: string | null;
   command: string | null;
@@ -126,10 +142,13 @@ function toHealthStatus(raw: string): McpHealthStatus {
 }
 
 function toView(row: ServerRow): McpServerView {
-  const transport: McpTransport = row.transport === "stdio" ? "stdio" : "http";
+  const transport = toTransport(row.transport);
   return {
     id: row.id,
+    nodeKey: row.node_key,
     name: row.name,
+    direction: row.direction === "outbound" ? "outbound" : "inbound",
+    roles: row.roles ?? [],
     transport,
     target: (transport === "stdio" ? row.command : row.url) ?? "",
     enabled: row.enabled,
@@ -149,7 +168,7 @@ function toView(row: ServerRow): McpServerView {
   };
 }
 
-const SERVER_COLUMNS = `id, name, transport, url, command, args, env, enabled, allowed_tools,
+const SERVER_COLUMNS = `id, node_key, name, direction, roles, transport, url, command, args, env, enabled, allowed_tools,
        timeout_ms, rate_limit_per_min, daily_quota, tools_cache,
        last_checked_at, last_error, health_status, health_checked_at, health_latency_ms,
        health_consecutive_failures, health_last_error, created_at`;
@@ -229,7 +248,20 @@ export async function createMcpServer(
   if (name.length === 0 || name.length > 60) {
     throw new Error("连接器名称不能为空且不超过 60 字");
   }
-  if (input.transport !== "http" && input.transport !== "stdio") {
+  const direction: McpDirection = input.direction === "outbound" ? "outbound" : "inbound";
+  const nodeKey = (input.nodeKey ?? name)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(nodeKey)) {
+    throw new Error("标识只能使用小写字母、数字与连字符（2–64 位）");
+  }
+  const roles = (input.roles ?? [])
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0 && item.length <= 40)
+    .slice(0, 20);
+  if (input.transport !== "http" && input.transport !== "stdio" && input.transport !== "sse") {
     throw new Error("不支持的传输方式");
   }
   const timeoutMs = Math.min(Math.max(Math.trunc(input.timeoutMs ?? 20_000), 1_000), MAX_TIMEOUT_MS);
@@ -246,10 +278,20 @@ export async function createMcpServer(
   let args: string[] = [];
   let env: Record<string, string> = {};
 
-  if (input.transport === "http") {
-    const parsed = await assertSafeHttpUrl(input.url ?? "");
-    url = parsed.toString();
-  } else {
+  // 环境变量只登记「名称」，真实值由运行容器的 process.env 提供（密钥不落库）
+  env = Object.fromEntries(
+    Object.entries(input.env ?? {})
+      .filter(([key, value]) => /^[A-Z_][A-Z0-9_]{0,63}$/.test(key) && typeof value === "string")
+      .slice(0, 20)
+      .map(([key, value]) => [key, value.slice(0, 1000)]),
+  );
+
+  const rawArgs = (input.args ?? [])
+    .map((item) => String(item).trim())
+    .filter((item) => item.length > 0 && item.length <= 500)
+    .slice(0, 20);
+
+  if (input.transport === "stdio") {
     const allowed = stdioAllowedCommands();
     command = (input.command ?? "").trim();
     if (!command) {
@@ -262,28 +304,28 @@ export async function createMcpServer(
           : `命令不在白名单内：${command}`,
       );
     }
-    args = (input.args ?? [])
-      .map((item) => String(item))
-      .filter((item) => item.length > 0 && item.length <= 500)
-      .slice(0, 20);
-    env = Object.fromEntries(
-      Object.entries(input.env ?? {})
-        .filter(([key, value]) => /^[A-Z_][A-Z0-9_]{0,63}$/.test(key) && typeof value === "string")
-        .slice(0, 20)
-        .map(([key, value]) => [key, value.slice(0, 1000)]),
-    );
+    args = rawArgs;
+  } else {
+    // 表单只保留 7 个基础字段：http / sse 的端点写在 args 的第一个参数
+    const endpoint = (input.url ?? rawArgs[0] ?? "").trim();
+    const parsed = await assertSafeHttpUrl(endpoint);
+    url = parsed.toString();
+    args = rawArgs;
   }
 
   return withUserContext(context, async (client) => {
     const inserted = await client.query<{ id: string }>(
       `insert into mcp_servers
-         (tenant_id, name, transport, url, command, args, env, timeout_ms,
+         (tenant_id, node_key, name, direction, roles, transport, url, command, args, env, timeout_ms,
           rate_limit_per_min, daily_quota, allowed_tools, created_by)
-       values ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11::text[], $12)
+       values ($1, $2, $3, $4, $5::text[], $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12, $13, $14::text[], $15)
        returning id`,
       [
         context.tenantId,
+        nodeKey,
         name,
+        direction,
+        roles,
         input.transport,
         url,
         command,
@@ -304,6 +346,9 @@ export async function createMcpServer(
       targetId: id,
       payload: {
         name,
+        node_key: nodeKey,
+        direction,
+        roles,
         transport: input.transport,
         url,
         command,
@@ -386,7 +431,7 @@ function textOfContent(content: unknown): string {
   return parts.join("\n") || JSON.stringify(content);
 }
 
-/** 用官方 SDK 建连，执行回调后关闭；HTTP / stdio 走同一入口 */
+/** 用官方 SDK 建连，执行回调后关闭；HTTP / SSE / stdio 走同一入口 */
 async function withSdkClient<T>(
   config: ConnectorCallConfig,
   fn: (session: SdkSession) => Promise<T>,
@@ -395,9 +440,13 @@ async function withSdkClient<T>(
   const transport =
     config.transport === "stdio"
       ? createStdioTransport(config)
-      : new StreamableHTTPClientTransport(new URL(await assertSafeHttpUrl(config.url ?? "")), {
-          requestInit: { redirect: "manual" },
-        });
+      : config.transport === "sse"
+        ? new SSEClientTransport(new URL(await assertSafeHttpUrl(config.url ?? "")), {
+            requestInit: { redirect: "manual" },
+          })
+        : new StreamableHTTPClientTransport(new URL(await assertSafeHttpUrl(config.url ?? "")), {
+            requestInit: { redirect: "manual" },
+          });
 
   try {
     await withConnectTimeout(
@@ -432,10 +481,14 @@ function createStdioTransport(config: ConnectorCallConfig): StdioClientTransport
   const baseEnv = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
   );
+  // 表单登记的只是变量名；值为空时沿用容器 process.env，避免把真实密钥写进数据库
+  const overrides = Object.fromEntries(
+    Object.entries(config.env).filter(([, value]) => value.length > 0),
+  );
   return new StdioClientTransport({
     command,
     args: config.args,
-    env: { ...baseEnv, ...config.env },
+    env: { ...baseEnv, ...overrides },
     stderr: "pipe",
   });
 }
@@ -495,7 +548,7 @@ export async function refreshMcpServerTools(
   try {
     const startedAt = Date.now();
     const tools = await probeConnectorTools({
-      transport: server.transport === "stdio" ? "stdio" : "http",
+      transport: toTransport(server.transport),
       url: server.url,
       command: server.command,
       args: server.args ?? [],
@@ -641,7 +694,7 @@ export async function callMcpServerTool(
   try {
     const result = await executeConnectorTool(
       {
-        transport: server.transport === "stdio" ? "stdio" : "http",
+        transport: toTransport(server.transport),
         url: server.url,
         command: server.command,
         args: server.args ?? [],

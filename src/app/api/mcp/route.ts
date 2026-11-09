@@ -196,7 +196,7 @@ export async function POST(request: Request): Promise<Response> {
     return unauthorized();
   }
 
-  const channel = requestChannel(request.headers);
+  const channel = requestChannel(request);
   if (!channelAllowed(token.scope, channel)) {
     await auditStandalone({
       actorUserId: token.context.userId,

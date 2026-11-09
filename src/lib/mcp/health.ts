@@ -19,6 +19,7 @@ import { requireContextPermission } from "@/lib/permissions/server";
 
 import {
   probeConnectorTools,
+  toTransport,
   type ConnectorCallConfig,
   type McpHealthStatus,
   type McpToolSummary,
@@ -98,7 +99,7 @@ function toTarget(row: TargetRow): HealthTarget {
     status: toHealthStatus(row.health_status),
     failures: Number(row.health_consecutive_failures ?? 0),
     config: {
-      transport: row.transport === "stdio" ? "stdio" : "http",
+      transport: toTransport(row.transport),
       url: row.url,
       command: row.command,
       args: row.args ?? [],

@@ -23,6 +23,7 @@ import {
 } from "@/components/knowledge/tokens";
 import type { AiEmployeeDetail, AiEmployeeGrantCandidates, AiEmployeeStatus, AiEmployeeView } from "@/lib/ai-employees";
 import type { McpToolOptionView } from "@/lib/mcp/connectors";
+import type { SkillOptionView } from "@/lib/skills";
 import type { WorkItemView, WorkPriority } from "@/lib/work-items";
 
 import {
@@ -91,12 +92,131 @@ function formatTime(iso: string | null): string {
   return iso ? TIME_FORMAT.format(new Date(iso)) : "";
 }
 
+const SKILL_CATEGORY_LABEL: Record<string, string> = {
+  creation: "创作",
+  production: "共用制作",
+  expert: "专家",
+  video: "视频 / 播客",
+  knowledge: "知识库",
+  music: "音乐",
+  tool: "工具",
+  learning: "学习提炼",
+  teaching: "教学",
+  finance: "财务",
+  admin: "行政",
+};
+
+/** 多选下拉：受工作台权限开关约束的 Skill 选项 */
+function SkillMultiSelect({
+  options,
+  value,
+  onChange,
+}: {
+  options: SkillOptionView[];
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.filter((option) => value.includes(option.key));
+
+  function toggle(key: string) {
+    onChange(value.includes(key) ? value.filter((item) => item !== key) : [...value, key]);
+  }
+
+  return (
+    <div className="relative">
+      <div
+        role="button"
+        tabIndex={0}
+        className={`${input} flex min-h-[42px] cursor-pointer flex-wrap items-center gap-1.5 py-2 text-left`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setOpen((current) => !current);
+          }
+        }}
+      >
+        {selected.length === 0 ? (
+          <span className="text-zinc-400">选择可调用的 Skill</span>
+        ) : (
+          selected.map((option) => (
+            <span
+              key={option.key}
+              className="inline-flex items-center gap-1 rounded-full bg-apple-blue-soft px-2 py-0.5 text-[11px] text-apple-blue"
+            >
+              {option.name}
+              <button
+                type="button"
+                aria-label={`移除 ${option.name}`}
+                className="text-apple-blue/60 hover:text-apple-blue"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggle(option.key);
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))
+        )}
+        <span className="ml-auto text-[11px] text-zinc-400">▾</span>
+      </div>
+
+      {open ? (
+        <div className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-2xl border border-hairline bg-white p-2 shadow-lg">
+          {options.length === 0 ? (
+            <p className="px-2 py-3 text-[12px] text-zinc-500">
+              当前等级没有可选 Skill；请检查工作台权限开关。
+            </p>
+          ) : (
+            options.map((option) => (
+              <label
+                key={option.key}
+                className="flex cursor-pointer items-start gap-2 rounded-xl px-2 py-2 hover:bg-apple-canvas"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={value.includes(option.key)}
+                  onChange={() => toggle(option.key)}
+                />
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-[12px] font-medium text-zinc-900">{option.name}</span>
+                    <span className="font-mono text-[10px] text-zinc-400">{option.key}</span>
+                    <span className={badge("muted")}>
+                      {SKILL_CATEGORY_LABEL[option.category] ?? option.category}
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
+                    {option.summary || "—"}
+                  </span>
+                </span>
+              </label>
+            ))
+          )}
+          <div className="flex justify-end border-t border-hairline px-2 pt-2">
+            <button type="button" className={`${linkBtn} text-[11px]`} onClick={() => setOpen(false)}>
+              完成
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 interface AiEmployeesClientProps {
   employees: AiEmployeeView[];
   detail: AiEmployeeDetail | null;
   candidates: AiEmployeeGrantCandidates | null;
   workItems: WorkItemView[];
   mcpTools: McpToolOptionView[];
+  skillOptions: SkillOptionView[];
+  accessLevel: string | null;
   canManage: boolean;
   canAssign: boolean;
 }
@@ -113,6 +233,8 @@ export function AiEmployeesClient({
   candidates,
   workItems,
   mcpTools,
+  skillOptions,
+  accessLevel,
   canManage,
   canAssign,
 }: AiEmployeesClientProps) {
@@ -125,13 +247,14 @@ export function AiEmployeesClient({
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [createSkills, setCreateSkills] = useState<string[]>([]);
 
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(detail?.name ?? "");
   const [editDescription, setEditDescription] = useState(detail?.description ?? "");
   const [editPersona, setEditPersona] = useState(detail?.persona ?? "");
   const [editSystemPrompt, setEditSystemPrompt] = useState(detail?.systemPrompt ?? "");
-  const [editSkills, setEditSkills] = useState((detail?.skillKeys ?? []).join(", "));
+  const [editSkills, setEditSkills] = useState<string[]>(detail?.skillKeys ?? []);
   const [editTools, setEditTools] = useState((detail?.allowedTools ?? []).join(", "));
   const [editTier, setEditTier] = useState<"deep" | "fast">(detail?.modelTier ?? "deep");
   const [editReviewMode, setEditReviewMode] = useState<"manual" | "auto">(
@@ -216,12 +339,14 @@ export function AiEmployeesClient({
                     slug: slug.trim(),
                     name: name.trim(),
                     description: description.trim(),
+                    skillKeys: createSkills,
                   }),
                 (result) => {
                   setCreating(false);
                   setSlug("");
                   setName("");
                   setDescription("");
+                  setCreateSkills([]);
                   if (result.id) {
                     router.push(`/ai-employees?ai=${result.id}`);
                   }
@@ -261,6 +386,13 @@ export function AiEmployeesClient({
                 onChange={(event) => setDescription(event.target.value)}
               />
             </label>
+            <div className="block">
+              <span className={fieldLabel}>分配 Skill</span>
+              <SkillMultiSelect options={skillOptions} value={createSkills} onChange={setCreateSkills} />
+              <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+                可选范围受工作台权限开关约束：当前 {accessLevel ?? "-"}；不存在的 Key 会被服务端拒绝。
+              </p>
+            </div>
             <button type="submit" className={btnBlue} disabled={pending}>
               {pending ? "创建中…" : "创建草稿"}
             </button>
@@ -362,7 +494,11 @@ export function AiEmployeesClient({
 
             <p className={`${meta} mb-3`}>
               模型档位：{detail.modelTier === "fast" ? "轻量快速（flash）" : "深度推理（pro）"}
-              {detail.skillKeys.length > 0 ? ` · 技能包 ${detail.skillKeys.join(" / ")}` : ""}
+              {detail.skillKeys.length > 0
+                ? ` · 技能 ${detail.skillKeys
+                    .map((key) => skillOptions.find((option) => option.key === key)?.name ?? key)
+                    .join(" / ")}`
+                : ""}
               {detail.allowedTools.length > 0 ? ` · 工具 ${detail.allowedTools.join(" / ")}` : ""}
               {detail.reviewMode === "auto"
                 ? ` · 自动验收（≥ ${detail.autoMinChars} 字）`
@@ -420,15 +556,13 @@ export function AiEmployeesClient({
                 </div>
 
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <label className="block">
-                    <span className={fieldLabel}>技能包</span>
-                    <input
-                      className={input}
-                      value={editSkills}
-                      placeholder="knowledge-search, distill"
-                      onChange={(event) => setEditSkills(event.target.value)}
-                    />
-                  </label>
+                  <div className="block">
+                    <span className={fieldLabel}>分配 Skill</span>
+                    <SkillMultiSelect options={skillOptions} value={editSkills} onChange={setEditSkills} />
+                    <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+                      受工作台权限开关约束：当前 {accessLevel ?? "-"}；保存时会拒绝悬空 Key。
+                    </p>
+                  </div>
                   <label className="block">
                     <span className={fieldLabel}>可用工具</span>
                     <input
@@ -524,10 +658,7 @@ export function AiEmployeesClient({
                             description: editDescription.trim(),
                             persona: editPersona.trim(),
                             systemPrompt: editSystemPrompt.trim(),
-                            skillKeys: editSkills
-                              .split(/[,，\n]/)
-                              .map((item) => item.trim())
-                              .filter(Boolean),
+                            skillKeys: editSkills,
                             allowedTools: editTools
                               .split(/[,，\n]/)
                               .map((item) => item.trim())
@@ -552,7 +683,7 @@ export function AiEmployeesClient({
                       setEditDescription(detail.description);
                       setEditPersona(detail.persona);
                       setEditSystemPrompt(detail.systemPrompt);
-                      setEditSkills(detail.skillKeys.join(", "));
+                      setEditSkills(detail.skillKeys);
                       setEditTools(detail.allowedTools.join(", "));
                       setEditTier(detail.modelTier);
                       setEditReviewMode(detail.reviewMode);

@@ -170,7 +170,12 @@ export async function loadWorkspaceTree(context: UserContext): Promise<Workspace
       return role;
     }
 
-    // 先把「有成员但还没有资料」的部门 / 岗位也建出来，保证结构完整
+    // 先把所有可见部门建出来（即使还没有成员或资料），保证新建部门立即出现在知识库目录
+    for (const row of departments.rows) {
+      departmentEntry(row.id);
+    }
+
+    // 再把「有成员但还没有资料」的岗位也建出来，保证结构完整
     for (const row of roles.rows) {
       if (!departments.rows.some((department) => department.id === row.department_id)) {
         continue;

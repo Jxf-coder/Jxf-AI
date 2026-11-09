@@ -336,13 +336,17 @@ export function scopeViolation(
   return null;
 }
 
-/** 客户端通道维：空 = 不限制；按 x-mcp-client 或 User-Agent 首段识别 */
-export function requestChannel(headers: Headers): string {
-  const explicit = headers.get("x-mcp-client")?.trim().toLowerCase() ?? "";
+/** 客户端通道维：空 = 不限制；按 query client、x-mcp-client 或 User-Agent 首段识别 */
+export function requestChannel(request: Request): string {
+  const queryClient = new URL(request.url).searchParams.get("client")?.trim().toLowerCase() ?? "";
+  if (queryClient) {
+    return queryClient.slice(0, 32);
+  }
+  const explicit = request.headers.get("x-mcp-client")?.trim().toLowerCase() ?? "";
   if (explicit) {
     return explicit.slice(0, 32);
   }
-  const userAgent = headers.get("user-agent") ?? "";
+  const userAgent = request.headers.get("user-agent") ?? "";
   const token = userAgent.split(/[\s/]/)[0]?.trim().toLowerCase() ?? "";
   return token.slice(0, 32);
 }

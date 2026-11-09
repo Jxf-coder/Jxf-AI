@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 
 import { PermissionProvider } from "@/components/permissions/PermissionProvider";
 import { Shell } from "@/components/shell/Shell";
+import { ToastViewport } from "@/components/ui/toast";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext, type ActiveMembership } from "@/lib/db/user-context";
 import { errorMessage, log } from "@/lib/logger";
@@ -75,6 +76,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       >
         {children}
       </Shell>
+      <ToastViewport />
     </PermissionProvider>
   );
 }

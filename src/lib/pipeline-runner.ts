@@ -14,6 +14,7 @@ import type { Client } from "pg";
 
 import { errorMessage } from "@/lib/logger";
 import type { UserContext } from "@/lib/db/user-context";
+import { capturePipelineRunExperienceSafe } from "@/lib/knowledge/experience/collectors";
 import { assignWork } from "@/lib/work-items";
 
 import { runPipeline, type PipelineStep } from "./pipelines";
@@ -76,6 +77,8 @@ async function markFinished(owner: Client, runId: string, failedStep: string | n
       where id = $1`,
     [runId, failedStep],
   );
+  // 终态入队经验（失败 / 部分失败才产 job）；采集失败不影响产线收口
+  await capturePipelineRunExperienceSafe(owner, runId);
 }
 
 async function loadWorkItem(owner: Client, workItemId: string): Promise<WorkItemState | null> {
@@ -165,7 +168,7 @@ export async function advancePipelineRuns(
         !lastState ||
         ["done", "waiting_review", "failed", "cancelled", "returned"].includes(lastState.status);
       if (terminal) {
-        await owner.query("update pipeline_runs set finished_at = now() where id = $1", [row.id]);
+        await markFinished(owner, row.id, null);
         outcomes.push({ ...base, action: "completed", step: null, failedStep: null, error: null });
       } else {
         outcomes.push({

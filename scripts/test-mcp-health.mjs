@@ -49,10 +49,10 @@ async function main() {
 
   try {
     const inserted = await client.query(
-      `insert into mcp_servers (tenant_id, name, transport, url, enabled, timeout_ms, health_status)
-       values ($1, $2, 'http', 'http://127.0.0.1:9/mcp', true, 1000, 'unknown')
+      `insert into mcp_servers (tenant_id, node_key, name, direction, roles, transport, url, enabled, timeout_ms, health_status)
+       values ($1, $3, $2, 'inbound', '{}'::text[], 'http', 'http://127.0.0.1:9/mcp', true, 1000, 'unknown')
        returning id`,
-      [TENANT, name],
+      [TENANT, name, `health-${Date.now().toString(36)}`],
     );
     serverId = inserted.rows[0].id;
 

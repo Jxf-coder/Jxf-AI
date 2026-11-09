@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { usePermission } from "@/components/permissions/usePermission";
 import { BrandMark } from "@/components/brand/BrandMark";
-import { AiIcon, BellIcon, ChatIcon, CloseIcon, KnowledgeIcon, LayersIcon, MenuIcon, PlugIcon, SearchIcon } from "@/components/ui/icons";
+import { AiIcon, BellIcon, ChatIcon, CloseIcon, KnowledgeIcon, LayersIcon, MenuIcon, PlugIcon, SearchIcon, SkillIcon } from "@/components/ui/icons";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { DepartmentSwitcher, type DepartmentOption } from "@/components/shell/DepartmentSwitcher";
 import { ProfileMenu } from "@/components/shell/ProfileMenu";
@@ -91,6 +91,19 @@ export function Shell({
     </Link>
   ) : null;
 
+  const skillsLink = can("skill:use") ? (
+    <Link
+      href="/skills"
+      className={`nav-item${pathname.startsWith("/skills") ? " is-active" : ""}`}
+      aria-current={pathname.startsWith("/skills") ? "page" : undefined}
+    >
+      <span className="nav-icon">
+        <SkillIcon size={18} />
+      </span>
+      <span className="nav-label">Skill</span>
+    </Link>
+  ) : null;
+
   const aiEmployeesLink = (
     <Link
       href="/ai-employees"
@@ -114,6 +127,7 @@ export function Shell({
       <div className="nav-section">
         <p className="nav-section-label">Workspace</p>
         {knowledgeLink}
+        {skillsLink}
         {pipelinesLink}
       </div>
       <div className="nav-section">
