@@ -32,3 +32,10 @@ Thumbs.db
 
 # AOCI 项目级 MCP 配置：含本机绝对路径与数据库连接串，只保留在本地
 .trae/mcp.json
+
+# 本地评审资料：只保留在工作区，不进入版本库
+docs/architecture/MCP工具能力梳理报告.md
+docs/architecture/WorkBuddy连接器清单.md
+docs/architecture/原项目技能盘点报告.md
+docs/architecture/知识库十目录与蒸馏对标报告.md
+docs/architecture/知识库经验沉淀融合方案.md
