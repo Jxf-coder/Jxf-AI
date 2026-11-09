@@ -7,7 +7,7 @@
 
 import { randomBytes } from "node:crypto";
 
-/** 必须替换为随机值的口令字段（会拼进数据库连接串，只用字母数字） */
+/** 必须替换为随机值的口令/令牌字段（口令会拼进数据库连接串，只用字母数字） */
 export const PASSWORD_KEYS = [
   "POSTGRES_PASSWORD",
   "JXF_OWNER_PASSWORD",
@@ -15,6 +15,7 @@ export const PASSWORD_KEYS = [
   "JXF_AUTH_PASSWORD",
   "JXF_WORKER_PASSWORD",
   "MINIO_ROOT_PASSWORD",
+  "METRICS_TOKEN",
 ];
 
 /** 仅开发种子使用；随机生成，生产环境不要执行 seed */

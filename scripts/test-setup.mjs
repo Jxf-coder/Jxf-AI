@@ -35,7 +35,7 @@ function main() {
   check("生成项覆盖全部密钥字段", PASSWORD_KEYS.every((key) => generated.includes(key)));
   check("JXF_AUTH_SECRET 为 64 位十六进制", /^[0-9a-f]{64}$/.test(section(content, "JXF_AUTH_SECRET") ?? ""));
   check(
-    "数据库口令为 32 位字母数字",
+    "口令/令牌为 32 位字母数字",
     PASSWORD_KEYS.every((key) => /^[A-Za-z0-9]{32}$/.test(section(content, key) ?? "")),
   );
   check(

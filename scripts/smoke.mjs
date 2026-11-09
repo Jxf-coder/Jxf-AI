@@ -33,6 +33,9 @@ function httpChecks() {
 const base = "http://127.0.0.1:3000";
 (async () => {
   const out = {};
+  const metricsAuth = process.env.METRICS_TOKEN
+    ? { authorization: "Bearer " + process.env.METRICS_TOKEN }
+    : {};
   const hit = async (key, path, init) => {
     try {
       const response = await fetch(base + path, init);
@@ -54,8 +57,8 @@ const base = "http://127.0.0.1:3000";
   await hit("settings", "/settings", { redirect: "manual" });
   await hit("pipelines", "/pipelines", { redirect: "manual" });
   await hit("skills", "/skills", { redirect: "manual" });
-  await hit("metrics", "/api/metrics");
-  await hit("metricsProm", "/api/metrics?format=prometheus");
+  await hit("metrics", "/api/metrics", { headers: metricsAuth });
+  await hit("metricsProm", "/api/metrics?format=prometheus", { headers: metricsAuth });
   await hit("webhook", "/api/webhooks/pipelines/00000000-0000-4000-8000-000000000000", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -168,18 +171,29 @@ function main() {
   );
 
   const metrics = http.metrics ? parseJson(http.metrics.body) : null;
-  record(
-    "指标端点 /api/metrics",
-    http.metrics?.status === 200 && metrics?.runs !== undefined ? "PASS" : "FAIL",
-    metrics ? `runs=${Object.keys(metrics.runs ?? {}).length} 状态` : `HTTP ${http.metrics?.status ?? "-"}`,
-  );
-  record(
-    "指标 Prometheus 格式",
-    http.metricsProm?.status === 200 && String(http.metricsProm.body).includes("jxf_up 1")
-      ? "PASS"
-      : "FAIL",
-    `HTTP ${http.metricsProm?.status ?? "-"}`,
-  );
+  if (http.metrics?.status === 200) {
+    record(
+      "指标端点 /api/metrics",
+      metrics?.runs !== undefined ? "PASS" : "FAIL",
+      metrics ? `runs=${Object.keys(metrics.runs ?? {}).length} 状态` : "响应不是 JSON",
+    );
+  } else if (http.metrics?.status === 503) {
+    record("指标端点 /api/metrics", "WARN", "未配置 METRICS_TOKEN，生产环境按 fail-closed 关闭指标");
+  } else {
+    record("指标端点 /api/metrics", "FAIL", `HTTP ${http.metrics?.status ?? "-"}`);
+  }
+
+  if (http.metricsProm?.status === 200) {
+    record(
+      "指标 Prometheus 格式",
+      String(http.metricsProm.body).includes("jxf_up 1") ? "PASS" : "FAIL",
+      "HTTP 200",
+    );
+  } else if (http.metricsProm?.status === 503) {
+    record("指标 Prometheus 格式", "WARN", "未配置 METRICS_TOKEN，生产环境按 fail-closed 关闭指标");
+  } else {
+    record("指标 Prometheus 格式", "FAIL", `HTTP ${http.metricsProm?.status ?? "-"}`);
+  }
   record(
     "Webhook 未认证拒绝",
     http.webhook?.status === 401 ? "PASS" : "FAIL",

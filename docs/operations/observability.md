@@ -21,11 +21,15 @@ curl -fsS http://127.0.0.1/api/metrics
 curl -fsS "http://127.0.0.1/api/metrics?format=prometheus"
 ```
 
-配置 `METRICS_TOKEN` 后必须带 Bearer：
+`METRICS_TOKEN` 由安装向导随机生成，调用时必须带 Bearer：
 
 ```bash
 curl -fsS -H "Authorization: Bearer $METRICS_TOKEN" http://127.0.0.1/api/metrics
 ```
+
+`JXF_ENV=production`（默认）且 `METRICS_TOKEN` 为空时，端点固定返回 503 且不下发任何计数
+（fail-closed），避免反向代理误绑 `0.0.0.0` 后泄露组织规模与队列积压；`npm run smoke`
+会把这种情况记为 WARN。
 
 指标来自 `app.metrics_snapshot()`（SECURITY DEFINER，只返回计数），因此不受应用角色
 RLS 的部门范围影响，也不会泄露跨部门明细。

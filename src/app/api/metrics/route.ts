@@ -6,7 +6,8 @@
  *
  * 只返回聚合计数，不含用户 / 文档明细；数据来自 SECURITY DEFINER 的
  * app.metrics_snapshot()，不受应用角色 RLS 的部门范围影响。
- * 配置 METRICS_TOKEN 后要求 `Authorization: Bearer <token>`。
+ * 配置 METRICS_TOKEN 后要求 `Authorization: Bearer <token>`；
+ * 生产环境未配置令牌时直接拒绝（fail-closed），避免反向代理误绑 0.0.0.0 后裸奔。
  */
 
 import { getPool } from "@/lib/db/pool";
@@ -66,7 +67,14 @@ function toPrometheus(snapshot: MetricsSnapshot): string {
 
 export async function GET(request: Request) {
   const token = process.env.METRICS_TOKEN?.trim();
-  if (token) {
+  const appEnv = process.env.JXF_ENV ?? "production";
+
+  if (!token) {
+    // 生产环境缺令牌等同于未启用：宁可 503，也不下发组织规模与队列积压
+    if (appEnv === "production") {
+      return Response.json({ error: "metrics disabled" }, { status: 503 });
+    }
+  } else {
     const header = request.headers.get("authorization") ?? "";
     if (header !== `Bearer ${token}`) {
       return new Response("unauthorized", { status: 401 });
