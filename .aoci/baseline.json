@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-08T16:11:12Z",
-  "updated_at": "2026-11-09T09:58:52Z",
+  "updated_at": "2026-11-09T10:06:53Z",
   "files": {
     ".dockerignore": {
       "role": "index",
@@ -21,6 +21,12 @@
       "size": 178,
       "normalized_sha256": "380a5246ed5eb44b9818654c42237c4dc35f06957cf740b8170af1b927a8f34e"
     },
+    ".github/workflows/ci.yml": {
+      "role": "index",
+      "sha256": "fe4cab3ccd9c28b8a1f58936f6ce21d8695c31ea41d5ca999970183789781e42",
+      "size": 1144,
+      "normalized_sha256": "fe4cab3ccd9c28b8a1f58936f6ce21d8695c31ea41d5ca999970183789781e42"
+    },
     ".gitignore": {
       "role": "index",
       "sha256": "1805e50c57f0a065ffdf7b61860b6e2d10e011c7c670bd1426fe63b60242b736",
@@ -35,9 +41,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "fc4bb4d4f463bb3d736b14620b53e678908da8cfa9bf11486ae3c114949fc551",
-      "size": 159741,
-      "normalized_sha256": "fc4bb4d4f463bb3d736b14620b53e678908da8cfa9bf11486ae3c114949fc551"
+      "sha256": "0aaea610372204c4fddbebd33b268fd4d5a91ff18c7fdf9e8df1a8cbc4e2d7eb",
+      "size": 160340,
+      "normalized_sha256": "0aaea610372204c4fddbebd33b268fd4d5a91ff18c7fdf9e8df1a8cbc4e2d7eb"
     },
     "aoci.database.txt": {
       "role": "index",
@@ -1049,9 +1055,9 @@
     },
     "docs/audit/2026-11-09-全面审计报告.md": {
       "role": "index",
-      "sha256": "4f86855ed11d3d7187498741bd11cc13360a4c51928f4d685513e48703960471",
-      "size": 19430,
-      "normalized_sha256": "4f86855ed11d3d7187498741bd11cc13360a4c51928f4d685513e48703960471"
+      "sha256": "3ed251fa70952d4dc2c3ea54112343cd49f86522aae68096a2ae2b72f39167ab",
+      "size": 23163,
+      "normalized_sha256": "3ed251fa70952d4dc2c3ea54112343cd49f86522aae68096a2ae2b72f39167ab"
     },
     "docs/development/P0-infrastructure.md": {
       "role": "index",
