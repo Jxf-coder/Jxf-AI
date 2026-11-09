@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-08T16:11:12Z",
-  "updated_at": "2026-11-09T13:13:58Z",
+  "updated_at": "2026-11-09T13:22:15Z",
   "files": {
     ".dockerignore": {
       "role": "index",
@@ -41,9 +41,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "a79cdc99cf939e279becbbb62e3252e870b5ef108f2494f8e1e9b5978521dcfa",
-      "size": 165640,
-      "normalized_sha256": "a79cdc99cf939e279becbbb62e3252e870b5ef108f2494f8e1e9b5978521dcfa"
+      "sha256": "ac3e046f7a1197feaeb653253fbca8799c5f87701f15ad698d056b85fa6f57f6",
+      "size": 165692,
+      "normalized_sha256": "ac3e046f7a1197feaeb653253fbca8799c5f87701f15ad698d056b85fa6f57f6"
     },
     "aoci.database.txt": {
       "role": "index",
@@ -1031,9 +1031,9 @@
     },
     "docs/audit/2026-11-09-全面审计报告.md": {
       "role": "index",
-      "sha256": "154b0a62470d8fd36d0be247c60d25479f9dbc98662bd3ae5fa885a86255f908",
-      "size": 29224,
-      "normalized_sha256": "154b0a62470d8fd36d0be247c60d25479f9dbc98662bd3ae5fa885a86255f908"
+      "sha256": "04d9f0e92f1bd7d46f7fb945022e6a83adb52e5640537c7e1071503e673a3d63",
+      "size": 30328,
+      "normalized_sha256": "04d9f0e92f1bd7d46f7fb945022e6a83adb52e5640537c7e1071503e673a3d63"
     },
     "docs/development/P0-infrastructure.md": {
       "role": "index",
