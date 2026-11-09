@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-08T16:11:12Z",
-  "updated_at": "2026-11-09T11:44:14Z",
+  "updated_at": "2026-11-09T12:28:34Z",
   "files": {
     ".dockerignore": {
       "role": "index",
@@ -41,9 +41,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "6e8459d9ef2740bd26eeefd6083003f761d0378142f5dddcb73715095a75035e",
-      "size": 166571,
-      "normalized_sha256": "6e8459d9ef2740bd26eeefd6083003f761d0378142f5dddcb73715095a75035e"
+      "sha256": "366e07c1417fb2644d164c8d435b046c265a2c3886a73fa44fdf0b2b571f11b7",
+      "size": 167228,
+      "normalized_sha256": "366e07c1417fb2644d164c8d435b046c265a2c3886a73fa44fdf0b2b571f11b7"
     },
     "aoci.database.txt": {
       "role": "index",
@@ -1001,9 +1001,9 @@
     },
     "docs/architecture/Milestone3-运行态数据模型.md": {
       "role": "index",
-      "sha256": "03acc7c8bf86596f3845ad5e1398699210ce2f49740b048c1e85056e4c1d2f00",
-      "size": 15670,
-      "normalized_sha256": "03acc7c8bf86596f3845ad5e1398699210ce2f49740b048c1e85056e4c1d2f00"
+      "sha256": "9cf93bc3c05f9cfbffb9198c064d3c7f982be26a589eda499cf4d3fb7602c694",
+      "size": 17807,
+      "normalized_sha256": "9cf93bc3c05f9cfbffb9198c064d3c7f982be26a589eda499cf4d3fb7602c694"
     },
     "docs/architecture/WorkBuddy连接器清单.md": {
       "role": "index",
@@ -1061,9 +1061,9 @@
     },
     "docs/audit/2026-11-09-全面审计报告.md": {
       "role": "index",
-      "sha256": "8185e9e6839e96ae0c0025d97b63b9530d22b25f96173e2fe9dcd69fd268b01f",
-      "size": 27495,
-      "normalized_sha256": "8185e9e6839e96ae0c0025d97b63b9530d22b25f96173e2fe9dcd69fd268b01f"
+      "sha256": "b4ee045d57c6f5cb292819bc0dd880f4d2b419cd2dadc52c873b5dfa3341459a",
+      "size": 28230,
+      "normalized_sha256": "b4ee045d57c6f5cb292819bc0dd880f4d2b419cd2dadc52c873b5dfa3341459a"
     },
     "docs/development/P0-infrastructure.md": {
       "role": "index",
@@ -1133,9 +1133,9 @@
     },
     "docs/operations/ops-runner.md": {
       "role": "index",
-      "sha256": "8b3bc4d8a37198c15534acf65a8c7aa3a77175e0559cf1ba4bbd03d7eb8f96d5",
-      "size": 4918,
-      "normalized_sha256": "8b3bc4d8a37198c15534acf65a8c7aa3a77175e0559cf1ba4bbd03d7eb8f96d5"
+      "sha256": "78cdaf0b4242aff39da14a87eced83cf4eaf3f5255df3179af10eb5a64ffc4d0",
+      "size": 6222,
+      "normalized_sha256": "78cdaf0b4242aff39da14a87eced83cf4eaf3f5255df3179af10eb5a64ffc4d0"
     },
     "docs/operations/pipeline-triggers.md": {
       "role": "index",
