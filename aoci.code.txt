@@ -136,6 +136,7 @@ _journal.json[XV5M]: F:Drizzle 迁移日志，按顺序登记迁移标签、时�
 030_pipeline_events_rls.sql[PM7T]: F:产线事件订阅与事件总线的 RLS：订阅跟随产线可见性，事件仅 L1 可读 | R:code:src/lib/pipeline-events.ts,code:db/schema/runtime.ts | A:策略重放 | S:事件写入只走 SECURITY DEFINER 的 publish_event；jxf_app 无 insert/update/delete；订阅写入要求创建人本人且产线启用
 031_skills_rls.sql[PE8M]: F:技能注册表与执行、Meta 投放、多平台分发表的 RLS：内置技能全员可读，自建按租户且仅创建者或 L1 可改 | R:code:src/lib/skills.ts,code:src/lib/skills/distribute.ts | A:策略重放 | S:内置技能 tenant_id 为空；只有 L1 可删除技能；发布机令牌只存 SHA-256；执行记录写入必须绑定当前用户
 032_knowledge_experience_rls.sql[PW8T]: F:经验采集队列与目录纠偏样本的 RLS，业务角色按租户与部门读写，worker 走独立通道 | R:code:db/schema/experience.ts,code:src/lib/knowledge/experience/queue.ts | A:策略重放 | S:不提供物理 DELETE；worker 通道按 current_user 判定；worker 写卡片仍需先设置租户与部门 GUC 上下文
+033_auth_tables_rls.sql[PI8T]: F:Auth.js 相关表的行级安全第一阶段：版本表只读、邮箱身份表按本人或可读部门在岗成员隔离 | R:code:src/auth.ts,code:src/app/(app)/admin/organization/actions.ts,code:src/app/(app)/me/profile/actions.ts | A:策略重放 | S:app_versions 只由迁移容器（owner）写入，业务角色仅保留 SELECT；user_email_identities 的读写都要求目标用户已有在岗任用，否则连策略一起拒绝；users/accounts/sessions/verification_tokens 仍需专用角色收权，不能只加 RLS
 
 ===E:/JXF-AI/db/schema/===
 ai-employees.ts[PB8T]: F:AI 员工定义与授权 schema，含人格、系统提示、技能包、工具范围、模型参数与部门或个人二选一授权 | R:code:db/schema/auth.ts,code:db/schema/departments.ts,code:db/policies/020_ai_employee_visibility.sql | A:数据库 schema | S:AI 员工不携带数据权限，运行时继承调用者上下文；部门与个人授权互斥；同员工同部门与同用户各唯一
@@ -268,7 +269,7 @@ layout.tsx[EI8T]: F:应用外壳布局，解析当前上下文与权限快照，
 ===E:/JXF-AI/src/app/(app)/admin/organization/===
 MembersTab.tsx[EI7L]: F:组织管理成员页签，展示成员列表并提供新增、移除、恢复与基础信息编辑 | R:code:src/app/(app)/admin/organization/actions.ts,code:src/components/ui/confirm-dialog.tsx | A:组织管理界面 | S:司龄由入职日期动态计算不落库；移除与恢复等危险操作必须经确认对话框
 OrgTree.tsx[EI7L]: F:组织架构树，支持部门与成员拖拽排序、迁移成员、删除部门与移除成员预检 | R:code:src/app/(app)/admin/organization/actions.ts,code:src/components/permissions/usePermission.ts | A:组织管理界面 | S:拖拽与移除前必须调用 checkMemberBlockers 预检；前端权限只控制显隐，真正拦截在服务端守卫
-actions.ts[AI8L]: F:组织管理 Server Actions，处理部门增改、删除、排序与成员新增、迁移、移除、恢复及离职交接 | R:code:src/lib/permissions/server.ts,code:src/lib/db/user-context.ts,code:src/lib/handover/registry.ts,code:src/lib/org/slug.ts | A:组织管理 | S:每个导出入口必须经 requireContextPermission；移除成员前必须检查未完成工作与资产，存在阻塞时转离职交接流程
+actions.ts[AI8L]: F:组织管理 Server Actions，处理部门增改、删除、排序与成员新增、迁移、移除、恢复及离职交接 | R:code:src/lib/permissions/server.ts,code:src/lib/db/user-context.ts,code:src/lib/handover/registry.ts,code:src/lib/org/slug.ts | A:组织管理 | S:每个导出入口必须经 requireContextPermission；移除成员前必须检查未完成工作与资产，存在阻塞时转离职交接流程；新增成员必须先写 memberships 再绑定邮箱，user_email_identities 的 RLS 依赖目标用户已有在岗任用
 page.tsx[EI7M]: F:组织管理页面，汇总部门树与成员列表并按权限裁剪可见页签 | R:code:src/app/(app)/admin/organization/OrgTree.tsx,code:src/app/(app)/admin/organization/MembersTab.tsx | A:组织管理界面 | S:force-dynamic，每次请求都按当前上下文实时鉴权；数据读取走 withUserContext 以应用 RLS
 
 ===E:/JXF-AI/src/app/(app)/admin/permissions/===
