@@ -170,6 +170,8 @@ services:
       JXF_TENANT_ID: ${JXF_TENANT_ID:?JXF_TENANT_ID 不能为空}
       # fail-closed：缺失 / 过短 / 弱值将拒绝启动
       JXF_AUTH_SECRET: ${JXF_AUTH_SECRET:?JXF_AUTH_SECRET 不能为空}
+      # 设置面密文专用密钥：留空时回退到 JXF_AUTH_SECRET 派生（旧部署兼容）
+      JXF_DATA_ENCRYPTION_KEY: ${JXF_DATA_ENCRYPTION_KEY:-}
       # 运行时只能使用受限业务角色 jxf_app（禁止 owner / superuser）
       APP_DATABASE_URL: postgresql://${JXF_APP_USER}:${JXF_APP_PASSWORD}@postgres:5432/${POSTGRES_DB}
       # Auth.js 专用角色：容器内固定走服务名 postgres；密码缺失时拒绝启动

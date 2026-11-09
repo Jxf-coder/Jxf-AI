@@ -16,6 +16,7 @@ export const PASSWORD_KEYS = [
   "JXF_WORKER_PASSWORD",
   "MINIO_ROOT_PASSWORD",
   "METRICS_TOKEN",
+  "JXF_DATA_ENCRYPTION_KEY",
 ];
 
 /** 仅开发种子使用；随机生成，生产环境不要执行 seed */
