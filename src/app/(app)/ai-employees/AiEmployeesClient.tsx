@@ -505,6 +505,31 @@ export function AiEmployeesClient({
                 : " · 人工验收"}
             </p>
 
+            {detail.skillDetails.length > 0 ? (
+              <div className="mb-3 rounded-2xl bg-apple-canvas px-3 py-2">
+                <p className="text-[11px] font-semibold text-zinc-700">技能生效状态</p>
+                <ul className="mt-1 flex flex-col gap-1 text-[11px] text-zinc-500">
+                  {detail.skillDetails.map((skill) => (
+                    <li key={skill.key} className="flex flex-wrap items-center justify-between gap-1">
+                      <span className="truncate">
+                        {skill.name}
+                        <span className="ml-1 text-[10px] text-zinc-400">{skill.key}</span>
+                      </span>
+                      <span className="shrink-0 text-[10px]">
+                        {skill.status === "missing"
+                          ? "已删除"
+                          : skill.status !== "active"
+                            ? "已停用"
+                            : skill.promptChars === 0
+                              ? "未填正文"
+                              : `生效 · ${skill.promptChars} 字`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
             {detail.status === "draft" ? (
               <p className={`${meta} mb-3`}>
                 草稿仅创建者与 L1 可见；上线后才按授权开放给部门与成员。

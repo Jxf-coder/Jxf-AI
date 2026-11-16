@@ -21,6 +21,7 @@ import {
   type WorkerToolPlan,
 } from "@/lib/mcp/worker-tools";
 import { claimRun, heartbeatRun, sweepExhausted, type ClaimedRun } from "@/lib/runtime/claim";
+import { composeSystemPrompt } from "@/lib/runtime/prompt";
 import {
   purgeExpiredExperienceSourceText,
   sweepExperienceJobs,
@@ -69,6 +70,8 @@ interface EmployeeSnapshot {
   modelConfig?: Record<string, unknown>;
   /** 形如 mcp:<serverId>:<toolName> */
   allowedTools?: string[];
+  /** 受理时按预算拼好的技能块；worker 不查 skills 表 */
+  skillsPrompt?: string | null;
 }
 
 function memoryBlockFor(run: ClaimedRun): string {
@@ -81,26 +84,11 @@ function memoryBlockFor(run: ClaimedRun): string {
 
 function systemPromptFor(run: ClaimedRun): string {
   const employee = (run.input.employee ?? null) as EmployeeSnapshot | null;
-  const memoryBlock = memoryBlockFor(run);
-  if (employee?.systemPrompt && employee.systemPrompt.trim().length > 0) {
-    return [employee.systemPrompt.trim(), memoryBlock].filter((part) => part.length > 0).join("\n\n");
-  }
-  const parts = ["你是企业内部的 AI 助手，回答必须基于已知信息，不确定就如实说明。"];
-  if (run.kind === "task") {
-    parts.push(
-      "这是一项被派发的工作任务：请直接产出可验收的交付物，结构清晰、结论明确，不要反问用户；无法确定的信息要标注出来。",
-    );
-  }
-  if (employee?.name) {
-    parts.push(`你的身份是「${employee.name}」。`);
-  }
-  if (employee?.persona && employee.persona.trim().length > 0) {
-    parts.push(`人格设定：${employee.persona.trim()}`);
-  }
-  if (memoryBlock) {
-    parts.push(memoryBlock);
-  }
-  return parts.join("\n");
+  return composeSystemPrompt({
+    kind: run.kind,
+    employee,
+    memory: memoryBlockFor(run),
+  });
 }
 
 /** 把附件正文拼进本轮用户消息；附件只在执行上下文里，不改变界面上的提问 */

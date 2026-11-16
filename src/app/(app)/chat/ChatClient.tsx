@@ -31,6 +31,7 @@ import {
   type Tone,
 } from "@/components/knowledge/tokens";
 import type { ThreadMemoryView } from "@/lib/runtime/memory";
+import type { RunSkillSnapshot } from "@/lib/runtime/stream";
 import type { ThreadDetail, ThreadSummary } from "@/lib/runtime/threads";
 
 import { MemoryPanel } from "./MemoryPanel";
@@ -66,6 +67,7 @@ interface Message {
   error?: string;
   runId?: string;
   steps: StepInfo[];
+  employeeSkills?: RunSkillSnapshot[];
   usage?: Usage | null;
   attachmentNames?: string[];
 }
@@ -323,6 +325,7 @@ export function ChatClient({
             result: Record<string, unknown>;
             error: string | null;
             usage: Usage;
+            employeeSkills?: RunSkillSnapshot[];
           };
         };
         const resultText = typeof data.run.result?.text === "string" ? data.run.result.text : "";
@@ -331,6 +334,7 @@ export function ChatClient({
           text: resultText || data.run.partialText || "",
           usage: data.run.usage,
           error: data.run.error ?? undefined,
+          employeeSkills: Array.isArray(data.run.employeeSkills) ? data.run.employeeSkills : [],
         });
       } catch {
         // 忽略无法解析的帧
@@ -1055,6 +1059,35 @@ export function ChatClient({
                     ))
                   )}
                 </ul>
+
+                {tracked.employeeSkills && tracked.employeeSkills.length > 0 ? (
+                  <div className="mt-3 rounded-xl border border-hairline px-3 py-2">
+                    <p className="text-[11px] font-semibold text-zinc-700">技能</p>
+                    <ul className="mt-1 flex flex-col gap-1 text-[11px] text-zinc-500">
+                      {tracked.employeeSkills.map((skill) => (
+                        <li key={skill.key} className="flex items-center justify-between gap-2">
+                          <span className="truncate">
+                            {skill.name}
+                            {skill.version > 0 ? ` · v${skill.version}` : ""}
+                          </span>
+                          <span className="shrink-0 text-[10px]">
+                            {skill.injected
+                              ? skill.truncated
+                                ? "已截断"
+                                : `${skill.chars} 字`
+                              : skill.skippedReason === "inactive"
+                                ? "已停用"
+                                : skill.skippedReason === "empty"
+                                  ? "无正文"
+                                  : skill.skippedReason === "budget"
+                                    ? "超出预算"
+                                    : "未找到"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
 
                 <div className="mt-3 rounded-xl border border-hairline px-3 py-2">
                   <p className="text-[11px] font-semibold text-zinc-700">Token 消耗</p>

@@ -18,6 +18,16 @@ export interface RunUsage {
   costMicros: number;
 }
 
+export interface RunSkillSnapshot {
+  key: string;
+  name: string;
+  version: number;
+  chars: number;
+  injected: boolean;
+  truncated: boolean;
+  skippedReason: string | null;
+}
+
 export interface RunSnapshot {
   id: string;
   status: string;
@@ -27,6 +37,8 @@ export interface RunSnapshot {
   error: string | null;
   usage: RunUsage;
   cancelRequested: boolean;
+  /** 受理时快照的技能注入结果（只含元信息，不含正文） */
+  employeeSkills: RunSkillSnapshot[];
   startedAt: string | null;
   finishedAt: string | null;
   partialUpdatedAt: string | null;
@@ -86,6 +98,37 @@ export async function closeRunStreamClient(client: Client): Promise<void> {
   await client.end().catch(() => undefined);
 }
 
+function normalizeEmployeeSkills(input: Record<string, unknown> | null): RunSkillSnapshot[] {
+  const employee = input?.employee;
+  if (!employee || typeof employee !== "object") {
+    return [];
+  }
+  const skills = (employee as { skills?: unknown }).skills;
+  if (!Array.isArray(skills)) {
+    return [];
+  }
+  const result: RunSkillSnapshot[] = [];
+  for (const item of skills) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const row = item as Record<string, unknown>;
+    if (typeof row.key !== "string") {
+      continue;
+    }
+    result.push({
+      key: row.key,
+      name: typeof row.name === "string" ? row.name : row.key,
+      version: Number(row.version ?? 0),
+      chars: Number(row.chars ?? 0),
+      injected: row.injected === true,
+      truncated: row.truncated === true,
+      skippedReason: typeof row.skippedReason === "string" ? row.skippedReason : null,
+    });
+  }
+  return result;
+}
+
 /** 读取运行快照；RLS 过滤后为空表示无权访问或不存在 */
 export async function loadRunSnapshot(client: Client, runId: string): Promise<RunSnapshot | null> {
   const { rows } = await client.query<{
@@ -102,10 +145,11 @@ export async function loadRunSnapshot(client: Client, runId: string): Promise<Ru
     started_at: Date | null;
     finished_at: Date | null;
     partial_updated_at: Date | null;
+    input: Record<string, unknown> | null;
   }>(
     `select id, status, last_seq, partial_text, result, error,
             prompt_tokens, completion_tokens, cost_micros,
-            cancel_requested_at, started_at, finished_at, partial_updated_at
+            cancel_requested_at, started_at, finished_at, partial_updated_at, input
        from runs
       where id = $1`,
     [runId],
@@ -128,6 +172,7 @@ export async function loadRunSnapshot(client: Client, runId: string): Promise<Ru
       costMicros: Number(row.cost_micros),
     },
     cancelRequested: Boolean(row.cancel_requested_at),
+    employeeSkills: normalizeEmployeeSkills(row.input),
     startedAt: toIso(row.started_at),
     finishedAt: toIso(row.finished_at),
     partialUpdatedAt: toIso(row.partial_updated_at),

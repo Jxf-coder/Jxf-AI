@@ -64,6 +64,17 @@ export interface AiEmployeeGrantView {
   capability: "use" | "manage";
 }
 
+export interface AiEmployeeSkillDetail {
+  key: string;
+  name: string;
+  /** active / draft / retired；技能已删除时为 missing */
+  status: string;
+  origin: string;
+  promptChars: number;
+  createdByName: string | null;
+  updatedAt: string | null;
+}
+
 export interface AiEmployeeDetail extends AiEmployeeView {
   grants: AiEmployeeGrantView[];
   /** 人格描述：运行时拼进系统提示 */
@@ -72,6 +83,8 @@ export interface AiEmployeeDetail extends AiEmployeeView {
   systemPrompt: string;
   /** 技能包 key（如 knowledge-search / distill / regression） */
   skillKeys: string[];
+  /** 技能在运行时的实际状态：停用 / 未填正文会在这里暴露 */
+  skillDetails: AiEmployeeSkillDetail[];
   /** 允许调用的工具名（M4 由 MCP 治理层继续收窄） */
   allowedTools: string[];
   /** 模型档位：deep / fast */
@@ -216,11 +229,58 @@ export async function loadAiEmployee(
 
     const review = parseReviewConfig(row.model_config);
 
+    const skillKeys = row.skill_keys ?? [];
+    let skillDetails: AiEmployeeSkillDetail[] = [];
+    if (skillKeys.length > 0) {
+      const skills = await client.query<{
+        key: string;
+        name: string;
+        status: string;
+        origin: string;
+        prompt_chars: number;
+        created_by_name: string | null;
+        updated_at: Date | null;
+      }>(
+        `select s.key, s.name, s.status, s.origin,
+                char_length(s.prompt_body) as prompt_chars,
+                (select name from users where id = s.created_by) as created_by_name,
+                s.updated_at
+           from skills s
+          where s.key = any($1::text[])`,
+        [skillKeys],
+      );
+      const byKey = new Map(skills.rows.map((item) => [item.key, item]));
+      skillDetails = skillKeys.map((key) => {
+        const found = byKey.get(key);
+        if (!found) {
+          return {
+            key,
+            name: key,
+            status: "missing",
+            origin: "",
+            promptChars: 0,
+            createdByName: null,
+            updatedAt: null,
+          };
+        }
+        return {
+          key: found.key,
+          name: found.name,
+          status: found.status,
+          origin: found.origin,
+          promptChars: Number(found.prompt_chars ?? 0),
+          createdByName: found.created_by_name,
+          updatedAt: found.updated_at ? found.updated_at.toISOString() : null,
+        };
+      });
+    }
+
     return {
       ...toView(row),
       persona: row.persona ?? "",
       systemPrompt: row.system_prompt ?? "",
-      skillKeys: row.skill_keys ?? [],
+      skillKeys,
+      skillDetails,
       allowedTools: row.allowed_tools ?? [],
       modelTier: row.model_config?.tier === "fast" ? "fast" : "deep",
       reviewMode: review.mode,

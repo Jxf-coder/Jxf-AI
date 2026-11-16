@@ -12,6 +12,11 @@ import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
 import { requireContextPermission } from "@/lib/permissions/server";
 import { readMemoryContext } from "@/lib/runtime/memory";
+import {
+  buildSkillContext,
+  type SkillContextEntry,
+  type SkillContextRow,
+} from "@/lib/runtime/skill-context";
 
 export type RuntimeRunKind = "chat" | "task" | "workflow_step" | "ingest" | "regression";
 
@@ -42,6 +47,11 @@ interface EmployeeSnapshot {
   modelConfig: Record<string, unknown>;
   /** 允许调用的外部工具，形如 mcp:<serverId>:<toolName> */
   allowedTools: string[];
+  /** 技能正文与逐项注入结果：worker 只读快照，不查 skills 表 */
+  skills: SkillContextEntry[];
+  skillsPrompt: string;
+  skillsPromptChars: number;
+  skillsPromptTruncated: boolean;
 }
 
 function questionTitle(input: Record<string, unknown>): string | null {
@@ -72,9 +82,10 @@ export async function acceptRun(context: UserContext, request: AcceptRunInput): 
         system_prompt: string | null;
         model_config: Record<string, unknown> | null;
         allowed_tools: string[] | null;
+        skill_keys: string[] | null;
         status: string;
       }>(
-        `select id, name, persona, system_prompt, model_config, allowed_tools, status
+        `select id, name, persona, system_prompt, model_config, allowed_tools, skill_keys, status
            from ai_employees where id = $1`,
         [request.aiEmployeeId],
       );
@@ -82,6 +93,19 @@ export async function acceptRun(context: UserContext, request: AcceptRunInput): 
       if (!found || found.status !== "active") {
         throw new Error("AI 员工不存在、未上线或未授权给当前部门");
       }
+      const skillKeys = found.skill_keys ?? [];
+      let skillRows: SkillContextRow[] = [];
+      if (skillKeys.length > 0) {
+        // RLS 保证只读到内置技能与本租户技能；状态与正文在快照阶段定稿
+        const skills = await client.query<SkillContextRow>(
+          `select key, name, version, status, prompt_body
+             from skills
+            where key = any($1::text[])`,
+          [skillKeys],
+        );
+        skillRows = skills.rows;
+      }
+      const skillContext = buildSkillContext(skillKeys, skillRows);
       employee = {
         id: found.id,
         name: found.name,
@@ -89,6 +113,10 @@ export async function acceptRun(context: UserContext, request: AcceptRunInput): 
         systemPrompt: found.system_prompt,
         modelConfig: found.model_config ?? {},
         allowedTools: found.allowed_tools ?? [],
+        skills: skillContext.entries,
+        skillsPrompt: skillContext.prompt,
+        skillsPromptChars: skillContext.chars,
+        skillsPromptTruncated: skillContext.truncated,
       };
     }
 

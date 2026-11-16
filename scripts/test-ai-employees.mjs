@@ -18,6 +18,7 @@ import {
   loadAiEmployee,
   revokeAiEmployeeGrant,
   setAiEmployeeStatus,
+  updateAiEmployee,
 } from "../src/lib/ai-employees.ts";
 import { PermissionDeniedError } from "../src/lib/permissions/guard.ts";
 
@@ -112,6 +113,7 @@ async function expectError(fn, code) {
 
 async function cleanup(owner) {
   await owner.query("delete from ai_employees where tenant_id = $1", [TENANT]);
+  await owner.query("delete from skills where tenant_id = $1", [TENANT]);
   await owner.query("delete from memberships where tenant_id = $1", [TENANT]);
   await owner.query(
     "delete from departments where tenant_id = $1 and id in (select descendant_id from department_closure where depth >= 3)",
@@ -399,6 +401,29 @@ async function main() {
   await setAiEmployeeStatus(bossContext, created.id, "disabled");
   const disabledVisible = await loadAiEmployee(memberAContext, created.id);
   check("停用：授权成员仍可见且状态为 disabled", disabledVisible?.status === "disabled", JSON.stringify(disabledVisible));
+
+  // 10.1 技能生效状态：生效 / 缺失在详情里可解释
+  const tenantSkillKey = `ai-skill-${Date.now().toString(36)}`;
+  await withClient(OWNER_URL, (owner) =>
+    owner.query(
+      `insert into skills (tenant_id, key, name, category, summary, hint, prompt_body, origin, status, created_by)
+       values ($1, $2, '验收技能', 'tool', '', '', '技能正文', 'tenant', 'active', $3)`,
+      [TENANT, tenantSkillKey, boss.userId],
+    ),
+  );
+  await updateAiEmployee(bossContext, created.id, {
+    name: "知识库助手",
+    description: "回答知识库相关问题的 AI 员工",
+    skillKeys: [tenantSkillKey],
+  });
+  const withSkills = await loadAiEmployee(memberAContext, created.id);
+  check(
+    "详情暴露技能生效状态与正文字数",
+    withSkills?.skillDetails.length === 1 &&
+      withSkills.skillDetails[0].status === "active" &&
+      withSkills.skillDetails[0].promptChars === 4,
+    JSON.stringify(withSkills?.skillDetails),
+  );
 
   // 11. 离职/调岗：下一次请求立即不可见
   await withClient(OWNER_URL, (owner) =>

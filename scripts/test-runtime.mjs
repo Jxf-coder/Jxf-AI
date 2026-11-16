@@ -24,6 +24,9 @@ import {
 } from "../src/lib/runtime/memory.ts";
 import { resumeRun } from "../src/lib/runtime/resume.ts";
 import { recordUsage } from "../src/lib/runtime/usage.ts";
+import { buildSkillContext } from "../src/lib/runtime/skill-context.ts";
+import { composeSystemPrompt } from "../src/lib/runtime/prompt.ts";
+import { loadRunSnapshot } from "../src/lib/runtime/stream.ts";
 import { getPool } from "../src/lib/db/pool.ts";
 
 const TENANT = process.env.RUNTIME_TEST_TENANT ?? "44444444-4444-4444-8444-444444444444";
@@ -158,6 +161,9 @@ async function cleanup(owner) {
   await owner.query("delete from token_usages where tenant_id = $1", [TENANT]);
   await owner.query("delete from runs where tenant_id = $1", [TENANT]);
   await owner.query("delete from threads where tenant_id = $1", [TENANT]);
+  await owner.query("delete from ai_employee_grants where tenant_id = $1", [TENANT]);
+  await owner.query("delete from ai_employees where tenant_id = $1", [TENANT]);
+  await owner.query("delete from skills where tenant_id = $1", [TENANT]);
   await owner.query("delete from memberships where tenant_id = $1", [TENANT]);
   await owner.query(
     "delete from departments where tenant_id = $1 and id in (select descendant_id from department_closure where depth >= 2)",
@@ -218,6 +224,25 @@ async function seed(owner) {
   );
   const membershipOf = (email) => memberships.rows.find((row) => row.user_id === uid[email]).id;
 
+  const skillKey = `rt-skill-${randomUUID().slice(0, 8)}`;
+  const missingSkillKey = `rt-missing-${randomUUID().slice(0, 8)}`;
+  await owner.query(
+    `insert into skills (tenant_id, key, name, category, summary, hint, prompt_body, origin, status, created_by)
+     values ($1, $2, '运行态技能', 'tool', '', '', $3, 'tenant', 'active', $4)`,
+    [TENANT, skillKey, "技能要求：先给结论，再列依据。", uid["boss@rt.test"]],
+  );
+  const employee = await owner.query(
+    `insert into ai_employees (tenant_id, slug, name, description, status, skill_keys, created_by)
+     values ($1, $2, '运行态员工', '', 'active', $3::text[], $4)
+     returning id`,
+    [TENANT, `rt-emp-${randomUUID().slice(0, 8)}`, [skillKey, missingSkillKey], uid["boss@rt.test"]],
+  );
+  await owner.query(
+    `insert into ai_employee_grants (tenant_id, ai_employee_id, department_id, capability, created_by)
+     values ($1, $2, $3, 'use', $4)`,
+    [TENANT, employee.rows[0].id, groupA.rows[0].id, uid["boss@rt.test"]],
+  );
+
   await owner.query("commit");
 
   return {
@@ -225,6 +250,8 @@ async function seed(owner) {
     deptA: groupA.rows[0].id,
     deptB: groupB.rows[0].id,
     deptRoot: root.rows[0].id,
+    skillKey,
+    employeeId: employee.rows[0].id,
     memberships: {
       a1: membershipOf("a1@rt.test"),
       b1: membershipOf("b1@rt.test"),
@@ -257,7 +284,7 @@ async function main() {
   const owner = new Client({ connectionString: OWNER_URL, application_name: "jxf-runtime-test-owner" });
   await owner.connect();
   const seeded = await seed(owner);
-  const { uid, deptA, deptB, deptRoot, memberships } = seeded;
+  const { uid, deptA, deptB, deptRoot, memberships, skillKey, employeeId } = seeded;
   const workerPool = new Pool({ connectionString: WORKER_URL, max: 4, application_name: "jxf-runtime-worker" });
 
   const a1 = await resolveActor(uid["a1@rt.test"], memberships.a1, deptA);
@@ -265,6 +292,62 @@ async function main() {
   const boss = await resolveActor(uid["boss@rt.test"], memberships.boss, deptRoot);
 
   try {
+    // -------------------------------------------------------------------------
+    // 0. 技能上下文装配（纯函数，不依赖数据库）
+    // -------------------------------------------------------------------------
+    const skillCtx = buildSkillContext(
+      ["skill-a", "skill-off", "skill-empty", "skill-gone"],
+      [
+        { key: "skill-a", name: "技能 A", version: 2, status: "active", prompt_body: "A 正文" },
+        { key: "skill-off", name: "停用技能", version: 1, status: "retired", prompt_body: "不该出现" },
+        { key: "skill-empty", name: "空技能", version: 1, status: "active", prompt_body: "   " },
+      ],
+    );
+    check(
+      "技能按勾选顺序注入正文",
+      skillCtx.prompt.includes("## 技能 A（skill-a · v2）") && skillCtx.prompt.includes("A 正文"),
+    );
+    check(
+      "停用 / 空正文 / 缺失技能被跳过并记录原因",
+      skillCtx.entries
+        .map((item) => item.skippedReason ?? "injected")
+        .join(",") === "injected,inactive,empty,missing" &&
+        skillCtx.entries[0].injected === true,
+      JSON.stringify(skillCtx.entries),
+    );
+
+    const longCtx = buildSkillContext(
+      ["skill-long"],
+      [{ key: "skill-long", name: "长技能", version: 1, status: "active", prompt_body: "x".repeat(9000) }],
+      { perSkill: 3000, total: 6000 },
+    );
+    check(
+      "单技能超限被截断且总量不超预算",
+      longCtx.chars === 3000 && longCtx.truncated && longCtx.entries[0].truncated === true,
+      String(longCtx.chars),
+    );
+
+    const composed = composeSystemPrompt({
+      kind: "task",
+      employee: {
+        name: "运行态员工",
+        persona: "严谨",
+        skillsPrompt: "【可用技能】\n\n## 技能 A\nA 正文",
+      },
+      memory: "记忆 X",
+    });
+    check(
+      "系统提示顺序：身份 → 技能 → 记忆",
+      composed.indexOf("A 正文") > composed.indexOf("人格设定：严谨") &&
+        composed.indexOf("记忆 X") > composed.indexOf("A 正文"),
+      composed,
+    );
+    check(
+      "无员工时保持默认提示",
+      composeSystemPrompt({ kind: "chat", employee: null, memory: "" }) ===
+        "你是企业内部的 AI 助手，回答必须基于已知信息，不确定就如实说明。",
+    );
+
     // -------------------------------------------------------------------------
     // 1. 受理与幂等
     // -------------------------------------------------------------------------
@@ -728,6 +811,46 @@ async function main() {
     await deleteThreadMemory(a1, memory.id);
     const afterDelete = await listThreadMemories(a1, accepted.threadId);
     check("删除后本人会话记忆列表为空", afterDelete.length === 0, String(afterDelete.length));
+
+    // -------------------------------------------------------------------------
+    // 10.5 技能注入：受理快照 + 运行快照可见性
+    // -------------------------------------------------------------------------
+    const skillRun = await acceptRun(a1, {
+      kind: "task",
+      input: { question: "技能注入验收", title: "技能注入验收" },
+      aiEmployeeId: employeeId,
+      clientTurnId: randomUUID(),
+    });
+    const skillSnapshot = await owner.query(
+      "select input->'employee' as employee from runs where id = $1",
+      [skillRun.runId],
+    );
+    const employeeSnapshot = skillSnapshot.rows[0]?.employee ?? {};
+    const skillEntries = Array.isArray(employeeSnapshot.skills) ? employeeSnapshot.skills : [];
+    check(
+      "受理时把技能正文快照进 runs.input",
+      typeof employeeSnapshot.skillsPrompt === "string" &&
+        employeeSnapshot.skillsPrompt.includes("先给结论") &&
+        employeeSnapshot.skillsPromptChars === skillEntries[0]?.chars,
+      JSON.stringify({ chars: employeeSnapshot.skillsPromptChars, entries: skillEntries }),
+    );
+    check(
+      "注入结果包含生效与缺失两类",
+      skillEntries[0]?.key === skillKey &&
+        skillEntries[0]?.injected === true &&
+        skillEntries[1]?.skippedReason === "missing",
+      JSON.stringify(skillEntries),
+    );
+
+    const visibleSnapshot = await runAs(a1, (client) => loadRunSnapshot(client, skillRun.runId));
+    check(
+      "运行快照向调用者暴露技能注入结果",
+      visibleSnapshot?.employeeSkills.length === 2 &&
+        visibleSnapshot.employeeSkills[0].key === skillKey &&
+        visibleSnapshot.employeeSkills[0].injected === true,
+      JSON.stringify(visibleSnapshot?.employeeSkills),
+    );
+    await owner.query("update runs set status = 'done', finished_at = now() where id = $1", [skillRun.runId]);
 
     // -------------------------------------------------------------------------
     // 11. 经验来源文本保留期：过期置空、pending 引用跳过、未到期保留
