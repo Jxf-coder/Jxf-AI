@@ -9,6 +9,7 @@
 import { errorMessage, log } from "@/lib/logger";
 
 import { enqueueExperience, type EnqueueResult, type Queryable } from "./capture";
+import { readExperiencePolicy } from "./policy";
 
 const DELIVERABLE_MAX_CHARS = 800;
 
@@ -33,13 +34,20 @@ export interface PipelineSourceInput {
   skippedSteps: string[];
   steps: PipelineStepSnapshot[];
   workItems: WorkItemRow[];
+  /** 成功终态：仅在开启「成功后自动沉淀」时使用 */
+  success?: boolean;
 }
 
 export function buildPipelineSourceText(input: PipelineSourceInput): string {
+  const terminal = input.success
+    ? "成功"
+    : input.failedStep
+      ? `失败于「${input.failedStep}」`
+      : "部分步骤失败";
   const lines: string[] = [
     `产线：${input.pipelineName}`,
     `触发方式：${input.triggerKind}`,
-    `终态：${input.failedStep ? `失败于「${input.failedStep}」` : "部分步骤失败"}`,
+    `终态：${terminal}`,
   ];
   if (input.failedStep) {
     lines.push(`失败步骤：${input.failedStep}`);
@@ -126,16 +134,45 @@ export async function capturePipelineRunExperience(
     ["failed", "cancelled", "returned"].includes(item.status),
   );
 
-  if (!run.failed_step && failedItems.length === 0) {
-    return null;
-  }
-  // 可选步骤失败已被跳过并继续：不算产线失败，不产经验
-  if (
+  const hasFailure = Boolean(run.failed_step) || failedItems.length > 0;
+  // 可选步骤失败已被跳过并继续：不算产线失败
+  const onlySkippedOptional =
     !run.failed_step &&
     skippedSteps.length > 0 &&
-    failedItems.every((item) => skippedSteps.includes(item.title))
-  ) {
-    return null;
+    failedItems.every((item) => skippedSteps.includes(item.title));
+
+  if (!hasFailure || onlySkippedOptional) {
+    // 成功（或仅可选步骤失败）默认不沉淀；开启「成功后自动沉淀」才入队
+    const policy = await readExperiencePolicy(client);
+    if (!policy.autoCaptureSuccess) {
+      return null;
+    }
+    return enqueueExperience(client, {
+      tenantId: run.tenant_id,
+      departmentId: run.department_id,
+      channel: "pipeline",
+      sourceType: "pipeline_success",
+      sourceId: run.id,
+      sourceVersion: `success|${run.finished_at ? run.finished_at.toISOString() : "open"}`,
+      title: `${run.name} · 产线成功`,
+      text: buildPipelineSourceText({
+        pipelineName: run.name,
+        triggerKind: run.trigger_kind,
+        failedStep: null,
+        skippedSteps,
+        steps: Array.isArray(run.steps) ? run.steps : [],
+        workItems,
+        success: true,
+      }),
+      signalLevel: 1,
+      meta: {
+        pipelineId: run.pipeline_id,
+        pipelineName: run.name,
+        triggerKind: run.trigger_kind,
+        workItemIds: ids,
+        success: true,
+      },
+    });
   }
 
   const text = buildPipelineSourceText({
@@ -157,6 +194,7 @@ export async function capturePipelineRunExperience(
     title: run.name,
     text,
     step: run.failed_step,
+    signalLevel: 3,
     meta: {
       pipelineId: run.pipeline_id,
       pipelineName: run.name,
@@ -267,6 +305,7 @@ export async function captureSkillRunExperience(
       input: run.input,
     }),
     errorType: "skill_run_failed",
+    signalLevel: 3,
     meta: {
       skillKey: run.skill_key,
       skillRunId: run.id,

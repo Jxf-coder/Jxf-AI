@@ -53,6 +53,8 @@ export interface ExperienceDraft {
   meta?: Record<string, unknown>;
   /** 手动触发：跳过冷却与滑动窗口 */
   manual?: boolean;
+  /** 信号等级：3=失败 2=退回/验收 1=主动/文档；低于策略阈值不入队 */
+  signalLevel?: number;
 }
 
 export interface EnqueueResult {
@@ -106,8 +108,28 @@ export async function enqueueExperience(
   client: Queryable,
   draft: ExperienceDraft,
 ): Promise<EnqueueResult> {
-  // 与 worker 共用同一份阈值：最短字数 / 截断上限 / 每小时入队上限
+  // 与 worker 共用同一份阈值：最短字数 / 截断上限 / 每小时入队上限 / 冷却窗
   const policy = await readExperiencePolicy(client);
+
+  // 部门 × 通道开关：没有配置行视为启用
+  const gate = await client.query("select app.experience_channel_enabled($1, $2) as enabled", [
+    draft.departmentId,
+    draft.channel,
+  ]);
+  if ((gate.rows[0] as { enabled?: boolean } | undefined)?.enabled === false) {
+    return { jobId: null, merged: false, reason: `该部门已关闭 ${draft.channel} 通道` };
+  }
+
+  const signalLevel = Number.isFinite(draft.signalLevel) ? Number(draft.signalLevel) : 1;
+  // 人工显式触发不受信号阈值限制；自动通道按策略过滤
+  if (!draft.manual && signalLevel < policy.minSignalLevel) {
+    return {
+      jobId: null,
+      merged: false,
+      reason: `信号等级 ${signalLevel} 低于策略阈值 ${policy.minSignalLevel}`,
+    };
+  }
+
   const prepared = prepareExperienceText(draft.text, policy.maxSourceChars);
   if (!isCollectableText(prepared.text, policy.minSourceChars)) {
     return {
@@ -142,14 +164,14 @@ export async function enqueueExperience(
           and created_at >= now() - ($3 || ' hours')::interval
         order by created_at desc
         limit 20`,
-      [draft.tenantId, fingerprint, String(DEDUPE_WINDOW_HOURS)],
+      [draft.tenantId, fingerprint, String(policy.dedupeWindowHours)],
     );
 
     for (const row of recent.rows as unknown as RecentJobRow[]) {
       const similarity = jaccardSimilarity(prepared.text, row.source_text ?? "");
       const verdict = classifySimilarity(similarity);
       if (verdict === "merge") {
-        await mergeIntoJob(client, row.id);
+        await mergeIntoJob(client, row.id, policy.cooldownMinutes);
         return { jobId: row.id, merged: true };
       }
       if (verdict === "suspect" && !relatedJobId) {
@@ -173,6 +195,7 @@ export async function enqueueExperience(
     step: draft.step ?? null,
     errorType: draft.errorType ?? null,
     statusCode: draft.statusCode ?? null,
+    signalLevel,
     truncated: prepared.truncated,
     originalChars: prepared.originalChars,
     omittedChars: prepared.omittedChars,
@@ -231,17 +254,21 @@ export async function enqueueExperience(
   if (!existingId) {
     return { jobId: null, merged: false, reason: "入队冲突且未找到已有 job" };
   }
-  await mergeIntoJob(client, existingId);
+  await mergeIntoJob(client, existingId, policy.cooldownMinutes);
   return { jobId: existingId, merged: true };
 }
 
-async function mergeIntoJob(client: Queryable, jobId: string): Promise<void> {
+async function mergeIntoJob(
+  client: Queryable,
+  jobId: string,
+  cooldownMinutes: number,
+): Promise<void> {
   await client.query(
     `update experience_jobs
         set occurrence_count = occurrence_count + 1,
             last_seen_at = now(),
-            cooldown_until = now() + ($2 || ' minutes')::interval
+            cooldown_until = now() + make_interval(mins => $2)
       where id = $1`,
-    [jobId, String(COOLDOWN_MINUTES)],
+    [jobId, cooldownMinutes],
   );
 }

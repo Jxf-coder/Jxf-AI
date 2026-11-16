@@ -7,6 +7,7 @@ import {
   jsonb,
   numeric,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -175,7 +176,36 @@ export const experiencePolicies = pgTable(
     hourlyJobLimit: integer("hourly_job_limit").notNull().default(20),
     dailyCardLimit: integer("daily_card_limit").notNull().default(50),
     maxCandidates: integer("max_candidates").notNull().default(3),
+    cooldownMinutes: integer("cooldown_minutes").notNull().default(60),
+    dedupeWindowHours: integer("dedupe_window_hours").notNull().default(24),
+    /** 1=主动/文档 2=退回/验收 3=失败；低于该等级的来源不入队 */
+    minSignalLevel: integer("min_signal_level").notNull().default(1),
+    autoCaptureSuccess: boolean("auto_capture_success").notNull().default(false),
+    /** fast / pro */
+    modelTier: text("model_tier").notNull().default("fast"),
     updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
+);
+
+/**
+ * 部门 × 通道采集开关（experience_channel_policies）。
+ * 没有配置行时由 app.experience_channel_enabled() 视为启用；写入只走 SECURITY DEFINER 函数。
+ */
+export const experienceChannelPolicies = pgTable(
+  "experience_channel_policies",
+  {
+    tenantId: uuid("tenant_id").notNull(),
+    departmentId: uuid("department_id")
+      .notNull()
+      .references(() => departments.id, { onDelete: "cascade" }),
+    channel: text("channel").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.departmentId, table.channel] }),
+    index("experience_channel_policies_tenant_idx").on(table.tenantId, table.departmentId),
+  ],
 );

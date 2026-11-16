@@ -160,6 +160,7 @@ function unitVector(index) {
 async function cleanup(owner) {
   await owner.query("delete from experience_jobs where tenant_id = $1", [TENANT]);
   await owner.query("delete from experience_policies where tenant_id = $1", [TENANT]);
+  await owner.query("delete from experience_channel_policies where tenant_id = $1", [TENANT]);
   await owner.query("delete from folder_route_stats_daily where tenant_id = $1", [TENANT]);
   await owner.query("delete from folder_route_feedback where tenant_id = $1", [TENANT]);
   await owner.query("delete from qa_logs where tenant_id = $1", [TENANT]);
@@ -1808,12 +1809,19 @@ async function main() {
       policyDefaults.rows[0]?.max_source_chars === 12000 &&
       policyDefaults.rows[0]?.hourly_job_limit === 20 &&
       policyDefaults.rows[0]?.daily_card_limit === 50 &&
-      policyDefaults.rows[0]?.max_candidates === 3,
+      policyDefaults.rows[0]?.max_candidates === 3 &&
+      policyDefaults.rows[0]?.cooldown_minutes === 60 &&
+      policyDefaults.rows[0]?.dedupe_window_hours === 24 &&
+      policyDefaults.rows[0]?.min_signal_level === 1 &&
+      policyDefaults.rows[0]?.auto_capture_success === false &&
+      policyDefaults.rows[0]?.model_tier === "fast",
     JSON.stringify(policyDefaults.rows[0]),
   );
 
   await runAs(boss, (client) =>
-    client.query("select app.save_experience_policy(120, 6000, 5, 30, 2)"),
+    client.query(
+      "select app.save_experience_policy(120, 6000, 5, 30, 2, 30, 12, 2, true, 'pro')",
+    ),
   );
   const policySaved = await runAs(boss, (client) =>
     client.query("select * from app.experience_policy()"),
@@ -1824,14 +1832,21 @@ async function main() {
       policySaved.rows[0]?.max_source_chars === 6000 &&
       policySaved.rows[0]?.hourly_job_limit === 5 &&
       policySaved.rows[0]?.daily_card_limit === 30 &&
-      policySaved.rows[0]?.max_candidates === 2,
+      policySaved.rows[0]?.max_candidates === 2 &&
+      policySaved.rows[0]?.cooldown_minutes === 30 &&
+      policySaved.rows[0]?.dedupe_window_hours === 12 &&
+      policySaved.rows[0]?.min_signal_level === 2 &&
+      policySaved.rows[0]?.auto_capture_success === true &&
+      policySaved.rows[0]?.model_tier === "pro",
     JSON.stringify(policySaved.rows[0]),
   );
 
   let policyDenied = false;
   try {
     await runAs(memberA, (client) =>
-      client.query("select app.save_experience_policy(200, 12000, 20, 50, 3)"),
+      client.query(
+        "select app.save_experience_policy(200, 12000, 20, 50, 3, 60, 24, 1, false, 'fast')",
+      ),
     );
   } catch (error) {
     policyDenied = error.code === "42501";
@@ -1841,7 +1856,9 @@ async function main() {
   let policyRangeDenied = false;
   try {
     await runAs(boss, (client) =>
-      client.query("select app.save_experience_policy(10, 500, 20, 50, 3)"),
+      client.query(
+        "select app.save_experience_policy(10, 500, 20, 50, 3, 60, 24, 1, false, 'fast')",
+      ),
     );
   } catch (error) {
     policyRangeDenied = error.code === "23514";
@@ -1884,6 +1901,114 @@ async function main() {
     "经验策略：达到阈值后正常入队",
     typeof policyLongEnough.jobId === "string",
     JSON.stringify(policyLongEnough),
+  );
+
+  // 部门 × 通道开关与最小信号等级
+  const channelDefault = await runAs(boss, (client) =>
+    client.query("select app.experience_channel_enabled($1, 'pipeline') as enabled", [
+      fx.departments.groupA,
+    ]),
+  );
+  check("经验通道：无配置时默认启用", channelDefault.rows[0]?.enabled === true);
+
+  await runAs(boss, (client) =>
+    client.query("select app.save_experience_channel_policy($1, 'pipeline', false)", [
+      fx.departments.groupA,
+    ]),
+  );
+  const channelDisabled = await runAs(memberA, (client) =>
+    enqueueExperience(client, {
+      tenantId: TENANT,
+      departmentId: fx.departments.groupA,
+      channel: "pipeline",
+      sourceType: "manual_test",
+      sourceId: randomUUID(),
+      sourceVersion: "v1",
+      title: "通道关闭回归",
+      text: "经".repeat(150),
+      manual: true,
+      signalLevel: 3,
+    }),
+  );
+  check(
+    "经验通道：关闭后不入队",
+    channelDisabled.jobId === null && /关闭/.test(channelDisabled.reason ?? ""),
+    JSON.stringify(channelDisabled),
+  );
+
+  let channelDenied = false;
+  try {
+    await runAs(memberA, (client) =>
+      client.query("select app.save_experience_channel_policy($1, 'pipeline', true)", [
+        fx.departments.groupA,
+      ]),
+    );
+  } catch (error) {
+    channelDenied = error.code === "42501";
+  }
+  check("经验通道：非 L1 不能改开关", channelDenied);
+
+  await runAs(boss, (client) =>
+    client.query("select app.save_experience_channel_policy($1, 'pipeline', true)", [
+      fx.departments.groupA,
+    ]),
+  );
+  const channelEnabled = await runAs(memberA, (client) =>
+    enqueueExperience(client, {
+      tenantId: TENANT,
+      departmentId: fx.departments.groupA,
+      channel: "pipeline",
+      sourceType: "manual_test",
+      sourceId: randomUUID(),
+      sourceVersion: "v1",
+      title: "通道恢复回归",
+      text: "经".repeat(150),
+      manual: true,
+      signalLevel: 3,
+    }),
+  );
+  check(
+    "经验通道：恢复后正常入队",
+    typeof channelEnabled.jobId === "string",
+    JSON.stringify(channelEnabled),
+  );
+
+  const lowSignal = await runAs(memberA, (client) =>
+    enqueueExperience(client, {
+      tenantId: TENANT,
+      departmentId: fx.departments.groupA,
+      channel: "retro",
+      sourceType: "manual_test",
+      sourceId: randomUUID(),
+      sourceVersion: "v1",
+      title: "信号等级回归",
+      text: "经".repeat(150),
+      signalLevel: 1,
+    }),
+  );
+  check(
+    "经验策略：低于最小信号等级不入队",
+    lowSignal.jobId === null && /信号等级/.test(lowSignal.reason ?? ""),
+    JSON.stringify(lowSignal),
+  );
+
+  const okSignal = await runAs(memberA, (client) =>
+    enqueueExperience(client, {
+      tenantId: TENANT,
+      departmentId: fx.departments.groupA,
+      channel: "retro",
+      sourceType: "manual_test",
+      sourceId: randomUUID(),
+      sourceVersion: "v1",
+      title: "信号等级回归",
+      text: "经".repeat(150),
+      signalLevel: 2,
+    }),
+  );
+  check(
+    "经验策略：达到信号等级后入队",
+    typeof okSignal.jobId === "string",
+    JSON.stringify(okSignal),
   );
 
   if (process.env.KEEP_KB_FIXTURES !== "1") {

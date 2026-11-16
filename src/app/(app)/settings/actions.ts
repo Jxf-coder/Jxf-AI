@@ -6,7 +6,9 @@ import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 import {
   PolicyInputError,
+  saveChannelPolicies,
   saveExperiencePolicy,
+  type ChannelPolicyInput,
   type ExperiencePolicy,
 } from "@/lib/knowledge/experience/policy";
 import { errorMessage, log } from "@/lib/logger";
@@ -183,6 +185,25 @@ export async function saveExperiencePolicyAction(
       return { ok: false, message: error.message };
     }
     return failure("save_experience_policy", error);
+  }
+}
+
+export async function saveExperienceChannelsAction(
+  inputs: ChannelPolicyInput[],
+): Promise<SettingsActionResult> {
+  try {
+    const context = await contextOf();
+    if (context.accessLevel !== "L1") {
+      return { ok: false, message: "只有 L1 可以修改经验采集开关" };
+    }
+    const saved = await saveChannelPolicies(context, inputs);
+    revalidatePath("/settings");
+    return { ok: true, message: `已保存 ${saved} 个部门/通道开关` };
+  } catch (error) {
+    if (error instanceof PolicyInputError) {
+      return { ok: false, message: error.message };
+    }
+    return failure("save_experience_channels", error);
   }
 }
 

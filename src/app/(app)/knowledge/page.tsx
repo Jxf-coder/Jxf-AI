@@ -31,6 +31,7 @@ import { resolveContextPermissions } from "@/lib/permissions/server";
 import type { ResolvedPermissions } from "@/types/permission";
 
 import { CardsTab } from "./_components/CardsTab";
+import { ExperienceJobsTab } from "./_components/ExperienceJobsTab";
 import { GapsTab } from "./_components/GapsTab";
 import { GraphView } from "./_components/GraphView";
 import { MetaTab } from "./_components/MetaTab";
@@ -284,6 +285,8 @@ export default async function KnowledgePage({
             ) : null}
 
             {tab === "routes" ? <RouteStatsTab context={context} /> : null}
+
+            {tab === "jobs" ? <ExperienceJobsTab context={context} /> : null}
 
             {tab === "cards" ? <CardsTab context={context} searchParams={params} /> : null}
 

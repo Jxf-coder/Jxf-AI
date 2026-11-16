@@ -279,18 +279,30 @@ test("技能失败来源文本包含技能、失败原因与输入", () => {
 
 test("经验策略：合法值原样通过，小数向下取整", () => {
   const normalized = normalizePolicy({
+    ...DEFAULT_EXPERIENCE_POLICY,
     minSourceChars: 150.9,
     maxSourceChars: 9000,
     hourlyJobLimit: 12,
     dailyCardLimit: 40,
     maxCandidates: 2,
+    cooldownMinutes: 30,
+    dedupeWindowHours: 12,
+    minSignalLevel: 2,
+    autoCaptureSuccess: true,
+    modelTier: "pro",
   });
   assert.deepEqual(normalized, {
+    ...DEFAULT_EXPERIENCE_POLICY,
     minSourceChars: 150,
     maxSourceChars: 9000,
     hourlyJobLimit: 12,
     dailyCardLimit: 40,
     maxCandidates: 2,
+    cooldownMinutes: 30,
+    dedupeWindowHours: 12,
+    minSignalLevel: 2,
+    autoCaptureSuccess: true,
+    modelTier: "pro",
   });
   assert.deepEqual(normalizePolicy(DEFAULT_EXPERIENCE_POLICY), DEFAULT_EXPERIENCE_POLICY);
 });
@@ -311,6 +323,14 @@ test("经验策略：越界与 min>=max 直接报错，不静默截断", () => {
         minSourceChars: 5000,
         maxSourceChars: 2000,
       }),
+    PolicyInputError,
+  );
+  assert.throws(
+    () => normalizePolicy({ ...DEFAULT_EXPERIENCE_POLICY, cooldownMinutes: 0 }),
+    PolicyInputError,
+  );
+  assert.throws(
+    () => normalizePolicy({ ...DEFAULT_EXPERIENCE_POLICY, modelTier: "turbo" }),
     PolicyInputError,
   );
 });

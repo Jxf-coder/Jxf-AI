@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 import { patchCards, type CardMetaPatch } from "@/lib/knowledge/cards";
+import { retryExperienceJob } from "@/lib/knowledge/experience/admin";
 import { submitRetroExperience } from "@/lib/knowledge/experience/retro";
 import { addGap, closeGap, reopenGap } from "@/lib/knowledge/gaps";
 import { revokeIngestRun } from "@/lib/knowledge/ingest";
@@ -68,6 +69,21 @@ export async function recalcRouteStatsAction(days: number): Promise<ActionResult
     const rows = await recalcRouteStats(context, days);
     revalidatePath("/knowledge");
     return { ok: true, message: `已重算：${rows} 组聚合行` };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 把进入 dead / failed 的经验任务重新入队（只能操作可写部门内的任务） */
+export async function retryExperienceJobAction(jobId: string): Promise<ActionResult> {
+  const context = await resolveCurrentContext();
+  if (!isUuid(jobId)) {
+    return { ok: false, message: "任务标识无效" };
+  }
+  try {
+    await retryExperienceJob(context, jobId);
+    revalidatePath("/knowledge");
+    return { ok: true, message: "已重新入队，worker 会在下一轮领取" };
   } catch (error) {
     return { ok: false, message: toPermissionMessage(error) };
   }

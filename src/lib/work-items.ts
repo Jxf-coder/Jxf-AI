@@ -462,6 +462,7 @@ export async function reviewWorkItem(
           sourceVersion: reviewedAt.toISOString(),
           title: `${row.title} · 验收${decision === "return" ? "退回" : "通过"}`,
           text: sourceText,
+          signalLevel: decision === "return" ? 3 : 2,
           meta: {
             workItemId: row.id,
             decision,

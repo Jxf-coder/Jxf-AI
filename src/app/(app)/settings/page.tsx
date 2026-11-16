@@ -10,7 +10,7 @@ import {
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 import { loadEnv } from "@/lib/env";
-import { readExperiencePolicy } from "@/lib/knowledge/experience/policy";
+import { readChannelPolicyMatrix, readExperiencePolicy } from "@/lib/knowledge/experience/policy";
 import { listOpsTasks } from "@/lib/ops/tasks";
 import { getEffectiveAiSummary } from "@/lib/settings/ai";
 import { readDeliveryStatus } from "@/lib/settings/delivery-status";
@@ -46,11 +46,12 @@ export default async function SettingsPage() {
     );
   }
 
-  const [settings, effective, opsTasks, experiencePolicy] = await Promise.all([
+  const [settings, effective, opsTasks, experiencePolicy, experienceChannels] = await Promise.all([
     readPlatformSettings(context),
     Promise.resolve(getEffectiveAiSummary()),
     listOpsTasks(context),
     withUserContext(context, (client) => readExperiencePolicy(client)),
+    readChannelPolicyMatrix(context),
   ]);
   const delivery = readDeliveryStatus();
   const env = loadEnv();
@@ -69,6 +70,7 @@ export default async function SettingsPage() {
           delivery={delivery}
           opsTasks={opsTasks}
           experiencePolicy={experiencePolicy}
+          experienceChannels={experienceChannels}
           version={env.version}
           appEnv={env.appEnv}
         />

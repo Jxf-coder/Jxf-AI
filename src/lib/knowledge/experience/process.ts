@@ -202,7 +202,7 @@ export async function processExperienceJob(
     ],
     {
       temperature: 0.1,
-      tier: "fast",
+      tier: cap.policy.modelTier === "pro" ? "deep" : "fast",
       maxTokens: extract.extractMaxTokens,
       timeoutMs: extract.extractTimeoutMs,
     },

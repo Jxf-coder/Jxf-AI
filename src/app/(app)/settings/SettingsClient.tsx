@@ -26,7 +26,12 @@ import {
   type OpsTaskView,
 } from "@/lib/ops/types";
 import {
+  EXPERIENCE_CHANNELS,
+  EXPERIENCE_MODEL_TIERS,
   EXPERIENCE_POLICY_LIMITS,
+  EXPERIENCE_SIGNAL_LEVELS,
+  type DepartmentChannelMatrix,
+  type ExperienceChannelKey,
   type ExperiencePolicy,
 } from "@/lib/knowledge/experience/policy-shared";
 import type { DeliveryStatus } from "@/lib/settings/delivery-status";
@@ -42,6 +47,7 @@ import {
   saveAiSettingsAction,
   saveAuditRetentionAction,
   saveBrandingAction,
+  saveExperienceChannelsAction,
   saveExperiencePolicyAction,
   saveNotificationAction,
   testAiConnectionAction,
@@ -54,6 +60,7 @@ interface SettingsClientProps {
   delivery: DeliveryStatus;
   opsTasks: OpsTaskView[];
   experiencePolicy: ExperiencePolicy;
+  experienceChannels: DepartmentChannelMatrix[];
   version: string;
   appEnv: string;
 }
@@ -133,6 +140,7 @@ export function SettingsClient({
   delivery,
   opsTasks,
   experiencePolicy,
+  experienceChannels,
   version,
   appEnv,
 }: SettingsClientProps) {
@@ -178,6 +186,10 @@ export function SettingsClient({
   const [policy, setPolicy] = useState<ExperiencePolicy>(experiencePolicy);
   const [policyBusy, setPolicyBusy] = useState(false);
   const [policyMessage, setPolicyMessage] = useState<Message | null>(null);
+
+  const [matrix, setMatrix] = useState<DepartmentChannelMatrix[]>(experienceChannels);
+  const [channelsBusy, setChannelsBusy] = useState(false);
+  const [channelsMessage, setChannelsMessage] = useState<Message | null>(null);
 
   const hasActiveOps = opsTasks.some(
     (task) => task.status === "queued" || task.status === "running",
@@ -296,6 +308,43 @@ export function SettingsClient({
     } finally {
       setPolicyBusy(false);
     }
+  }
+
+  async function submitChannels() {
+    setChannelsBusy(true);
+    setChannelsMessage(null);
+    try {
+      const inputs = matrix.flatMap((department) =>
+        EXPERIENCE_CHANNELS.map((channel) => ({
+          departmentId: department.departmentId,
+          channel: channel.key as ExperienceChannelKey,
+          enabled: department.channels[channel.key] ?? true,
+        })),
+      );
+      const result = await saveExperienceChannelsAction(inputs);
+      setChannelsMessage({ tone: result.ok ? "info" : "error", text: result.message });
+      if (result.ok) {
+        router.refresh();
+      }
+    } finally {
+      setChannelsBusy(false);
+    }
+  }
+
+  function toggleChannel(departmentId: string, channel: string) {
+    setMatrix((previous) =>
+      previous.map((department) =>
+        department.departmentId === departmentId
+          ? {
+              ...department,
+              channels: {
+                ...department.channels,
+                [channel]: !(department.channels[channel] ?? true),
+              },
+            }
+          : department,
+      ),
+    );
   }
 
   async function requestOpsTask(kind: OpsTaskKind, cold = false) {
@@ -710,23 +759,50 @@ export function SettingsClient({
         right={<span className={badge()}>仅 L1 可改</span>}
       >
         <div className={formGrid}>
-          {(Object.keys(EXPERIENCE_POLICY_LIMITS) as Array<keyof ExperiencePolicy>).map((key) => {
-            const limit = EXPERIENCE_POLICY_LIMITS[key];
-            return (
-              <Field key={key} label={`${limit.label}（${limit.min}–${limit.max}）`}>
-                <input
-                  type="number"
-                  min={limit.min}
-                  max={limit.max}
-                  className={input}
-                  value={policy[key]}
-                  onChange={(event) =>
-                    setPolicy({ ...policy, [key]: Number(event.target.value) })
-                  }
-                />
-              </Field>
-            );
-          })}
+          {(Object.keys(EXPERIENCE_POLICY_LIMITS) as Array<keyof typeof EXPERIENCE_POLICY_LIMITS>).map(
+            (key) => {
+              const limit = EXPERIENCE_POLICY_LIMITS[key];
+              return (
+                <Field key={key} label={`${limit.label}（${limit.min}–${limit.max}）`}>
+                  <input
+                    type="number"
+                    min={limit.min}
+                    max={limit.max}
+                    className={input}
+                    value={policy[key]}
+                    onChange={(event) =>
+                      setPolicy({ ...policy, [key]: Number(event.target.value) })
+                    }
+                  />
+                </Field>
+              );
+            },
+          )}
+          <Field label="模型档位">
+            <select
+              className={input}
+              value={policy.modelTier}
+              onChange={(event) => setPolicy({ ...policy, modelTier: event.target.value })}
+            >
+              {EXPERIENCE_MODEL_TIERS.map((tier) => (
+                <option key={tier} value={tier}>
+                  {tier === "pro" ? "pro · 深度模型" : "fast · 轻量模型"}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="成功后自动沉淀">
+            <select
+              className={input}
+              value={policy.autoCaptureSuccess ? "on" : "off"}
+              onChange={(event) =>
+                setPolicy({ ...policy, autoCaptureSuccess: event.target.value === "on" })
+              }
+            >
+              <option value="off">关闭（只采失败/退回/复盘）</option>
+              <option value="on">开启（产线成功也入队）</option>
+            </select>
+          </Field>
         </div>
 
         <div className={actions}>
@@ -750,9 +826,81 @@ export function SettingsClient({
         ) : null}
 
         <p className={`${meta} mt-3`}>
-          最短字数决定「值不值得入队」；截断上限只保留头 30% + 关键段 + 尾 30%，不会把长日志整份送进模型；
-          每日产卡上限命中时 job 会推迟到次日，不消耗模型额度。
+          最短字数决定「值不值得入队」；截断上限只保留头 30% + 关键段 + 尾 30%；
+          冷却窗与去重窗口控制同一故障的合并；最小信号等级：
+          {EXPERIENCE_SIGNAL_LEVELS.map((item) => item.label).join(" / ")}。人工复盘不受信号阈值限制。
         </p>
+      </SectionCard>
+
+      <SectionCard
+        title="经验采集开关（部门 × 通道）"
+        desc="关闭后该部门对应通道的来源不再入队；没有配置过的组合默认启用。"
+        right={<span className={badge()}>{matrix.length} 个部门</span>}
+      >
+        {matrix.length === 0 ? (
+          <div className="rounded-2xl bg-apple-canvas px-4 py-6 text-center text-[13px] text-zinc-500">
+            还没有部门，先到组织管理创建部门。
+          </div>
+        ) : (
+          <div className="max-h-96 overflow-auto">
+            <table className="w-full border-separate border-spacing-y-1 text-[12px]">
+              <thead>
+                <tr className={`${meta} text-left`}>
+                  <th className="sticky left-0 bg-white px-2 py-1 font-medium">部门</th>
+                  {EXPERIENCE_CHANNELS.map((channel) => (
+                    <th key={channel.key} className="px-2 py-1 text-center font-medium">
+                      {channel.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {matrix.map((department) => (
+                  <tr key={department.departmentId} className="bg-apple-canvas/60">
+                    <td className="sticky left-0 bg-apple-canvas/60 px-2 py-1.5 text-zinc-800">
+                      {department.departmentName}
+                    </td>
+                    {EXPERIENCE_CHANNELS.map((channel) => (
+                      <td key={channel.key} className="px-2 py-1.5 text-center">
+                        <input
+                          type="checkbox"
+                          aria-label={`${department.departmentName} · ${channel.label}`}
+                          checked={department.channels[channel.key] ?? true}
+                          onChange={() => toggleChannel(department.departmentId, channel.key)}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className={actions}>
+          <button
+            type="button"
+            className={btnBlue}
+            disabled={channelsBusy}
+            onClick={submitChannels}
+          >
+            {channelsBusy ? "保存中…" : "保存采集开关"}
+          </button>
+          <button
+            type="button"
+            className={btnGhost}
+            disabled={channelsBusy}
+            onClick={() => {
+              setMatrix(experienceChannels);
+              setChannelsMessage(null);
+            }}
+          >
+            还原为当前已保存值
+          </button>
+        </div>
+        {channelsMessage ? (
+          <InlineMessage tone={channelsMessage.tone}>{channelsMessage.text}</InlineMessage>
+        ) : null}
       </SectionCard>
 
       <SectionCard

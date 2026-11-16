@@ -17,6 +17,8 @@ revoke insert, update, delete, truncate on public.experience_policies from jxf_a
 grant select on public.experience_policies to jxf_app;
 
 -- 读取当前租户策略；没有配置行或没有租户上下文时返回代码默认值，调用方不必判空。
+-- 返回类型可能已被 040 扩展；策略每次启动都会重放，先删再建避免 return type 冲突。
+drop function if exists app.experience_policy();
 create or replace function app.experience_policy()
 returns table (
   min_source_chars integer,
