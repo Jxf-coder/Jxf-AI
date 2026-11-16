@@ -9,6 +9,7 @@ export const KNOWLEDGE_TABS = [
   { key: "gaps", label: "缺口" },
   { key: "qa", label: "问答来源" },
   { key: "regression", label: "回归题" },
+  { key: "routes", label: "路由纠偏" },
 ] as const;
 
 export type KnowledgeTab = (typeof KNOWLEDGE_TABS)[number]["key"];

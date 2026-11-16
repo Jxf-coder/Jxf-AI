@@ -26,8 +26,44 @@ export const FOLDER_KEYS: readonly FolderKey[] = STANDARD_FOLDERS.map((folder) =
 export const DEFAULT_DOCUMENT_FOLDER: FolderKey = "01-original";
 export const DEFAULT_CARD_FOLDER: FolderKey = "02-cards";
 
+/**
+ * 事实问答的召回目录白名单。
+ *
+ * 05-经验蒸馏 / 08-复盘归档 是「经验与总结」，不是可引用的事实依据，
+ * 必须在事实问答里显式排除；经验检索通道另行传 {05-distill}（可选加 08）。
+ */
+export const FACT_FOLDERS: readonly FolderKey[] = [
+  "02-cards",
+  "03-standards",
+  "04-cases",
+  "06-templates",
+  "07-training",
+];
+
 export function isFolderKey(value: string | undefined | null): value is FolderKey {
   return typeof value === "string" && (FOLDER_KEYS as readonly string[]).includes(value);
+}
+
+/**
+ * 产线可声明的归档目录：只允许语义目录，01/02/99 属于原始素材、默认卡片与回收站，
+ * 不能作为产线交付物的强制归档目标。
+ */
+export const ARCHIVE_FOLDERS: readonly FolderKey[] = [
+  "03-standards",
+  "04-cases",
+  "05-distill",
+  "06-templates",
+  "07-training",
+  "08-retro",
+];
+
+export function isArchiveFolder(value: string | undefined | null): value is FolderKey {
+  return typeof value === "string" && (ARCHIVE_FOLDERS as readonly string[]).includes(value);
+}
+
+/** 99-回收站只能由删除动作产生，不能作为上传目标 */
+export function isUploadableFolder(value: string | undefined | null): value is FolderKey {
+  return isFolderKey(value) && value !== "99-trash";
 }
 
 export function folderLabel(key: string): string {

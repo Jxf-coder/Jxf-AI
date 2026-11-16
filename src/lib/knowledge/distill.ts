@@ -18,6 +18,7 @@ import { chatCompletion } from "@/lib/ai/openai";
 import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
+import { loadEnv } from "@/lib/env";
 import { distillDedupeKey } from "@/lib/knowledge/experience/dedupe";
 import { routeFolder } from "@/lib/knowledge/experience/routing";
 import { normalizeForMatch, numbersDiffer, titleKey, verifyQuoteInChunk } from "@/lib/knowledge/evidence";
@@ -117,12 +118,18 @@ export async function distillDocument(context: UserContext, documentId: string):
   }
 
   const prompt = buildPrompt(loaded.document.title, loaded.chunks);
+  const extract = loadEnv().ai;
   const answer = await chatCompletion(
     [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: prompt },
     ],
-    { temperature: 0.1, tier: "fast" },
+    {
+      temperature: 0.1,
+      tier: "fast",
+      maxTokens: extract.extractMaxTokens,
+      timeoutMs: extract.extractTimeoutMs,
+    },
   );
 
   if (!answer) {

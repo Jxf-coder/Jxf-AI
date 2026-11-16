@@ -12,6 +12,8 @@ import {
 import { aiStatus } from "@/lib/ai/openai";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
+import { isFolderKey } from "@/lib/knowledge/folders";
+import { formatFileSizeLimit, maxFileBytes } from "@/lib/knowledge/ingest";
 import { loadKnowledgeStats } from "@/lib/knowledge/stats";
 import {
   isUuid,
@@ -34,6 +36,7 @@ import { GraphView } from "./_components/GraphView";
 import { MetaTab } from "./_components/MetaTab";
 import { QaTab } from "./_components/QaTab";
 import { RegressionTab } from "./_components/RegressionTab";
+import { RouteStatsTab } from "./_components/RouteStatsTab";
 import { ScoutTab } from "./_components/ScoutTab";
 import { StatBar } from "./_components/StatBar";
 import { DEFAULT_TAB, TabNav, isKnowledgeTab, type KnowledgeTab } from "./_components/TabNav";
@@ -69,6 +72,7 @@ export default async function KnowledgePage({
     doc?: string;
     card?: string;
     treeQ?: string;
+    treeFolder?: string;
     folder?: string;
     dept?: string;
     role?: string;
@@ -83,6 +87,8 @@ export default async function KnowledgePage({
   const params = await searchParams;
   const tab: KnowledgeTab = isKnowledgeTab(params.tab) ? params.tab : DEFAULT_TAB;
   const treeQuery = typeof params.treeQ === "string" ? params.treeQ.trim().slice(0, 60) : "";
+  const treeFolder =
+    typeof params.treeFolder === "string" && isFolderKey(params.treeFolder) ? params.treeFolder : "";
 
   const access = await withUserContext(context, async (client) => {
     let actor: ResolvedPermissions | null = null;
@@ -101,7 +107,7 @@ export default async function KnowledgePage({
     access.canRead ? loadKnowledgeStats(context) : Promise.resolve(null),
     access.canRead ? loadWorkspaceTree(context) : Promise.resolve(null),
     access.canRead && treeQuery.length > 0
-      ? searchWorkspace(context, treeQuery)
+      ? searchWorkspace(context, treeQuery, { folder: treeFolder })
       : Promise.resolve([]),
     access.canRead && tab === "scout" ? listNeedsOcrDocuments(context) : Promise.resolve([]),
     // 共享审批只对 L1 展示；RLS 同时把范围限制在可读子树内
@@ -179,6 +185,7 @@ export default async function KnowledgePage({
           <WorkspaceTree
             tree={tree}
             query={treeQuery}
+            folder={treeFolder}
             matches={matches}
             tab={tab}
             target={
@@ -230,6 +237,7 @@ export default async function KnowledgePage({
                       needsOcr={needsOcr}
                       target={uploadTarget}
                       isL1={context.accessLevel === "L1"}
+                      maxFileLabel={formatFileSizeLimit(maxFileBytes())}
                       shareRequests={shareRequests}
                       departments={tree.departments.map((department) => ({
                         id: department.id,
@@ -274,6 +282,8 @@ export default async function KnowledgePage({
             {tab === "regression" ? (
               <RegressionTab context={context} canWrite={access.canWrite} />
             ) : null}
+
+            {tab === "routes" ? <RouteStatsTab context={context} /> : null}
 
             {tab === "cards" ? <CardsTab context={context} searchParams={params} /> : null}
 

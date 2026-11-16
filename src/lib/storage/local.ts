@@ -18,6 +18,7 @@ const KEY_PREFIX = "uploads/";
 const CONTENT_TYPES: Record<string, string> = {
   pdf: "application/pdf",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  doc: "application/msword",
   txt: "text/plain; charset=utf-8",
   md: "text/markdown; charset=utf-8",
   markdown: "text/markdown; charset=utf-8",

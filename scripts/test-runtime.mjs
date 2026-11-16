@@ -12,9 +12,16 @@ import { Client, Pool } from "pg";
 
 import { acceptRun } from "../src/lib/runtime/accept.ts";
 import { claimRun, heartbeatRun, sweepExhausted } from "../src/lib/runtime/claim.ts";
+import { purgeExpiredExperienceSourceText } from "../src/lib/knowledge/experience/queue.ts";
 import { isCancelRequested, requestCancel } from "../src/lib/runtime/cancel.ts";
 import { emitEvent, savePartialText } from "../src/lib/runtime/emit.ts";
 import { markInterruptedForOthers, sweepStaleHeartbeat } from "../src/lib/runtime/recover.ts";
+import {
+  MAX_MEMORY_ITEMS,
+  addThreadMemory,
+  deleteThreadMemory,
+  listThreadMemories,
+} from "../src/lib/runtime/memory.ts";
 import { resumeRun } from "../src/lib/runtime/resume.ts";
 import { recordUsage } from "../src/lib/runtime/usage.ts";
 import { getPool } from "../src/lib/db/pool.ts";
@@ -657,6 +664,130 @@ async function main() {
       client.query("select count(1)::int as n from runs where id = $1", [accepted.runId]),
     );
     check("L1 可读任意部门 run", bossRead.rows[0].n === 1);
+
+    // -------------------------------------------------------------------------
+    // 10. 会话记忆：仅本人可见、注入当前会话、上限与删除
+    // -------------------------------------------------------------------------
+    const memoryText = "客户偏好：先给结论再给论据";
+    const memory = await addThreadMemory(a1, accepted.threadId, memoryText);
+    const memoryList = await listThreadMemories(a1, accepted.threadId);
+    check(
+      "本人可读到自己置顶的会话记忆",
+      memoryList.length === 1 && memoryList[0].id === memory.id && memoryList[0].content === memoryText,
+      JSON.stringify(memoryList),
+    );
+
+    const memoryDirectCross = await runAs(b1, (client) =>
+      client.query("select count(1)::int as n from thread_memories where thread_id = $1", [accepted.threadId]),
+    );
+    check("RLS 让其他用户直接查询会话记忆返回 0 行", memoryDirectCross.rows[0].n === 0, String(memoryDirectCross.rows[0].n));
+
+    const memoryOtherList = await listThreadMemories(b1, accepted.threadId);
+    check("其他用户读不到他人会话记忆", memoryOtherList.length === 0, String(memoryOtherList.length));
+
+    const memoryRun = await acceptRun(a1, {
+      kind: "chat",
+      input: { question: "会话记忆注入验收" },
+      threadId: accepted.threadId,
+      clientTurnId: randomUUID(),
+    });
+    const memoryRunRow = await owner.query("select input->>'memory' as memory from runs where id = $1", [memoryRun.runId]);
+    check(
+      "受理时把会话记忆快照进 runs.input",
+      memoryRunRow.rows[0].memory === `- ${memoryText}`,
+      JSON.stringify(memoryRunRow.rows[0]),
+    );
+    await owner.query("update runs set status = 'done', finished_at = now() where id = $1", [memoryRun.runId]);
+
+    const memoryAudit = await owner.query(
+      "select count(1)::int as n from audit_events where action = 'chat.memory_added' and target_id = $1",
+      [memory.id],
+    );
+    check("置顶记忆写入审计", memoryAudit.rows[0].n === 1, String(memoryAudit.rows[0].n));
+
+    const tooLong = await addThreadMemory(a1, accepted.threadId, "长".repeat(501)).then(
+      () => false,
+      () => true,
+    );
+    check("单条记忆超过 500 字被拒绝", tooLong);
+
+    const capThread = await acceptRun(a1, {
+      kind: "chat",
+      input: { question: "记忆上限验收会话" },
+      clientTurnId: randomUUID(),
+    });
+    for (let index = 1; index <= MAX_MEMORY_ITEMS; index += 1) {
+      await addThreadMemory(a1, capThread.threadId, `偏好 ${index}`);
+    }
+    const overCap = await addThreadMemory(a1, capThread.threadId, "第 11 条").then(
+      () => false,
+      () => true,
+    );
+    check(`每条会话最多 ${MAX_MEMORY_ITEMS} 条记忆`, overCap);
+
+    await deleteThreadMemory(a1, memory.id);
+    const afterDelete = await listThreadMemories(a1, accepted.threadId);
+    check("删除后本人会话记忆列表为空", afterDelete.length === 0, String(afterDelete.length));
+
+    // -------------------------------------------------------------------------
+    // 11. 经验来源文本保留期：过期置空、pending 引用跳过、未到期保留
+    //     整个断言在 worker 事务内执行并回滚，避免清掉库里其他过期文本
+    // -------------------------------------------------------------------------
+    const insertJob = (text, ageDays) =>
+      owner.query(
+        `insert into experience_jobs
+           (tenant_id, department_id, channel, source_type, source_id, source_version,
+            cooldown_bucket, source_text, status, created_at)
+         values ($1, $2, 'manual', 'pipeline_run', $3, 'v1', $4, $5, 'done',
+                 now() - make_interval(days => $6))
+         returning id`,
+        [TENANT, deptA, randomUUID(), `manual:${randomUUID()}`, text, ageDays],
+      );
+
+    const expiredJob = await insertJob("过期来源文本", 100);
+    const referencedJob = await insertJob("被引用来源文本", 100);
+    const freshJob = await insertJob("未过期来源文本", 1);
+    await owner.query(
+      `insert into knowledge_cards
+         (tenant_id, department_id, kind, title, body, status, origin, folder_key,
+          source_job_id, source_channel)
+       values ($1, $2, 'fact', '保留期引用卡', '正文', 'pending', 'distill', '05-distill', $3, 'pipeline')`,
+      [TENANT, deptA, referencedJob.rows[0].id],
+    );
+
+    const purgeClient = await workerPool.connect();
+    try {
+      await purgeClient.query("begin");
+      const purgedResult = await purgeExpiredExperienceSourceText(purgeClient);
+      const afterPurge = await purgeClient.query(
+        "select id, source_text from experience_jobs where id = any($1::uuid[])",
+        [[expiredJob.rows[0].id, referencedJob.rows[0].id, freshJob.rows[0].id]],
+      );
+      const sourceTextOf = Object.fromEntries(afterPurge.rows.map((row) => [row.id, row.source_text]));
+      check(
+        "保留期：过期且未被引用的来源文本被清空",
+        sourceTextOf[expiredJob.rows[0].id] === null,
+        JSON.stringify(sourceTextOf[expiredJob.rows[0].id]),
+      );
+      check(
+        "保留期：被 pending 卡引用的旧 job 保留原文",
+        sourceTextOf[referencedJob.rows[0].id] === "被引用来源文本",
+        JSON.stringify(sourceTextOf[referencedJob.rows[0].id]),
+      );
+      check(
+        "保留期：未到期的来源文本保留",
+        sourceTextOf[freshJob.rows[0].id] === "未过期来源文本",
+        JSON.stringify(sourceTextOf[freshJob.rows[0].id]),
+      );
+      check(
+        "保留期：返回清理与跳过计数",
+        purgedResult.purged >= 1 && purgedResult.skipped >= 1,
+        JSON.stringify(purgedResult),
+      );
+      await purgeClient.query("rollback");
+    } finally {
+      purgeClient.release();
+    }
   } finally {
     await owner.query("begin");
     await cleanup(owner);

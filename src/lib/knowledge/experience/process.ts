@@ -15,15 +15,18 @@
 import type { Pool, PoolClient } from "pg";
 
 import { chatCompletionDetailed } from "@/lib/ai/openai";
+import { loadEnv } from "@/lib/env";
 import { normalizeForMatch, numbersDiffer, titleKey, verifyQuoteInText } from "@/lib/knowledge/evidence";
 import { errorMessage, log } from "@/lib/logger";
 
 import { experienceDedupeKey } from "./dedupe";
 import { hashText } from "./fingerprint";
+import { readExperiencePolicy, type ExperiencePolicy } from "./policy";
 import type { ClaimedExperienceJob } from "./queue";
 import { completeExperienceJob, deferExperienceJob } from "./queue";
 import { routeFolder, type RouteChannel } from "./routing";
 
+/** 缺省阈值；实际生效值由 app.experience_policy() 提供（settings 可改） */
 export const MAX_CANDIDATES = 3;
 export const MAX_DAILY_CARDS = 50;
 
@@ -122,8 +125,13 @@ function locatorOf(job: ClaimedExperienceJob): string {
   return "运行产物";
 }
 
+interface DailyCapCheck {
+  deferred: boolean;
+  policy: ExperiencePolicy;
+}
+
 /** 每日卡片上限：命中则把 job 推迟到次日 00:00，不消耗 LLM */
-async function deferIfDailyCapReached(pool: Pool, job: ClaimedExperienceJob): Promise<boolean> {
+async function deferIfDailyCapReached(pool: Pool, job: ClaimedExperienceJob): Promise<DailyCapCheck> {
   const client = await pool.connect();
   try {
     await client.query("begin");
@@ -132,6 +140,7 @@ async function deferIfDailyCapReached(pool: Pool, job: ClaimedExperienceJob): Pr
               set_config('app.department_ids', $2, true)`,
       [job.tenantId, `{${job.departmentId}}`],
     );
+    const policy = await readExperiencePolicy(client);
     const { rows } = await client.query<{ count: number }>(
       `select count(*)::int as count
          from knowledge_cards
@@ -142,16 +151,17 @@ async function deferIfDailyCapReached(pool: Pool, job: ClaimedExperienceJob): Pr
     );
     await client.query("commit");
     const used = Number(rows[0]?.count ?? 0);
-    if (used < MAX_DAILY_CARDS) {
-      return false;
+    if (used < policy.dailyCardLimit) {
+      return { deferred: false, policy };
     }
     await deferExperienceJob(pool, job.id, "daily card cap reached", "next_day");
     log("info", "experience_job_deferred", {
       job_id: job.id,
       reason: "daily_card_cap",
       used,
+      limit: policy.dailyCardLimit,
     });
-    return true;
+    return { deferred: true, policy };
   } catch (error) {
     await client.query("rollback").catch(() => {});
     throw error;
@@ -174,17 +184,28 @@ export async function processExperienceJob(
     return result;
   }
 
-  if (await deferIfDailyCapReached(pool, job)) {
-    return { status: "skipped", cardIds: [], reason: "当日卡片额度已用尽，已推迟到次日" };
+  const cap = await deferIfDailyCapReached(pool, job);
+  if (cap.deferred) {
+    return {
+      status: "skipped",
+      cardIds: [],
+      reason: `当日卡片额度已用尽（上限 ${cap.policy.dailyCardLimit} 张），已推迟到次日`,
+    };
   }
 
   const startedAt = Date.now();
+  const extract = loadEnv().ai;
   const completion = await chatCompletionDetailed(
     [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: sourceText },
     ],
-    { temperature: 0.1, tier: "fast" },
+    {
+      temperature: 0.1,
+      tier: "fast",
+      maxTokens: extract.extractMaxTokens,
+      timeoutMs: extract.extractTimeoutMs,
+    },
   );
   const durationMs = Date.now() - startedAt;
 
@@ -198,7 +219,7 @@ export async function processExperienceJob(
     return result;
   }
 
-  const candidates = parseCandidates(completion.text).slice(0, MAX_CANDIDATES);
+  const candidates = parseCandidates(completion.text).slice(0, cap.policy.maxCandidates);
   const meta = {
     model: completion.model,
     provider: completion.provider,

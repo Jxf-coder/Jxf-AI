@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache";
 
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
+import {
+  PolicyInputError,
+  saveExperiencePolicy,
+  type ExperiencePolicy,
+} from "@/lib/knowledge/experience/policy";
 import { errorMessage, log } from "@/lib/logger";
 import { OpsTaskError, createOpsTask } from "@/lib/ops/tasks";
 import type { OpsTaskKind, OpsTaskView } from "@/lib/ops/types";
@@ -156,6 +161,28 @@ export async function testNotificationAction(): Promise<SettingsActionResult> {
     return { ok: false, message: `发送失败：${result.error ?? "未知错误"}` };
   } catch (error) {
     return failure("test_notification", error);
+  }
+}
+
+export async function saveExperiencePolicyAction(
+  input: ExperiencePolicy,
+): Promise<SettingsActionResult> {
+  try {
+    const context = await contextOf();
+    if (context.accessLevel !== "L1") {
+      return { ok: false, message: "只有 L1 可以修改经验沉淀策略" };
+    }
+    const saved = await saveExperiencePolicy(context, input);
+    revalidatePath("/settings");
+    return {
+      ok: true,
+      message: `经验沉淀策略已保存：最短 ${saved.minSourceChars} 字 · 每小时 ${saved.hourlyJobLimit} 条 · 每日 ${saved.dailyCardLimit} 张 · 每 job ${saved.maxCandidates} 个候选`,
+    };
+  } catch (error) {
+    if (error instanceof PolicyInputError) {
+      return { ok: false, message: error.message };
+    }
+    return failure("save_experience_policy", error);
   }
 }
 

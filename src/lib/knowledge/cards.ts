@@ -18,6 +18,7 @@ import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
 import { documentDedupeKey } from "@/lib/knowledge/experience/dedupe";
 import { recordRouteFeedback } from "@/lib/knowledge/experience/feedback";
+import { routeFolder } from "@/lib/knowledge/experience/routing";
 import { isFolderKey, type FolderKey } from "@/lib/knowledge/folders";
 import { requireContextPermission } from "@/lib/permissions/server";
 
@@ -118,6 +119,8 @@ export interface CardMetaPatch {
   source?: string | null;
   version?: string | null;
   owner?: string | null;
+  /** 批量改目录；设置后同时清除 route_pending */
+  folderKey?: string | null;
 }
 
 export interface BulkResult {
@@ -443,6 +446,9 @@ export async function createManualCard(
     throw new Error("正文过长（≤ 4000 字）");
   }
   const sourceDocumentId = input.sourceDocumentId?.trim() || null;
+  // 人工建卡也走目录语义路由：case 自动归 04，内容命中规范/模板/培训等归对应目录，
+  // 多个目录同分时标记 route_pending，由人工在下拉里裁决。
+  const manualRoute = routeFolder({ channel: "manual", kind: input.kind, title, body });
 
   const extra: Record<string, string> = {};
   for (const key of META_KEYS) {
@@ -454,10 +460,11 @@ export async function createManualCard(
 
   return withUserContext(context, async (client) => {
     let departmentId = context.activeDepartmentId;
+    let route = manualRoute;
 
     if (sourceDocumentId) {
-      const document = await client.query<{ department_id: string }>(
-        "select department_id from documents where id = $1",
+      const document = await client.query<{ department_id: string; folder_key: string }>(
+        "select department_id, folder_key from documents where id = $1",
         [sourceDocumentId],
       );
       const documentDepartmentId = document.rows[0]?.department_id;
@@ -465,6 +472,13 @@ export async function createManualCard(
         throw new Error("来源文档不存在或无权访问");
       }
       departmentId = documentDepartmentId;
+      route = routeFolder({
+        channel: "document",
+        kind: input.kind,
+        title,
+        body,
+        sourceFolder: document.rows[0]?.folder_key ?? null,
+      });
     }
 
     if (!departmentId) {
@@ -486,9 +500,10 @@ export async function createManualCard(
       const inserted = await client.query<{ id: string; rev: number }>(
         `insert into knowledge_cards
            (tenant_id, department_id, kind, title, body, status, origin, human_edited, rev,
-            category, product, external_ok, valid_until, extra, role_key, updated_by, source_channel)
+            category, product, external_ok, valid_until, extra, role_key, updated_by, source_channel,
+            folder_key, route_reason, route_confidence, suggested_folder, route_pending)
          values ($1, $2, $3, $4, $5, 'pending', 'manual', true, 1, $6, $7, $8, $9, $10::jsonb,
-                 ${roleKeySql}, $11, 'manual')
+                 ${roleKeySql}, $11, 'manual', $12, $13, $14, $15, $16)
          returning id, rev`,
         [
           context.tenantId,
@@ -502,6 +517,11 @@ export async function createManualCard(
           normText(input.validUntil),
           JSON.stringify(extra),
           context.userId,
+          route.folderKey,
+          route.reason,
+          route.confidence,
+          route.suggestedFolder,
+          route.pending,
         ],
       );
       const created = inserted.rows[0];
@@ -600,9 +620,11 @@ export async function createManualCard(
       `insert into knowledge_cards
          (tenant_id, department_id, kind, title, body, status, origin, human_edited, rev,
           category, product, external_ok, valid_until, extra, role_key, source_document_id, updated_by,
-          source_channel, source_ref, dedupe_key)
+          source_channel, source_ref, dedupe_key,
+          folder_key, route_reason, route_confidence, suggested_folder, route_pending)
        values ($1, $2, $3, $4, $5, 'pending', 'manual', true, 1, $6, $7, $8, $9, $10::jsonb,
-               ${roleKeySql}, $12::uuid, $11, 'manual', jsonb_build_object('documentId', $12::uuid), $13)
+               ${roleKeySql}, $12::uuid, $11, 'manual', jsonb_build_object('documentId', $12::uuid), $13,
+               $14, $15, $16, $17, $18)
        on conflict (tenant_id, source_document_id) where source_document_id is not null do nothing
        returning id, rev`,
       [
@@ -619,6 +641,11 @@ export async function createManualCard(
         context.userId,
         sourceDocumentId,
         documentDedupeKey(sourceDocumentId),
+        route.folderKey,
+        route.reason,
+        route.confidence,
+        route.suggestedFolder,
+        route.pending,
       ],
     );
 
@@ -1038,8 +1065,18 @@ export async function patchCards(
     }
   }
 
+  const folderPatch =
+    typeof patch.folderKey === "string" && patch.folderKey.length > 0 ? patch.folderKey : null;
+  if (folderPatch && !isFolderKey(folderPatch)) {
+    throw new Error("目标目录不合法");
+  }
+
   const hasColumnPatch =
-    "category" in patch || "product" in patch || "validUntil" in patch || "externalOk" in patch;
+    "category" in patch ||
+    "product" in patch ||
+    "validUntil" in patch ||
+    "externalOk" in patch ||
+    folderPatch !== null;
   const hasExtraPatch = Object.keys(extraPatch).length > 0;
 
   if (!hasColumnPatch && !hasExtraPatch) {
@@ -1085,6 +1122,10 @@ export async function patchCards(
         if ("externalOk" in patch) {
           values.push(Boolean(patch.externalOk));
           sets.push(`external_ok = $${values.length}`);
+        }
+        if (folderPatch) {
+          values.push(folderPatch);
+          sets.push(`folder_key = $${values.length}`, "route_pending = false");
         }
         if (hasExtraPatch) {
           values.push(JSON.stringify(extraPatch));

@@ -627,7 +627,8 @@ as $fn$
       cross join patterns p
       cross join scope s
      where k.status = 'confirmed'
-       and k.department_id = any (s.ids)
+       -- 本部门子树之外，显式共享的卡片允许跨部门召回（RLS 已放行 visibility='shared'）
+       and (k.department_id = any (s.ids) or k.visibility = 'shared')
        and (p_folders is null or k.folder_key = any (p_folders))
        and (k.title like any (p.pats) or k.body like any (p.pats))
   ),
@@ -646,7 +647,8 @@ as $fn$
       cross join scope s
      where p_embedding is not null
        and c.embedding is not null
-       and c.department_id = any (s.ids)
+       -- 共享文档的切片参与卡片向量召回，否则共享卡只能靠关键词命中
+       and (c.department_id = any (s.ids) or d0.visibility = 'shared')
        -- 相似度闸门：余弦距离 > 0.5 视为无关，避免问答对任何问题都强行召回
        and c.embedding <=> p_embedding <= 0.5
      order by c.embedding <=> p_embedding

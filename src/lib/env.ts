@@ -33,6 +33,10 @@ export interface AiEnvConfig {
   timeoutMs: number;
   topK: number;
   maxTokens: number;
+  /** 长抽取（蒸馏建卡 / 经验提炼）的 token 预算：推理模型的思考 token 也计入 */
+  extractMaxTokens: number;
+  /** 长抽取的请求超时：大 token 预算下单次生成可能远超常规超时 */
+  extractTimeoutMs: number;
   /** 瞬时故障（503 / 超时 / 连接重置）的指数避让重试次数，0 表示不重试 */
   retryAttempts: number;
   retryBaseMs: number;
@@ -77,6 +81,10 @@ export interface AppEnv {
   };
   ai: AiEnvConfig;
   ocr: OcrEnvConfig;
+  knowledge: {
+    /** 知识库单文件上限：大文件解析会在内存里整份展开，按机器内存调整 */
+    maxFileBytes: number;
+  };
 }
 
 const VALID_LOG_LEVELS: readonly LogLevel[] = ["debug", "info", "warn", "error"];
@@ -200,6 +208,8 @@ function readAiConfig(): AiEnvConfig {
     timeoutMs: readOptionalInt("JXF_AI_TIMEOUT_MS", 30_000),
     topK: readOptionalInt("JXF_AI_TOP_K", 6),
     maxTokens: readOptionalInt("JXF_AI_MAX_TOKENS", 1024),
+    extractMaxTokens: readOptionalInt("JXF_AI_EXTRACT_MAX_TOKENS", 32_768),
+    extractTimeoutMs: readOptionalInt("JXF_AI_EXTRACT_TIMEOUT_MS", 180_000),
     retryAttempts: readOptionalCount("JXF_AI_RETRY_ATTEMPTS", 2),
     retryBaseMs: readOptionalInt("JXF_AI_RETRY_BASE_MS", 500),
     fallback: readAiFallback(chatModel, fastModel),
@@ -273,6 +283,9 @@ export function loadEnv(): AppEnv {
     },
     ai: readAiConfig(),
     ocr: readOcrConfig(),
+    knowledge: {
+      maxFileBytes: readOptionalInt("JXF_KNOWLEDGE_MAX_FILE_BYTES", 50 * 1024 * 1024),
+    },
   };
 
   return cached;

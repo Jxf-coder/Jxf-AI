@@ -10,6 +10,7 @@ import {
   FolderIcon,
   LayersIcon,
 } from "@/components/ui/icons";
+import { folderLabel, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
 import type { TreeFolder, TreeItem, WorkspaceTree } from "@/lib/knowledge/workspace";
 
 import { emptyTrashAction } from "../actions";
@@ -19,6 +20,8 @@ interface WorkspaceTreeProps {
   selected: { kind: "doc" | "card"; id: string } | null;
   /** 目录标题搜索词（服务端检索，不受目录 500 条上限影响） */
   query: string;
+  /** 搜索限定的目录；空表示全库 */
+  folder: string;
   matches: TreeItem[];
   /** 当前 Tab，保证搜索提交后不跳出当前视图 */
   tab: string;
@@ -57,7 +60,7 @@ function itemStatusLabel(item: TreeItem): string {
 }
 
 /** 左侧常驻目录：公司资料（共享） + 部门 → 岗位 → 10 个标准目录 */
-export function WorkspaceTree({ tree, selected, query, matches, tab, target }: WorkspaceTreeProps) {
+export function WorkspaceTree({ tree, selected, query, folder, matches, tab, target }: WorkspaceTreeProps) {
   const router = useRouter();
   const firstDepartment = tree.departments[0];
   const firstRole = firstDepartment?.roles[0];
@@ -99,7 +102,9 @@ export function WorkspaceTree({ tree, selected, query, matches, tab, target }: W
       item.kind === "card"
         ? `/knowledge?tab=scout&card=${item.id}`
         : `/knowledge?tab=scout&doc=${item.id}`;
-    const href = keepQuery && query ? `${base}&treeQ=${encodeURIComponent(query)}` : base;
+    const href = keepQuery && query
+      ? `${base}&treeQ=${encodeURIComponent(query)}${folder ? `&treeFolder=${encodeURIComponent(folder)}` : ""}`
+      : base;
     return (
       <Link
         key={`${item.kind}:${item.id}`}
@@ -119,7 +124,12 @@ export function WorkspaceTree({ tree, selected, query, matches, tab, target }: W
         ) : (
           <FileTextIcon size={13} className="shrink-0 text-zinc-400" />
         )}
-        <span className="truncate">{item.title}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate">{item.title}</span>
+          {item.location ? (
+            <span className="block truncate text-[10px] text-zinc-400">{item.location}</span>
+          ) : null}
+        </span>
         <span className={`ml-2 h-1.5 w-1.5 shrink-0 rounded-full ${statusDot(item.status)}`} />
       </Link>
     );
@@ -291,12 +301,26 @@ export function WorkspaceTree({ tree, selected, query, matches, tab, target }: W
           aria-label="搜索知识库标题"
           className="w-full rounded-lg border border-black/[0.06] bg-white px-2 py-1.5 text-[12px] text-zinc-800 outline-none placeholder:text-zinc-400 focus:border-black/20"
         />
+        <select
+          name="treeFolder"
+          defaultValue={folder}
+          aria-label="限定搜索目录"
+          onChange={(event) => event.currentTarget.form?.requestSubmit()}
+          className="mt-1.5 w-full rounded-lg border border-black/[0.06] bg-white px-2 py-1.5 text-[12px] text-zinc-700 outline-none focus:border-black/20"
+        >
+          <option value="">全部目录</option>
+          {STANDARD_FOLDERS.map((item) => (
+            <option key={item.key} value={item.key}>
+              {item.label}
+            </option>
+          ))}
+        </select>
       </form>
 
       {query ? (
         <div className="mb-2 rounded-xl border border-black/[0.05] bg-white/80 p-1">
           <p className="px-1.5 py-1 text-[11px] text-zinc-500">
-            搜索「{query}」 · {matches.length} 条
+            搜索「{query}」 · {folder ? folderLabel(folder) : "全部目录"} · {matches.length} 条
           </p>
           {matches.length === 0 ? (
             <p className="px-1.5 pb-1 text-[11px] text-zinc-400">没有匹配的知识卡或文档</p>
@@ -304,7 +328,7 @@ export function WorkspaceTree({ tree, selected, query, matches, tab, target }: W
             matches.map((item) => itemRow(item, 1, true))
           )}
           <Link
-            href={`/knowledge?tab=${tab}`}
+            href={`/knowledge?tab=${tab}${folder ? `&treeFolder=${encodeURIComponent(folder)}` : ""}`}
             scroll={false}
             className="block px-1.5 py-1 text-[11px] text-zinc-400 transition-colors hover:text-zinc-700"
           >

@@ -16,6 +16,7 @@ import {
 } from "../src/lib/pipelines.ts";
 import { advancePipelineRuns, applyPrevious, sweepScheduledPipelines } from "../src/lib/pipeline-runner.ts";
 import { capturePipelineRunExperience } from "../src/lib/knowledge/experience/collectors.ts";
+import { archivePipelineRunDeliverables } from "../src/lib/knowledge/pipeline-archive.ts";
 import { reviewWorkItem } from "../src/lib/work-items.ts";
 import {
   dispatchPipelineEvents,
@@ -145,6 +146,8 @@ async function main() {
   const eventIds = [];
   /** 经验队列清理：source_id 指向测试产线运行 / 工作项 */
   const experienceSourceIds = [];
+  /** 产线归档卡清理 */
+  const archivedCardIds = [];
   let hooks = null;
 
   try {
@@ -403,6 +406,89 @@ async function main() {
     );
 
     // ------------------------------------------------------------------
+    // 2.3 产线收口强制归档：声明目录后把交付物归档为待确认卡片
+    // ------------------------------------------------------------------
+    const archivePipeline = await createPipeline(l1, {
+      name: `归档产线 ${stamp}`,
+      archiveFolder: "08-retro",
+      steps: [
+        {
+          title: `归档步骤 ${stamp}`,
+          brief: "产出本周复盘交付物",
+          aiEmployeeId: employeeId,
+          aiEmployeeName: "产线测试员工",
+        },
+      ],
+    });
+    pipelineIds.push(archivePipeline.id);
+    check("产线归档目录已保存", archivePipeline.archiveFolder === "08-retro");
+
+    let invalidArchive = null;
+    try {
+      await createPipeline(l1, {
+        name: `非法归档产线 ${stamp}`,
+        archiveFolder: "02-cards",
+        steps: [
+          { title: "非法步骤", brief: "x", aiEmployeeId: employeeId, aiEmployeeName: "产线测试员工" },
+        ],
+      });
+    } catch (error) {
+      invalidArchive = error;
+    }
+    check("非法归档目录被拒绝", invalidArchive instanceof Error, String(invalidArchive));
+
+    const archiveRun = await runPipeline(l1, archivePipeline.id);
+    workItemIds.push(...archiveRun.workItemIds);
+    for (const id of archiveRun.workItemIds) {
+      await freezeRun(owner, id);
+    }
+    await finishWorkItem(owner, archiveRun.workItemIds[0], "done", "本周复盘结论：交付节奏稳定。");
+    const archivedAdvance = await advancePipelineRuns(owner, hooks, { runIds: [archiveRun.runId] });
+    check("归档产线正常收口", archivedAdvance[0]?.action === "completed", JSON.stringify(archivedAdvance));
+
+    const archivedCard = await owner.query(
+      `select id, folder_key, status, source_channel, route_pending
+         from knowledge_cards
+        where tenant_id = $1 and dedupe_key = $2`,
+      [TENANT, `pipeline_run:${archiveRun.runId}`],
+    );
+    check(
+      "收口后交付物归档到声明目录",
+      archivedCard.rowCount === 1 &&
+        archivedCard.rows[0]?.folder_key === "08-retro" &&
+        archivedCard.rows[0]?.status === "pending" &&
+        archivedCard.rows[0]?.source_channel === "pipeline" &&
+        archivedCard.rows[0]?.route_pending === false,
+      JSON.stringify(archivedCard.rows),
+    );
+    const archivedCardId = archivedCard.rows[0]?.id;
+    if (archivedCardId) {
+      archivedCardIds.push(archivedCardId);
+    }
+    const archiveEvidence = await owner.query(
+      `select verified, quote from card_evidence where card_id = $1 and source_kind = 'run'`,
+      [archivedCardId],
+    );
+    check(
+      "归档卡带逐字证据",
+      archiveEvidence.rowCount >= 1 &&
+        archiveEvidence.rows[0]?.verified === true &&
+        String(archiveEvidence.rows[0]?.quote ?? "").length > 0,
+      JSON.stringify(archiveEvidence.rows),
+    );
+
+    const archivedAgain = await archivePipelineRunDeliverables(owner, archiveRun.runId);
+    const archivedCount = await owner.query(
+      `select count(*)::int as n from knowledge_cards where tenant_id = $1 and dedupe_key = $2`,
+      [TENANT, `pipeline_run:${archiveRun.runId}`],
+    );
+    check(
+      "同一运行重复归档不产生第二张卡",
+      archivedAgain === null && archivedCount.rows[0]?.n === 1,
+      JSON.stringify(archivedCount.rows),
+    );
+
+    // ------------------------------------------------------------------
     // 3. 定时触发：到点发起、同窗口不重复
     // ------------------------------------------------------------------
     const scheduled = await createPipeline(l1, {
@@ -607,6 +693,14 @@ async function main() {
       check("L2 不能生成 Webhook 令牌", deniedRotate);
     }
   } finally {
+    if (archivedCardIds.length > 0) {
+      await owner
+        .query("delete from card_evidence where card_id = any($1::uuid[])", [archivedCardIds])
+        .catch(() => undefined);
+      await owner
+        .query("delete from knowledge_cards where id = any($1::uuid[])", [archivedCardIds])
+        .catch(() => undefined);
+    }
     if (experienceSourceIds.length > 0) {
       const jobs = await owner
         .query("select id from experience_jobs where source_id = any($1::uuid[])", [

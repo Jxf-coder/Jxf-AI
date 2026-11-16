@@ -7,6 +7,7 @@
 
 import mammoth from "mammoth";
 import { extractText, getDocumentProxy } from "unpdf";
+import WordExtractor from "word-extractor";
 
 export class UnsupportedDocumentError extends Error {
   constructor(public readonly extension: string) {
@@ -49,6 +50,13 @@ export async function parseDocument(
   if (extension === "docx") {
     const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
     const text = normalizeText(result.value ?? "");
+    return { pages: text ? [text] : [], hasText: text.length > 0 };
+  }
+
+  // Word 97-2003 旧二进制格式：mammoth 不支持，改用 word-extractor 取正文
+  if (extension === "doc" || mime === "application/msword") {
+    const document = await new WordExtractor().extract(Buffer.from(buffer));
+    const text = normalizeText(document.getBody() ?? "");
     return { pages: text ? [text] : [], hasText: text.length > 0 };
   }
 

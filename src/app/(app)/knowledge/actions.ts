@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext, withUserContext } from "@/lib/db/user-context";
 import { patchCards, type CardMetaPatch } from "@/lib/knowledge/cards";
+import { submitRetroExperience } from "@/lib/knowledge/experience/retro";
 import { addGap, closeGap, reopenGap } from "@/lib/knowledge/gaps";
 import { revokeIngestRun } from "@/lib/knowledge/ingest";
 import { submitOcrText } from "@/lib/knowledge/ocr";
@@ -25,6 +26,7 @@ import {
   runRegression,
   seedRegressionQuestions,
 } from "@/lib/knowledge/regression";
+import { recalcRouteStats } from "@/lib/knowledge/route-stats";
 import { toPermissionMessage } from "@/lib/permissions/guard";
 
 export interface ActionResult {
@@ -41,6 +43,34 @@ export interface AskResult {
   ok: boolean;
   message?: string;
   answer?: QaAnswer;
+}
+
+/** 写一条人工复盘：进入经验队列，由 worker 提炼成 05/08 的待确认卡 */
+export async function createRetroAction(title: string, body: string): Promise<ActionResult> {
+  const session = await requireSession();
+  const context = await resolveUserContext(session.userId);
+
+  try {
+    const result = await submitRetroExperience(context, { title, body });
+    if (result.ok) {
+      revalidatePath("/knowledge");
+    }
+    return result;
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+/** 重算目录纠偏日聚合（仅 L1）：把最近 N 天的反馈汇总进聚合表 */
+export async function recalcRouteStatsAction(days: number): Promise<ActionResult> {
+  const context = await resolveCurrentContext();
+  try {
+    const rows = await recalcRouteStats(context, days);
+    revalidatePath("/knowledge");
+    return { ok: true, message: `已重算：${rows} 组聚合行` };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
 }
 
 /** 单轮 RAG 问答：检索 → 生成 → 引用与数字校验 → 审计 */

@@ -30,8 +30,10 @@ import {
   btnGhost,
   type Tone,
 } from "@/components/knowledge/tokens";
+import type { ThreadMemoryView } from "@/lib/runtime/memory";
 import type { ThreadDetail, ThreadSummary } from "@/lib/runtime/threads";
 
+import { MemoryPanel } from "./MemoryPanel";
 import {
   addThreadToKnowledgeAction,
   deleteThreadAction,
@@ -82,6 +84,7 @@ interface ChatClientProps {
   fastModelName: string;
   initialThreads: ThreadSummary[];
   initialThread: ThreadDetail | null;
+  initialMemories: ThreadMemoryView[];
 }
 
 type ChatTier = "deep" | "fast";
@@ -236,6 +239,7 @@ export function ChatClient({
   fastModelName,
   initialThreads,
   initialThread,
+  initialMemories,
 }: ChatClientProps) {
   const router = useRouter();
   const [threads, setThreads] = useState<ThreadSummary[]>(initialThreads);
@@ -1079,6 +1083,13 @@ export function ChatClient({
             ) : null}
             <span className="truncate text-[13px] font-semibold text-zinc-900">{activeTitle}</span>
           </div>
+          {threadId ? (
+            <MemoryPanel
+              key={threadId}
+              threadId={threadId}
+              initialMemories={threadId === initialThread?.id ? initialMemories : []}
+            />
+          ) : null}
         </div>
 
         {!chatEnabled ? (

@@ -44,6 +44,7 @@
     "worker": "node --env-file=.env --import tsx src/worker/main.ts",
     "probe:embedding": "node --env-file=.env scripts/probe-embedding.mjs",
     "backfill:embeddings": "node --env-file=.env scripts/backfill-embeddings.mjs",
+    "backfill:experience-folders": "node --env-file=.env --import tsx scripts/backfill-experience-folders.mjs",
     "verify:guards": "node scripts/verify-permission-guards.mjs"
   },
   "dependencies": {
@@ -61,7 +62,8 @@
     "pinyin-pro": "^3.29.5",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "unpdf": "^1.9.1"
+    "unpdf": "^1.9.1",
+    "word-extractor": "^1.0.4"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

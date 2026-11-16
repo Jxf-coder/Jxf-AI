@@ -72,7 +72,7 @@ function revalidateKnowledge() {
   revalidatePath("/knowledge/cards");
 }
 
-/** 批量改字段白名单：只接受这 7 个键，其余一律丢弃 */
+/** 批量改字段白名单：只接受这几个键，其余一律丢弃 */
 function sanitizePatch(input: CardMetaPatch | undefined): CardMetaPatch {
   if (!input) {
     return {};
@@ -85,6 +85,9 @@ function sanitizePatch(input: CardMetaPatch | undefined): CardMetaPatch {
   if ("source" in input) patch.source = input.source;
   if ("version" in input) patch.version = input.version;
   if ("owner" in input) patch.owner = input.owner;
+  if (typeof input.folderKey === "string" && isFolderKey(input.folderKey)) {
+    patch.folderKey = input.folderKey;
+  }
   return patch;
 }
 

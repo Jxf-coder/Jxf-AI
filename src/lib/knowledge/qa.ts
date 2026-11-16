@@ -14,6 +14,7 @@ import { chatCompletion, embedTexts } from "@/lib/ai/openai";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
 import { extractNumbers } from "@/lib/knowledge/evidence";
+import { FACT_FOLDERS } from "@/lib/knowledge/folders";
 import { loadEnv } from "@/lib/env";
 import { log } from "@/lib/logger";
 import { requireContextPermission } from "@/lib/permissions/server";
@@ -69,8 +70,8 @@ export async function answerQuestion(context: UserContext, rawQuestion: string):
     });
 
     const { rows } = await client.query<{ card_id: string; title: string; body: string; score: number }>(
-      "select card_id, title, body, score from app.hybrid_search_cards($1, $2::vector, $3, 60)",
-      [question, embedding ? `[${embedding.join(",")}]` : null, env.ai.topK],
+      "select card_id, title, body, score from app.hybrid_search_cards($1, $2::vector, $3, 60, $4::text[])",
+      [question, embedding ? `[${embedding.join(",")}]` : null, env.ai.topK, [...FACT_FOLDERS]],
     );
 
     if (rows.length === 0) {

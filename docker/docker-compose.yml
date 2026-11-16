@@ -199,6 +199,10 @@ services:
       JXF_AI_FALLBACK_MODEL_FLASH: ${JXF_AI_FALLBACK_MODEL_FLASH:-}
       JXF_AI_TOP_K: ${JXF_AI_TOP_K:-6}
       JXF_AI_MAX_TOKENS: ${JXF_AI_MAX_TOKENS:-2048}
+      # 长抽取（蒸馏建卡 / 经验提炼）单独预算：推理模型的思考 token 也计入
+      JXF_AI_EXTRACT_MAX_TOKENS: ${JXF_AI_EXTRACT_MAX_TOKENS:-32768}
+      # 长抽取的请求超时：大 token 预算下单次生成可能远超常规 60s
+      JXF_AI_EXTRACT_TIMEOUT_MS: ${JXF_AI_EXTRACT_TIMEOUT_MS:-180000}
       JXF_EMBEDDING_BASE_URL: ${JXF_EMBEDDING_BASE_URL:-https://api.openai.com/v1}
       JXF_EMBEDDING_API_KEY: ${JXF_EMBEDDING_API_KEY:-}
       JXF_EMBEDDING_MODEL: ${JXF_EMBEDDING_MODEL:-text-embedding-3-small}
@@ -210,6 +214,8 @@ services:
       JXF_OCR_MODEL: ${JXF_OCR_MODEL:-gemini-3.1-flash-lite}
       JXF_OCR_TIMEOUT_MS: ${JXF_OCR_TIMEOUT_MS:-90000}
       JXF_OCR_MAX_BYTES: ${JXF_OCR_MAX_BYTES:-15000000}
+      # 知识库单文件上限（默认 50MB）：解析会把整份文件读进内存，按机器内存调整
+      JXF_KNOWLEDGE_MAX_FILE_BYTES: ${JXF_KNOWLEDGE_MAX_FILE_BYTES:-52428800}
       # MCP 外部连接器：内网主机白名单（逗号分隔主机名/IP）；为空时只允许公网地址
       MCP_TRUSTED_HOSTS: ${MCP_TRUSTED_HOSTS:-}
       # stdio 连接器允许的可执行文件（逗号分隔，建议绝对路径）；为空表示禁用 stdio

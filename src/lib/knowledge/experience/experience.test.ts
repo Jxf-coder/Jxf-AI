@@ -16,8 +16,9 @@ import {
   numSignature,
 } from "./dedupe";
 import { MIN_SOURCE_CHARS, isCollectableText, prepareExperienceText } from "./capture";
-import { buildPipelineSourceText } from "./collectors";
+import { buildPipelineSourceText, buildSkillSourceText } from "./collectors";
 import { buildFingerprint, normalizeForFingerprint } from "./fingerprint";
+import { DEFAULT_EXPERIENCE_POLICY, PolicyInputError, normalizePolicy } from "./policy-shared";
 import { redactText, redactValue } from "./redact";
 import { routeFolder } from "./routing";
 import { collapseRepeatedLines, truncateSourceText } from "./truncate";
@@ -252,4 +253,64 @@ test("产线来源文本包含失败步骤、验收备注与交付摘要", () =>
   assert.ok(text.includes("验收备注：模型输出了无法核对的数字"));
   assert.ok(text.includes("交付摘要：交付摘要正文"));
   assert.ok(text.includes("触发方式：schedule"));
+});
+
+test("技能失败来源文本包含技能、失败原因与输入", () => {
+  const text = buildSkillSourceText({
+    skillName: "获客脚本专家",
+    skillKey: "lead-script-expert",
+    error: "AI 未启用或调用失败",
+    input: { 行业: "食品包装", 目标: "生成 12 秒口播" },
+  });
+  assert.ok(text.includes("技能：获客脚本专家（lead-script-expert）"));
+  assert.ok(text.includes("失败原因：AI 未启用或调用失败"));
+  assert.ok(text.includes("食品包装"));
+
+  const fallback = buildSkillSourceText({
+    skillName: null,
+    skillKey: "lead-script-expert",
+    error: null,
+    input: null,
+  });
+  assert.ok(fallback.includes("技能：lead-script-expert"));
+  assert.ok(fallback.includes("失败原因：未记录"));
+  assert.ok(fallback.includes("（无输入）"));
+});
+
+test("经验策略：合法值原样通过，小数向下取整", () => {
+  const normalized = normalizePolicy({
+    minSourceChars: 150.9,
+    maxSourceChars: 9000,
+    hourlyJobLimit: 12,
+    dailyCardLimit: 40,
+    maxCandidates: 2,
+  });
+  assert.deepEqual(normalized, {
+    minSourceChars: 150,
+    maxSourceChars: 9000,
+    hourlyJobLimit: 12,
+    dailyCardLimit: 40,
+    maxCandidates: 2,
+  });
+  assert.deepEqual(normalizePolicy(DEFAULT_EXPERIENCE_POLICY), DEFAULT_EXPERIENCE_POLICY);
+});
+
+test("经验策略：越界与 min>=max 直接报错，不静默截断", () => {
+  assert.throws(
+    () => normalizePolicy({ ...DEFAULT_EXPERIENCE_POLICY, minSourceChars: 5 }),
+    PolicyInputError,
+  );
+  assert.throws(
+    () => normalizePolicy({ ...DEFAULT_EXPERIENCE_POLICY, maxCandidates: 11 }),
+    PolicyInputError,
+  );
+  assert.throws(
+    () =>
+      normalizePolicy({
+        ...DEFAULT_EXPERIENCE_POLICY,
+        minSourceChars: 5000,
+        maxSourceChars: 2000,
+      }),
+    PolicyInputError,
+  );
 });

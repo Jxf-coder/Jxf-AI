@@ -19,12 +19,14 @@ import {
   type Tone,
 } from "@/components/knowledge/tokens";
 import type { PipelineRunStatus, PipelineRunView, PipelineView } from "@/lib/pipelines";
+import { ARCHIVE_FOLDERS, folderLabel } from "@/lib/knowledge/folders";
 
 import {
   createPipelineAction,
   disableWebhookAction,
   rotateWebhookAction,
   runPipelineAction,
+  setArchiveFolderAction,
   setEventSubscriptionAction,
   togglePipelineAction,
 } from "./actions";
@@ -101,6 +103,7 @@ export function PipelinesClient({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [schedule, setSchedule] = useState("");
+  const [archiveFolder, setArchiveFolder] = useState("");
   const [steps, setSteps] = useState<StepDraft[]>([{ ...EMPTY_STEP }]);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
@@ -135,6 +138,7 @@ export function PipelinesClient({
         name: name.trim(),
         description: description.trim(),
         scheduleIntervalMinutes: schedule.trim() ? Number.parseInt(schedule.trim(), 10) : null,
+        archiveFolder: archiveFolder || null,
         steps: steps.map((step) => ({
           title: step.title.trim(),
           brief: step.brief.trim(),
@@ -149,6 +153,7 @@ export function PipelinesClient({
         setName("");
         setDescription("");
         setSchedule("");
+        setArchiveFolder("");
         setSteps([{ ...EMPTY_STEP }]);
       }
     } finally {
@@ -175,6 +180,20 @@ export function PipelinesClient({
     setMessage(null);
     try {
       const result = await togglePipelineAction(pipelineId, enabled);
+      setMessage({ tone: result.ok ? "info" : "error", text: result.message });
+      if (result.ok) {
+        router.refresh();
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function changeArchiveFolder(pipelineId: string, folder: string) {
+    setBusy(pipelineId);
+    setMessage(null);
+    try {
+      const result = await setArchiveFolderAction(pipelineId, folder);
       setMessage({ tone: result.ok ? "info" : "error", text: result.message });
       if (result.ok) {
         router.refresh();
@@ -279,6 +298,20 @@ export function PipelinesClient({
                   placeholder="例如 1440 = 每天一次"
                   onChange={(event) => setSchedule(event.target.value)}
                 />
+              </Field>
+              <Field label="收口归档目录（可选）">
+                <select
+                  className={input}
+                  value={archiveFolder}
+                  onChange={(event) => setArchiveFolder(event.target.value)}
+                >
+                  <option value="">不归档</option>
+                  {ARCHIVE_FOLDERS.map((folder) => (
+                    <option key={folder} value={folder}>
+                      {folderLabel(folder)}
+                    </option>
+                  ))}
+                </select>
               </Field>
             </div>
 
@@ -396,6 +429,11 @@ export function PipelinesClient({
                           每 {pipeline.scheduleIntervalMinutes} 分钟
                         </span>
                       ) : null}
+                      {pipeline.archiveFolder ? (
+                        <span className={badge("blue")}>
+                          归档 · {folderLabel(pipeline.archiveFolder)}
+                        </span>
+                      ) : null}
                     </div>
                     {pipeline.description ? (
                       <p className={`${meta} mt-1`}>{pipeline.description}</p>
@@ -435,6 +473,25 @@ export function PipelinesClient({
 
                 {canManage ? (
                   <div className="mt-2 grid gap-2 rounded-xl bg-apple-canvas px-3 py-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={meta}>收口归档</span>
+                      <select
+                        className={`${input} w-auto !py-1 text-[11px]`}
+                        value={pipeline.archiveFolder ?? ""}
+                        aria-label="产线收口归档目录"
+                        disabled={busy === pipeline.id}
+                        onChange={(event) => changeArchiveFolder(pipeline.id, event.target.value)}
+                      >
+                        <option value="">不归档</option>
+                        {ARCHIVE_FOLDERS.map((folder) => (
+                          <option key={folder} value={folder}>
+                            {folderLabel(folder)}
+                          </option>
+                        ))}
+                      </select>
+                      <span className={meta}>收口后把交付物归档为待确认卡片</span>
+                    </div>
+
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={meta}>Webhook</span>
                       {pipeline.webhookEnabled ? (

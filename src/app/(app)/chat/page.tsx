@@ -3,6 +3,7 @@ import { aiStatus } from "@/lib/ai/openai";
 import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext } from "@/lib/db/user-context";
 import { isUuid } from "@/lib/knowledge/workspace";
+import { listThreadMemories } from "@/lib/runtime/memory";
 import { listThreads, loadThread } from "@/lib/runtime/threads";
 
 import { ChatClient } from "./ChatClient";
@@ -23,12 +24,14 @@ export default async function ChatPage({
 
   let threads = [] as Awaited<ReturnType<typeof listThreads>>;
   let thread = null as Awaited<ReturnType<typeof loadThread>>;
+  let memories = [] as Awaited<ReturnType<typeof listThreadMemories>>;
   let accessDenied = false;
 
   try {
     threads = await listThreads(context);
     if (requestedThreadId && isUuid(requestedThreadId)) {
       thread = await loadThread(context, requestedThreadId);
+      memories = thread ? await listThreadMemories(context, thread.id) : [];
     }
   } catch {
     accessDenied = true;
@@ -50,6 +53,7 @@ export default async function ChatPage({
       fastModelName={status.fastModel}
       initialThreads={threads}
       initialThread={thread}
+      initialMemories={memories}
     />
   );
 }

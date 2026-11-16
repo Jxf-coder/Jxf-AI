@@ -8,10 +8,12 @@ import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { SectionCard } from "@/components/knowledge/SectionCard";
 import { btnBlue, btnGhost, input, inputInline } from "@/components/knowledge/tokens";
 import type { CardFacets, CardMetaPatch, CardView } from "@/lib/knowledge/cards";
+import { STANDARD_FOLDERS } from "@/lib/knowledge/folders";
 
 import { bulkDecideAction } from "../cards/actions";
 import { CardItem } from "./CardItem";
 import { NewCardPanel } from "./NewCardPanel";
+import { RetroPanel } from "./RetroPanel";
 import { CARD_KIND_LABEL, CARD_STATUS_LABEL } from "./card-labels";
 
 export interface CardsFilterState {
@@ -46,6 +48,7 @@ export function CardsClient({ cards, facets, canWrite, canConfirm, filter }: Car
     owner: "",
     validUntil: "",
     external: "" as "" | "yes" | "no",
+    folder: "",
   });
 
   const allPicked = cards.length > 0 && cards.every((card) => picked.has(card.id));
@@ -88,6 +91,7 @@ export function CardsClient({ cards, facets, canWrite, canConfirm, filter }: Car
     if (bulk.validUntil) patch.validUntil = bulk.validUntil;
     if (bulk.external === "yes") patch.externalOk = true;
     if (bulk.external === "no") patch.externalOk = false;
+    if (bulk.folder) patch.folderKey = bulk.folder;
 
     if (action === "patch" && Object.keys(patch).length === 0) {
       setFailed(true);
@@ -255,6 +259,19 @@ export function CardsClient({ cards, facets, canWrite, canConfirm, filter }: Car
             <option value="no">仅内部</option>
           </select>
 
+          <select
+            className={`${inputInline} w-auto`}
+            value={bulk.folder}
+            aria-label="批量目录"
+            onChange={(event) => setBulk((current) => ({ ...current, folder: event.target.value }))}
+          >
+            <option value="">目录不变</option>
+            {STANDARD_FOLDERS.filter((folder) => folder.key !== "99-trash").map((folder) => (
+              <option key={folder.key} value={folder.key}>
+                {folder.label}
+              </option>
+            ))}
+          </select>
           <span className="ml-auto flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -285,6 +302,7 @@ export function CardsClient({ cards, facets, canWrite, canConfirm, filter }: Car
       ) : null}
 
       {canWrite ? <NewCardPanel /> : null}
+      {canWrite ? <RetroPanel /> : null}
 
       {message ? (
         <InlineMessage tone={failed ? "error" : "info"} className="mt-3 mb-0">

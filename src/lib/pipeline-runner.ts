@@ -15,6 +15,7 @@ import type { Client } from "pg";
 import { errorMessage } from "@/lib/logger";
 import type { UserContext } from "@/lib/db/user-context";
 import { capturePipelineRunExperienceSafe } from "@/lib/knowledge/experience/collectors";
+import { archivePipelineRunDeliverablesSafe } from "@/lib/knowledge/pipeline-archive";
 import { assignWork } from "@/lib/work-items";
 
 import { runPipeline, type PipelineStep } from "./pipelines";
@@ -79,6 +80,8 @@ async function markFinished(owner: Client, runId: string, failedStep: string | n
   );
   // 终态入队经验（失败 / 部分失败才产 job）；采集失败不影响产线收口
   await capturePipelineRunExperienceSafe(owner, runId);
+  // 产线声明了归档目录时，把交付物强制归档成待确认卡片
+  await archivePipelineRunDeliverablesSafe(owner, runId);
 }
 
 async function loadWorkItem(owner: Client, workItemId: string): Promise<WorkItemState | null> {

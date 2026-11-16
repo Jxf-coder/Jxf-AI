@@ -13,6 +13,8 @@ import type { Pool } from "pg";
 
 const LEASE_SECONDS = 90;
 const MAX_ATTEMPTS = 3;
+/** 来源文本保留期：只清大文本，job 行与计数长期保留 */
+export const SOURCE_TEXT_RETENTION_DAYS = 90;
 
 export interface ClaimedExperienceJob {
   id: string;
@@ -135,6 +137,27 @@ export async function sweepExperienceJobs(
     [MAX_ATTEMPTS],
   );
   return { requeued: requeued.rowCount ?? 0, dead: dead.rowCount ?? 0 };
+}
+
+/**
+ * 来源文本保留期清理：只把 source_text 置空，不删除 job 行。
+ *
+ * 具体 SQL 在 `app.purge_experience_source_text`（SECURITY DEFINER）：
+ * worker 没有卡表的全量读上下文，直接查 knowledge_cards 会把「被 pending 卡引用」
+ * 误判成「未引用」；函数以 owner 身份只做这一件事，worker 仅获 execute。
+ */
+export async function purgeExpiredExperienceSourceText(
+  pool: Pool,
+  retentionDays = SOURCE_TEXT_RETENTION_DAYS,
+): Promise<{ purged: number; skipped: number }> {
+  const { rows } = await pool.query<{ purged: number; skipped: number }>(
+    "select purged, skipped from app.purge_experience_source_text($1)",
+    [retentionDays],
+  );
+  return {
+    purged: Number(rows[0]?.purged ?? 0),
+    skipped: Number(rows[0]?.skipped ?? 0),
+  };
 }
 
 /** 限额命中：把 job 放回队列并推迟到下一次窗口，不计失败 */

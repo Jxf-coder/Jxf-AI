@@ -248,7 +248,7 @@ function chatProviders(tier: ChatTier): ChatProvider[] {
  */
 export async function chatCompletionDetailed(
   messages: ChatMessage[],
-  options: { temperature?: number; maxTokens?: number; tier?: ChatTier } = {},
+  options: { temperature?: number; maxTokens?: number; tier?: ChatTier; timeoutMs?: number } = {},
 ): Promise<ChatCompletionResult | null> {
   const ai = loadEnv().ai;
   if (!ai.enabled) {
@@ -258,6 +258,7 @@ export async function chatCompletionDetailed(
   const tier: ChatTier = options.tier ?? "deep";
   const providers = chatProviders(tier);
   const model = providers[0].model;
+  const timeoutMs = options.timeoutMs ?? ai.timeoutMs;
 
   for (const [index, provider] of providers.entries()) {
     try {
@@ -270,7 +271,7 @@ export async function chatCompletionDetailed(
           temperature: options.temperature ?? 0.2,
           max_tokens: options.maxTokens ?? ai.maxTokens,
         },
-        ai.timeoutMs,
+        timeoutMs,
         provider.name,
       )) as {
         choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
@@ -520,7 +521,7 @@ export async function chatCompletionStreamDetailed(
 /** 兼容旧调用：只要文本 */
 export async function chatCompletion(
   messages: ChatMessage[],
-  options: { temperature?: number; maxTokens?: number; tier?: ChatTier } = {},
+  options: { temperature?: number; maxTokens?: number; tier?: ChatTier; timeoutMs?: number } = {},
 ): Promise<string | null> {
   const result = await chatCompletionDetailed(messages, options);
   return result?.text ?? null;

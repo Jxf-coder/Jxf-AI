@@ -107,6 +107,8 @@ interface ScoutTabProps {
   shareRequests: ShareRequestView[];
   /** L1 在共享区可指定归属部门（当前可见部门） */
   departments: Array<{ id: string; name: string }>;
+  /** 服务端生效的单文件上限文案，如 "50MB" */
+  maxFileLabel: string;
 }
 
 /** 巡读上传：逐文件入库 + 批次详情 + 整批撤回 */
@@ -118,6 +120,7 @@ export function ScoutTab({
   isL1,
   shareRequests,
   departments,
+  maxFileLabel,
 }: ScoutTabProps) {
   const router = useRouter();
   const folderRef = useRef<HTMLInputElement>(null);
@@ -424,8 +427,8 @@ export function ScoutTab({
 
       <SectionCard
         title="上传文档"
-        right={<span className={badge()}>单文件 ≤ 20MB</span>}
-        desc="支持 PDF / DOCX / TXT / Markdown / CSV；可以拖文件夹，按顺序逐个入库，扫描件会标记为「待 OCR」。"
+        right={<span className={badge()}>单文件 ≤ {maxFileLabel}</span>}
+        desc="支持 PDF / DOC / DOCX / TXT / Markdown / CSV；可以拖文件夹，按顺序逐个入库，扫描件会标记为「待 OCR」。"
       >
         {!canWrite ? (
           <InlineMessage>当前账号没有「知识入库」权限，只能查看本部门文档与知识卡。</InlineMessage>
@@ -447,7 +450,7 @@ export function ScoutTab({
                   value={folder}
                   onChange={(event) => setFolder(event.target.value)}
                 >
-                  {STANDARD_FOLDERS.map((item) => (
+                  {STANDARD_FOLDERS.filter((item) => item.key !== "99-trash").map((item) => (
                     <option key={item.key} value={item.key}>
                       {item.label}
                     </option>

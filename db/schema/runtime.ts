@@ -55,6 +55,32 @@ export const threads = pgTable(
   ],
 );
 
+export const threadMemories = pgTable(
+  "thread_memories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull(),
+    /** 仅创建者本人可见，不参与部门共享 */
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    threadId: uuid("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("thread_memories_owner_idx").on(
+      table.tenantId,
+      table.userId,
+      table.threadId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const runs = pgTable(
   "runs",
   {

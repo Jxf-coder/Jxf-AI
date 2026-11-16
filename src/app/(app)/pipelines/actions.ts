@@ -17,6 +17,7 @@ import {
   PipelineInputError,
   createPipeline,
   runPipeline,
+  setPipelineArchiveFolder,
   setPipelineEnabled,
   type CreatePipelineInput,
 } from "@/lib/pipelines";
@@ -90,6 +91,21 @@ export async function togglePipelineAction(
     return { ok: true, message: enabled ? "产线已启用" : "产线已停用" };
   } catch (error) {
     return failure("toggle_pipeline", error);
+  }
+}
+
+/** 声明 / 取消产线收口时的强制归档目录 */
+export async function setArchiveFolderAction(
+  pipelineId: string,
+  folder: string,
+): Promise<PipelineActionResult> {
+  try {
+    await setPipelineArchiveFolder(await contextOf(), pipelineId, folder || null);
+    revalidatePath("/pipelines");
+    revalidatePath("/knowledge");
+    return { ok: true, message: folder ? "已设置收口归档目录" : "已关闭强制归档" };
+  } catch (error) {
+    return failure("set_archive_folder", error);
   }
 }
 

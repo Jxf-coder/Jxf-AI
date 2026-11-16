@@ -1,4 +1,4 @@
-﻿/**
+/**
  * M2-A3 知识库验收：RLS 隔离、sha256 去重、批次撤回、确认门槛、混合检索降级。
  *
  * 使用真实 PostgreSQL + jxf_app 角色；所有写入走 owner 连接播种（owner 绕过 RLS），
@@ -7,6 +7,8 @@
  * 运行：npm run test:knowledge
  */
 import { randomUUID } from "node:crypto";
+import { readFile, unlink } from "node:fs/promises";
+import path from "node:path";
 
 import { Client } from "pg";
 
@@ -15,6 +17,7 @@ import {
   CardConflictError,
   createManualCard,
   listCardVersions,
+  patchCards,
   updateCard,
 } from "../src/lib/knowledge/cards.ts";
 import { addCardEvidence, removeCardEvidence } from "../src/lib/knowledge/card-evidence.ts";
@@ -34,6 +37,8 @@ import {
   trashDocument,
 } from "../src/lib/knowledge/trash.ts";
 import { loadWorkspaceTree, searchWorkspace, setCardVisibility } from "../src/lib/knowledge/workspace.ts";
+import { ingestUpload, maxFileBytes } from "../src/lib/knowledge/ingest.ts";
+import { enqueueExperience } from "../src/lib/knowledge/experience/capture.ts";
 
 const TENANT = process.env.KB_TEST_TENANT ?? "22222222-2222-4222-8222-222222222222";
 const HOST = process.env.SEED_DB_HOST ?? "127.0.0.1";
@@ -153,6 +158,10 @@ function unitVector(index) {
 }
 
 async function cleanup(owner) {
+  await owner.query("delete from experience_jobs where tenant_id = $1", [TENANT]);
+  await owner.query("delete from experience_policies where tenant_id = $1", [TENANT]);
+  await owner.query("delete from folder_route_stats_daily where tenant_id = $1", [TENANT]);
+  await owner.query("delete from folder_route_feedback where tenant_id = $1", [TENANT]);
   await owner.query("delete from qa_logs where tenant_id = $1", [TENANT]);
   await owner.query("delete from knowledge_gaps where tenant_id = $1", [TENANT]);
   await owner.query("delete from card_evidence where card_id in (select id from knowledge_cards where tenant_id = $1)", [TENANT]);
@@ -345,6 +354,15 @@ async function seed() {
       [cardConfirmed, chunkA, docA, cardVerified, cardConflict, cardExpired],
     );
 
+    // 跨部门共享卡：用于验证 hybrid_search_cards 的 shared 分支
+    const sharedCard = await owner.query(
+      `insert into knowledge_cards
+         (tenant_id, department_id, kind, title, body, status, origin, human_edited, conflict_with, visibility)
+       values ($1, $2, 'fact', '全公司共享的预约口径', '共享给全公司的预约口径，跨部门问答也应召回。', 'confirmed', 'manual', true, '{}', 'shared')
+       returning id`,
+      [TENANT, groupB.rows[0].id],
+    );
+
     await owner.query("commit");
     return {
       uid,
@@ -371,6 +389,7 @@ async function seed() {
       cardExpired,
       cardHuman,
       cardB,
+      cardSharedB: sharedCard.rows[0].id,
     };
   });
 }
@@ -399,7 +418,9 @@ async function main() {
   check("L3 读兄弟部门切片", crossChunks.rowCount === 0, `rowCount=${crossChunks.rowCount}`);
 
   const crossCards = await runAs(memberA, (client) =>
-    client.query("select id from knowledge_cards where department_id = $1", [fx.departments.groupB]),
+    client.query("select id from knowledge_cards where department_id = $1 and visibility <> 'shared'", [
+      fx.departments.groupB,
+    ]),
   );
   check("L3 读兄弟部门知识卡", crossCards.rowCount === 0, `rowCount=${crossCards.rowCount}`);
 
@@ -538,6 +559,43 @@ async function main() {
   const cardIds = cardHits.rows.map((row) => row.card_id);
   check("卡片召回只返回 confirmed", cardIds.length === 1 && cardIds[0] === fx.cardConfirmed, `ids=${cardIds.join(",")}`);
   check("卡片召回不跨部门", !cardIds.includes(fx.cardB), `ids=${cardIds.join(",")}`);
+
+  // 12a. 共享卡跨部门召回：visibility='shared' 的卡必须被问答召回
+  const sharedCardHits = await runAs(memberA, (client) =>
+    client.query("select * from app.hybrid_search_cards($1, null, 10, 60, $2::text[])", [
+      "共享的预约口径",
+      ["02-cards"],
+    ]),
+  );
+  check(
+    "共享卡跨部门可被问答召回",
+    sharedCardHits.rows.some((row) => row.card_id === fx.cardSharedB),
+    `ids=${sharedCardHits.rows.map((row) => row.card_id).join(",")}`,
+  );
+
+  // 12b. 目录白名单：事实问答排除 05/08，经验通道只取 05
+  const factFolderHits = await runAs(memberA, (client) =>
+    client.query("select * from app.hybrid_search_cards($1, null, 10, 60, $2::text[])", [
+      "迁移量",
+      ["02-cards", "03-standards", "04-cases", "06-templates", "07-training"],
+    ]),
+  );
+  check(
+    "事实问答目录白名单召回普通卡片",
+    factFolderHits.rows.some((row) => row.card_id === fx.cardConfirmed),
+    `ids=${factFolderHits.rows.map((row) => row.card_id).join(",")}`,
+  );
+  const experienceFolderHits = await runAs(memberA, (client) =>
+    client.query("select * from app.hybrid_search_cards($1, null, 10, 60, $2::text[])", [
+      "迁移量",
+      ["05-distill"],
+    ]),
+  );
+  check(
+    "经验目录白名单不召回普通卡片",
+    !experienceFolderHits.rows.some((row) => row.card_id === fx.cardConfirmed),
+    `ids=${experienceFolderHits.rows.map((row) => row.card_id).join(",")}`,
+  );
 
   // 13. 卡片向量通道：切片 → 证据 → 卡片
   const cardVector = await runAs(memberA, (client) =>
@@ -913,6 +971,80 @@ async function main() {
     "目录预填：在职岗位可预填",
     rolePrefill.ok === true && rolePrefill.roleKey === "一组经理",
     JSON.stringify(rolePrefill),
+  );
+
+  // 23b. 卡片归档：人工建卡按语义路由，文档来源继承目录，批量可改目录
+  const caseCard = await createManualCard(bossContext, {
+    kind: "case",
+    title: "制造业客户交付纪要",
+    body: "为制造业客户完成质检流程改造，覆盖排产与验收。",
+  });
+  const templateCard = await createManualCard(bossContext, {
+    kind: "fact",
+    title: "报价模板字段说明",
+    body: "模板包含单价、税率与交付周期三栏。",
+  });
+  const plainCard = await createManualCard(bossContext, {
+    kind: "fact",
+    title: "日常答复口径",
+    body: "统一使用简体中文答复。",
+  });
+
+  const casesDoc = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      `insert into documents (tenant_id, department_id, title, mime, sha256, folder_key)
+       values ($1, $2, '交付说明文档', 'text/plain', $3, '04-cases') returning id`,
+      [TENANT, fx.departments.groupA, "5".repeat(64)],
+    );
+    return rows[0].id;
+  });
+  const inheritedCard = await createManualCard(bossContext, {
+    kind: "fact",
+    title: "交付说明卡",
+    body: "从来源文档提炼的要点。",
+    sourceDocumentId: casesDoc,
+  });
+
+  const archived = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      "select id, folder_key, route_pending from knowledge_cards where id = any($1::uuid[])",
+      [[caseCard.id, templateCard.id, plainCard.id, inheritedCard.id]],
+    );
+    return Object.fromEntries(rows.map((row) => [row.id, row]));
+  });
+  check(
+    "归档：case 卡自动归 04-案例库",
+    archived[caseCard.id]?.folder_key === "04-cases" && archived[caseCard.id]?.route_pending === false,
+    JSON.stringify(archived[caseCard.id]),
+  );
+  check(
+    "归档：模板卡自动归 06-模板工具",
+    archived[templateCard.id]?.folder_key === "06-templates",
+    JSON.stringify(archived[templateCard.id]),
+  );
+  check(
+    "归档：无信号卡留在 02-知识卡片",
+    archived[plainCard.id]?.folder_key === "02-cards",
+    JSON.stringify(archived[plainCard.id]),
+  );
+  check(
+    "归档：文档生成卡片继承文档目录",
+    archived[inheritedCard.id]?.folder_key === "04-cases",
+    JSON.stringify(archived[inheritedCard.id]),
+  );
+
+  const bulkFolder = await patchCards(bossContext, [plainCard.id], { folderKey: "03-standards" });
+  const bulkFolderRow = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query(
+      "select folder_key, route_pending from knowledge_cards where id = $1",
+      [plainCard.id],
+    );
+    return rows[0];
+  });
+  check(
+    "归档：批量改目录生效并清除 route_pending",
+    bulkFolder.patched === 1 && bulkFolderRow.folder_key === "03-standards" && bulkFolderRow.route_pending === false,
+    JSON.stringify({ bulkFolder, bulkFolderRow }),
   );
 
   // 23c. 公司共享审批：申请期间保持部门隔离，L1 通过后才开放
@@ -1557,6 +1689,201 @@ async function main() {
     "清空回收站：文档与卡片一并删除",
     emptied.documents >= 1 && emptied.cards >= 1,
     JSON.stringify(emptied),
+  );
+
+  // 28. 入库格式与大小上限：.doc 可解析可入库，超限如实跳过
+  const docFixturePath = path.join(process.cwd(), "scripts", "fixtures", "knowledge-sample.doc");
+  const docBytes = new Uint8Array(await readFile(docFixturePath));
+  const parsedDoc = await parseDocument(docBytes, "application/msword", "knowledge-sample.doc");
+  check(
+    "DOC 解析：旧二进制格式取到正文",
+    parsedDoc.hasText && parsedDoc.pages.length === 1 && parsedDoc.pages[0].includes("耐候等级"),
+    JSON.stringify({ pages: parsedDoc.pages.length, hasText: parsedDoc.hasText }),
+  );
+
+  const docIngest = await ingestUpload(
+    bossContext,
+    [{ name: "knowledge-sample.doc", mime: "application/msword", bytes: docBytes }],
+    "doc 解析回归",
+  );
+  check(
+    "DOC 入库：扩展名在白名单内并切出切片",
+    docIngest.files[0]?.decision === "rule_keep" && (docIngest.files[0]?.chunkCount ?? 0) >= 1,
+    JSON.stringify(docIngest.files[0] ?? {}),
+  );
+
+  const sizeLimit = maxFileBytes();
+  check(
+    "大小上限：生效值来自 env 且不低于 50MB",
+    sizeLimit === Number(process.env.JXF_KNOWLEDGE_MAX_FILE_BYTES ?? 50 * 1024 * 1024) &&
+      sizeLimit >= 50 * 1024 * 1024,
+    `limit=${sizeLimit}`,
+  );
+
+  const oversized = await ingestUpload(
+    bossContext,
+    [{ name: "too-large.pdf", mime: "application/pdf", bytes: new Uint8Array(sizeLimit + 1) }],
+    "上限回归",
+  );
+  check(
+    "大小上限：超限文件被跳过并提示压缩或拆分",
+    oversized.files[0]?.decision === "rule_skip" &&
+      /超过.*请压缩或拆分/.test(oversized.files[0]?.reason ?? ""),
+    JSON.stringify(oversized.files[0] ?? {}),
+  );
+
+  // 入库会写 public/uploads：清掉本次测试产生的原件，避免污染工作区
+  const uploadedKeys = await withClient(OWNER_URL, async (owner) => {
+    const { rows } = await owner.query("select storage_key from assets where tenant_id = $1", [TENANT]);
+    return rows.map((row) => row.storage_key);
+  });
+  for (const key of uploadedKeys) {
+    if (typeof key === "string" && key.startsWith("uploads/")) {
+      await unlink(path.join(process.cwd(), "public", key)).catch(() => {});
+    }
+  }
+
+  // 29. 目录纠偏日聚合：只能由重算函数写、只对 L1 可见
+  await withClient(OWNER_URL, async (owner) => {
+    await owner.query("delete from folder_route_stats_daily where tenant_id = $1", [TENANT]);
+    await owner.query("delete from folder_route_feedback where tenant_id = $1", [TENANT]);
+    await owner.query(
+      `insert into folder_route_feedback
+         (tenant_id, department_id, card_id, channel, action, suggested_folder, chosen_folder, route_confidence)
+       values
+         ($1, $2, gen_random_uuid(), 'pipeline', 'accepted', '03-standards', '03-standards', 0.90),
+         ($1, $2, gen_random_uuid(), 'pipeline', 'overridden', '03-standards', '04-cases', 0.60),
+         ($1, $2, gen_random_uuid(), 'retro', 'overridden', null, '08-retro', 0.40)`,
+      [TENANT, fx.departments.groupA],
+    );
+  });
+
+  const rollup = await runAs(boss, (client) =>
+    client.query("select app.rollup_folder_route_stats(30) as rows"),
+  );
+  check("纠偏统计：重算函数写入聚合行", rollup.rows[0]?.rows === 3, JSON.stringify(rollup.rows[0]));
+
+  const rerollup = await runAs(boss, (client) =>
+    client.query("select app.rollup_folder_route_stats(30) as rows"),
+  );
+  const statsRows = await runAs(boss, (client) =>
+    client.query(
+      `select action, suggested_folder, chosen_folder, total
+         from folder_route_stats_daily
+        where tenant_id = $1
+        order by action, chosen_folder`,
+      [TENANT],
+    ),
+  );
+  check(
+    "纠偏统计：重复重算幂等（空建议目录不重复成行）",
+    rerollup.rows[0]?.rows === 3 && statsRows.rows.length === 3,
+    `rows=${statsRows.rows.length} ${JSON.stringify(statsRows.rows)}`,
+  );
+
+  const memberStats = await runAs(memberA, (client) =>
+    client.query("select count(*)::int as count from folder_route_stats_daily"),
+  );
+  check("纠偏统计：非 L1 读不到聚合行", memberStats.rows[0].count === 0, `count=${memberStats.rows[0].count}`);
+
+  let rollupDenied = false;
+  try {
+    await runAs(memberA, (client) => client.query("select app.rollup_folder_route_stats(30)"));
+  } catch {
+    rollupDenied = true;
+  }
+  check("纠偏统计：非 L1 不能重算", rollupDenied);
+
+  // 30. 经验沉淀策略：默认值、L1 可写、非 L1 拒绝、越界拒绝、采集按策略生效
+  await withClient(OWNER_URL, (owner) =>
+    owner.query("delete from experience_policies where tenant_id = $1", [TENANT]),
+  );
+
+  const policyDefaults = await runAs(boss, (client) =>
+    client.query("select * from app.experience_policy()"),
+  );
+  check(
+    "经验策略：缺行返回默认阈值",
+    policyDefaults.rows[0]?.min_source_chars === 200 &&
+      policyDefaults.rows[0]?.max_source_chars === 12000 &&
+      policyDefaults.rows[0]?.hourly_job_limit === 20 &&
+      policyDefaults.rows[0]?.daily_card_limit === 50 &&
+      policyDefaults.rows[0]?.max_candidates === 3,
+    JSON.stringify(policyDefaults.rows[0]),
+  );
+
+  await runAs(boss, (client) =>
+    client.query("select app.save_experience_policy(120, 6000, 5, 30, 2)"),
+  );
+  const policySaved = await runAs(boss, (client) =>
+    client.query("select * from app.experience_policy()"),
+  );
+  check(
+    "经验策略：L1 保存后立即生效",
+    policySaved.rows[0]?.min_source_chars === 120 &&
+      policySaved.rows[0]?.max_source_chars === 6000 &&
+      policySaved.rows[0]?.hourly_job_limit === 5 &&
+      policySaved.rows[0]?.daily_card_limit === 30 &&
+      policySaved.rows[0]?.max_candidates === 2,
+    JSON.stringify(policySaved.rows[0]),
+  );
+
+  let policyDenied = false;
+  try {
+    await runAs(memberA, (client) =>
+      client.query("select app.save_experience_policy(200, 12000, 20, 50, 3)"),
+    );
+  } catch (error) {
+    policyDenied = error.code === "42501";
+  }
+  check("经验策略：非 L1 不能保存", policyDenied);
+
+  let policyRangeDenied = false;
+  try {
+    await runAs(boss, (client) =>
+      client.query("select app.save_experience_policy(10, 500, 20, 50, 3)"),
+    );
+  } catch (error) {
+    policyRangeDenied = error.code === "23514";
+  }
+  check("经验策略：越界被表约束拒绝", policyRangeDenied);
+
+  const policyTooShort = await runAs(memberA, (client) =>
+    enqueueExperience(client, {
+      tenantId: TENANT,
+      departmentId: fx.departments.groupA,
+      channel: "manual",
+      sourceType: "manual_test",
+      sourceId: randomUUID(),
+      sourceVersion: "v1",
+      title: "策略阈值回归",
+      text: "经".repeat(100),
+      manual: true,
+    }),
+  );
+  check(
+    "经验策略：低于最短字数的来源不入队",
+    policyTooShort.jobId === null,
+    JSON.stringify(policyTooShort),
+  );
+
+  const policyLongEnough = await runAs(memberA, (client) =>
+    enqueueExperience(client, {
+      tenantId: TENANT,
+      departmentId: fx.departments.groupA,
+      channel: "manual",
+      sourceType: "manual_test",
+      sourceId: randomUUID(),
+      sourceVersion: "v1",
+      title: "策略阈值回归",
+      text: "经".repeat(150),
+      manual: true,
+    }),
+  );
+  check(
+    "经验策略：达到阈值后正常入队",
+    typeof policyLongEnough.jobId === "string",
+    JSON.stringify(policyLongEnough),
   );
 
   if (process.env.KEEP_KB_FIXTURES !== "1") {

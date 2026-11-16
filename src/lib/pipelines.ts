@@ -15,6 +15,7 @@ import type { PoolClient } from "pg";
 import { auditInTx } from "@/lib/audit";
 import { withUserContext, type UserContext } from "@/lib/db/user-context";
 import { capturePipelineRunExperience } from "@/lib/knowledge/experience/collectors";
+import { isArchiveFolder, type FolderKey } from "@/lib/knowledge/folders";
 import { errorMessage, log } from "@/lib/logger";
 import { requireContextPermission } from "@/lib/permissions/server";
 import type { PermissionResource } from "@/types/permission";
@@ -46,6 +47,8 @@ export interface PipelineView {
   webhookTokenHint: string | null;
   /** 已订阅的内部事件类型 */
   eventTypes: string[];
+  /** 收口时把交付物强制归档到的语义目录；null = 不归档 */
+  archiveFolder: string | null;
   createdAt: string;
 }
 
@@ -77,6 +80,8 @@ export interface CreatePipelineInput {
   name: string;
   description?: string;
   scheduleIntervalMinutes?: number | null;
+  /** 收口时把交付物强制归档到的语义目录 */
+  archiveFolder?: string | null;
   steps: Array<{ title: string; brief: string; aiEmployeeId: string; aiEmployeeName: string; optional?: boolean }>;
 }
 
@@ -96,6 +101,7 @@ interface PipelineRow {
   webhook_enabled: boolean;
   webhook_token_hint: string | null;
   event_types?: string[] | null;
+  archive_folder: string | null;
   created_at: Date;
 }
 
@@ -117,7 +123,7 @@ interface PipelineRunRow {
 
 const PIPELINE_COLUMNS = `id, name, description, steps, enabled,
        schedule_interval_minutes, last_scheduled_at,
-       webhook_enabled, webhook_token_hint, created_at`;
+       webhook_enabled, webhook_token_hint, archive_folder, created_at`;
 
 const TRIGGER_KINDS: readonly PipelineTriggerKind[] = ["manual", "schedule", "webhook", "event"];
 
@@ -144,6 +150,7 @@ function toPipelineView(row: PipelineRow): PipelineView {
     webhookEnabled: Boolean(row.webhook_enabled),
     webhookTokenHint: row.webhook_token_hint ?? null,
     eventTypes: Array.isArray(row.event_types) ? row.event_types : [],
+    archiveFolder: row.archive_folder ?? null,
     createdAt: row.created_at.toISOString(),
   };
 }
@@ -209,13 +216,25 @@ function normalizeSchedule(value: unknown): number | null {
   return minutes;
 }
 
+/** 归档目录：空 = 不归档；只接受语义目录白名单（03–08） */
+function normalizeArchiveFolder(value: unknown): FolderKey | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const folder = String(value);
+  if (!isArchiveFolder(folder)) {
+    throw new PipelineInputError("归档目录必须是 03-标准规范 到 08-复盘归档 之间的语义目录");
+  }
+  return folder;
+}
+
 export async function listPipelines(context: UserContext): Promise<PipelineView[]> {
   return withUserContext(context, async (client) => {
     await requireContextPermission(client, context, "pipeline:use", departmentResource(context));
     const { rows } = await client.query<PipelineRow>(
       `select p.id, p.name, p.description, p.steps, p.enabled,
               p.schedule_interval_minutes, p.last_scheduled_at,
-              p.webhook_enabled, p.webhook_token_hint, p.created_at,
+              p.webhook_enabled, p.webhook_token_hint, p.archive_folder, p.created_at,
               coalesce(
                 array_agg(s.event_type) filter (where s.enabled),
                 '{}'::text[]
@@ -246,6 +265,7 @@ export async function createPipeline(
   }
   const steps = normalizeSteps(input.steps);
   const scheduleIntervalMinutes = normalizeSchedule(input.scheduleIntervalMinutes);
+  const archiveFolder = normalizeArchiveFolder(input.archiveFolder);
   const departmentId = context.activeDepartmentId;
   if (!departmentId) {
     throw new PipelineInputError("当前账号没有有效部门上下文");
@@ -255,8 +275,9 @@ export async function createPipeline(
     await requireContextPermission(client, context, "pipeline:manage", departmentResource(context));
     const { rows } = await client.query<PipelineRow>(
       `insert into pipelines
-         (tenant_id, department_id, name, description, steps, schedule_interval_minutes, created_by)
-       values ($1, $2, $3, $4, $5::jsonb, $6, $7)
+         (tenant_id, department_id, name, description, steps, schedule_interval_minutes,
+          archive_folder, created_by)
+       values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
        returning ${PIPELINE_COLUMNS}`,
       [
         context.tenantId,
@@ -265,6 +286,7 @@ export async function createPipeline(
         description,
         JSON.stringify(steps),
         scheduleIntervalMinutes,
+        archiveFolder,
         context.userId,
       ],
     );
@@ -278,7 +300,7 @@ export async function createPipeline(
       targetType: "pipeline",
       targetId: row.id,
       departmentId,
-      payload: { name, step_count: steps.length },
+      payload: { name, step_count: steps.length, archive_folder: archiveFolder },
     });
     return toPipelineView(row);
   });
@@ -306,6 +328,35 @@ export async function setPipelineEnabled(
       targetType: "pipeline",
       targetId: pipelineId,
       departmentId: context.activeDepartmentId,
+    });
+  });
+}
+
+/** 修改归档目录：null = 停止强制归档；只接受 03–08 语义目录 */
+export async function setPipelineArchiveFolder(
+  context: UserContext,
+  pipelineId: string,
+  folder: string | null,
+): Promise<void> {
+  const archiveFolder = normalizeArchiveFolder(folder);
+  await withUserContext(context, async (client) => {
+    await requireContextPermission(client, context, "pipeline:manage", departmentResource(context));
+    const updated = await client.query(
+      `update pipelines
+          set archive_folder = $3, updated_at = now()
+        where id = $1 and tenant_id = $2`,
+      [pipelineId, context.tenantId, archiveFolder],
+    );
+    if (updated.rowCount === 0) {
+      throw new PipelineInputError("产线不存在或无权操作");
+    }
+    await auditInTx(client, context, {
+      actorUserId: context.userId,
+      action: "pipeline.archive_folder_changed",
+      targetType: "pipeline",
+      targetId: pipelineId,
+      departmentId: context.activeDepartmentId,
+      payload: { archive_folder: archiveFolder },
     });
   });
 }

@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth/session";
 import { resolveUserContext } from "@/lib/db/user-context";
 import { isUuid } from "@/lib/knowledge/workspace";
 import { toPermissionMessage } from "@/lib/permissions/guard";
+import { addThreadMemory, deleteThreadMemory } from "@/lib/runtime/memory";
 import {
   addThreadToKnowledge,
   archiveThread,
@@ -16,11 +17,42 @@ import {
 export interface ThreadActionResult {
   ok: boolean;
   message: string;
+  /** 新增记忆时返回真实 id，供客户端立即渲染与删除 */
+  memoryId?: string;
 }
 
 async function resolveCurrentContext() {
   const session = await requireSession();
   return resolveUserContext(session.userId);
+}
+
+export async function addMemoryAction(
+  threadId: string,
+  content: string,
+): Promise<ThreadActionResult> {
+  if (!isUuid(threadId)) {
+    return { ok: false, message: "会话标识不合法" };
+  }
+  try {
+    const memory = await addThreadMemory(await resolveCurrentContext(), threadId, content);
+    revalidatePath("/chat");
+    return { ok: true, message: "已置顶为会话记忆", memoryId: memory.id };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+export async function deleteMemoryAction(memoryId: string): Promise<ThreadActionResult> {
+  if (!isUuid(memoryId)) {
+    return { ok: false, message: "记忆标识不合法" };
+  }
+  try {
+    await deleteThreadMemory(await resolveCurrentContext(), memoryId);
+    revalidatePath("/chat");
+    return { ok: true, message: "已删除记忆" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
 }
 
 export async function renameThreadAction(

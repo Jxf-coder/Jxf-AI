@@ -13,6 +13,8 @@ import type { PoolClient } from "pg";
 import { chatCompletion } from "@/lib/ai/openai";
 import { auditInTx } from "@/lib/audit";
 import { withUserContext, type UserContext } from "@/lib/db/user-context";
+import { captureSkillRunExperience } from "@/lib/knowledge/experience/collectors";
+import { errorMessage, log } from "@/lib/logger";
 import { requireContextPermission } from "@/lib/permissions/server";
 import type { PermissionResource } from "@/types/permission";
 
@@ -490,6 +492,26 @@ export async function runPromptSkill(
         `update skill_runs set status = 'failed', error = $2, finished_at = now() where id = $1`,
         [runId, "AI 未启用或调用失败"],
       );
+
+      // 失败默认沉淀到经验队列；采集失败不影响失败状态落库
+      await client.query("savepoint experience_capture");
+      try {
+        const captured = await captureSkillRunExperience(client, runId);
+        await client.query("release savepoint experience_capture");
+        if (captured?.jobId) {
+          log("info", "experience_job_enqueued", {
+            job_id: captured.jobId,
+            merged: captured.merged,
+            skill_run_id: runId,
+          });
+        }
+      } catch (error) {
+        await client.query("rollback to savepoint experience_capture");
+        log("warn", "experience_capture_failed", {
+          skill_run_id: runId,
+          error: errorMessage(error),
+        });
+      }
     });
     throw new SkillInputError("AI 未启用或调用失败，请先在设置面配置模型");
   }

@@ -21,7 +21,10 @@ import {
   type WorkerToolPlan,
 } from "@/lib/mcp/worker-tools";
 import { claimRun, heartbeatRun, sweepExhausted, type ClaimedRun } from "@/lib/runtime/claim";
-import { sweepExperienceJobs } from "@/lib/knowledge/experience/queue";
+import {
+  purgeExpiredExperienceSourceText,
+  sweepExperienceJobs,
+} from "@/lib/knowledge/experience/queue";
 import { processOneExperienceJob } from "@/worker/experience";
 import { isCancelRequested } from "@/lib/runtime/cancel";
 import { emitEvent, savePartialText } from "@/lib/runtime/emit";
@@ -33,6 +36,8 @@ const WORKER_ID = `worker-${os.hostname()}-${process.pid}`;
 const IDLE_SLEEP_MS = 800;
 const HEARTBEAT_MS = 30_000;
 const SWEEP_EVERY_MS = 60_000;
+/** 来源文本保留期清理：每 6 小时一次，只清过期大文本 */
+const PURGE_SOURCE_TEXT_EVERY_MS = 6 * 60 * 60 * 1000;
 
 let stopping = false;
 /** 后台经验沉淀：同一时刻最多 1 个，不阻塞前台 run 领取 */
@@ -66,10 +71,19 @@ interface EmployeeSnapshot {
   allowedTools?: string[];
 }
 
+function memoryBlockFor(run: ClaimedRun): string {
+  const memory = typeof run.input.memory === "string" ? run.input.memory.trim() : "";
+  if (memory.length === 0) {
+    return "";
+  }
+  return `以下是用户为本会话置顶的记忆，优先遵守；与当前消息冲突时以当前消息为准：\n${memory}`;
+}
+
 function systemPromptFor(run: ClaimedRun): string {
   const employee = (run.input.employee ?? null) as EmployeeSnapshot | null;
+  const memoryBlock = memoryBlockFor(run);
   if (employee?.systemPrompt && employee.systemPrompt.trim().length > 0) {
-    return employee.systemPrompt.trim();
+    return [employee.systemPrompt.trim(), memoryBlock].filter((part) => part.length > 0).join("\n\n");
   }
   const parts = ["你是企业内部的 AI 助手，回答必须基于已知信息，不确定就如实说明。"];
   if (run.kind === "task") {
@@ -82,6 +96,9 @@ function systemPromptFor(run: ClaimedRun): string {
   }
   if (employee?.persona && employee.persona.trim().length > 0) {
     parts.push(`人格设定：${employee.persona.trim()}`);
+  }
+  if (memoryBlock) {
+    parts.push(memoryBlock);
   }
   return parts.join("\n");
 }
@@ -624,9 +641,18 @@ async function main(): Promise<void> {
   }
 
   let lastSweep = 0;
+  let lastPurge = Date.now();
 
   while (!stopping) {
     try {
+      if (Date.now() - lastPurge > PURGE_SOURCE_TEXT_EVERY_MS) {
+        lastPurge = Date.now();
+        const purged = await purgeExpiredExperienceSourceText(pool);
+        if (purged.purged > 0 || purged.skipped > 0) {
+          log("info", "experience_source_text_purged", purged);
+        }
+      }
+
       if (Date.now() - lastSweep > SWEEP_EVERY_MS) {
         lastSweep = Date.now();
         await sweepStaleHeartbeat(pool);

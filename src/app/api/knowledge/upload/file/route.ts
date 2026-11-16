@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { resolveUserContext } from "@/lib/db/user-context";
-import { isFolderKey } from "@/lib/knowledge/folders";
-import { ingestUpload, MAX_FILE_BYTES } from "@/lib/knowledge/ingest";
+import { isUploadableFolder } from "@/lib/knowledge/folders";
+import { formatFileSizeLimit, ingestUpload, maxFileBytes } from "@/lib/knowledge/ingest";
 import { errorMessage, log } from "@/lib/logger";
 import { PermissionDeniedError } from "@/lib/permissions/guard";
 
@@ -36,8 +36,12 @@ export async function POST(request: Request) {
   if (file.size === 0) {
     return Response.json({ ok: false, error: "文件为空" }, { status: 400 });
   }
-  if (file.size > MAX_FILE_BYTES) {
-    return Response.json({ ok: false, error: `${file.name} 超过 20MB 上限` }, { status: 413 });
+  const limit = maxFileBytes();
+  if (file.size > limit) {
+    return Response.json(
+      { ok: false, error: `${file.name} 超过 ${formatFileSizeLimit(limit)} 上限，请压缩或拆分后上传` },
+      { status: 413 },
+    );
   }
 
   const runId = String(form.get("runId") ?? "").trim() || undefined;
@@ -61,7 +65,7 @@ export async function POST(request: Request) {
       goal,
       {
         runId,
-        folderKey: isFolderKey(folder) ? folder : undefined,
+        folderKey: isUploadableFolder(folder) ? folder : undefined,
         departmentId,
         roleKey,
         scope,

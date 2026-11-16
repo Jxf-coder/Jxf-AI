@@ -15,9 +15,11 @@ import { randomUUID } from "node:crypto";
 
 import { buildFingerprint } from "./fingerprint";
 import { classifySimilarity, cooldownBucket, jaccardSimilarity, manualBucket } from "./dedupe";
+import { readExperiencePolicy } from "./policy";
 import { redactText, redactValue } from "./redact";
-import { truncateSourceText } from "./truncate";
+import { DEFAULT_SOURCE_TEXT_LIMIT, truncateSourceText } from "./truncate";
 
+/** 缺省阈值；实际生效值由 app.experience_policy() 提供（settings 可改） */
 export const MIN_SOURCE_CHARS = 200;
 export const COOLDOWN_MINUTES = 60;
 export const DEDUPE_WINDOW_HOURS = 24;
@@ -73,9 +75,12 @@ export interface PreparedSourceText {
 }
 
 /** 去敏一次、三处复用：LLM 输入、证据校验、人工工作台展示 */
-export function prepareExperienceText(raw: string): PreparedSourceText {
+export function prepareExperienceText(
+  raw: string,
+  limit = DEFAULT_SOURCE_TEXT_LIMIT,
+): PreparedSourceText {
   const redacted = redactText(String(raw ?? ""));
-  const truncated = truncateSourceText(redacted);
+  const truncated = truncateSourceText(redacted, limit);
   return {
     text: truncated.text,
     truncated: truncated.truncated,
@@ -84,8 +89,8 @@ export function prepareExperienceText(raw: string): PreparedSourceText {
   };
 }
 
-export function isCollectableText(text: string): boolean {
-  return String(text ?? "").trim().length >= MIN_SOURCE_CHARS;
+export function isCollectableText(text: string, minChars = MIN_SOURCE_CHARS): boolean {
+  return String(text ?? "").trim().length >= minChars;
 }
 
 interface RecentJobRow {
@@ -101,9 +106,15 @@ export async function enqueueExperience(
   client: Queryable,
   draft: ExperienceDraft,
 ): Promise<EnqueueResult> {
-  const prepared = prepareExperienceText(draft.text);
-  if (!isCollectableText(prepared.text)) {
-    return { jobId: null, merged: false, reason: `来源文本过短（<${MIN_SOURCE_CHARS} 字）` };
+  // 与 worker 共用同一份阈值：最短字数 / 截断上限 / 每小时入队上限
+  const policy = await readExperiencePolicy(client);
+  const prepared = prepareExperienceText(draft.text, policy.maxSourceChars);
+  if (!isCollectableText(prepared.text, policy.minSourceChars)) {
+    return {
+      jobId: null,
+      merged: false,
+      reason: `来源文本过短（<${policy.minSourceChars} 字）`,
+    };
   }
 
   const fingerprint = buildFingerprint({
@@ -155,7 +166,7 @@ export async function enqueueExperience(
     [draft.tenantId],
   );
   const used = Number((hourly.rows[0] as { count?: number } | undefined)?.count ?? 0);
-  const overLimit = used >= HOURLY_JOB_LIMIT;
+  const overLimit = used >= policy.hourlyJobLimit;
 
   const sourceMeta = redactValue({
     title: draft.title,

@@ -25,6 +25,10 @@ import {
   type OpsTaskStatus,
   type OpsTaskView,
 } from "@/lib/ops/types";
+import {
+  EXPERIENCE_POLICY_LIMITS,
+  type ExperiencePolicy,
+} from "@/lib/knowledge/experience/policy-shared";
 import type { DeliveryStatus } from "@/lib/settings/delivery-status";
 import {
   CLEAR_API_KEY,
@@ -38,6 +42,7 @@ import {
   saveAiSettingsAction,
   saveAuditRetentionAction,
   saveBrandingAction,
+  saveExperiencePolicyAction,
   saveNotificationAction,
   testAiConnectionAction,
   testNotificationAction,
@@ -48,6 +53,7 @@ interface SettingsClientProps {
   effective: EffectiveAiSummary;
   delivery: DeliveryStatus;
   opsTasks: OpsTaskView[];
+  experiencePolicy: ExperiencePolicy;
   version: string;
   appEnv: string;
 }
@@ -126,6 +132,7 @@ export function SettingsClient({
   effective,
   delivery,
   opsTasks,
+  experiencePolicy,
   version,
   appEnv,
 }: SettingsClientProps) {
@@ -167,6 +174,10 @@ export function SettingsClient({
 
   const [opsKind, setOpsKind] = useState<OpsTaskKind | null>(null);
   const [opsMessage, setOpsMessage] = useState<Message | null>(null);
+
+  const [policy, setPolicy] = useState<ExperiencePolicy>(experiencePolicy);
+  const [policyBusy, setPolicyBusy] = useState(false);
+  const [policyMessage, setPolicyMessage] = useState<Message | null>(null);
 
   const hasActiveOps = opsTasks.some(
     (task) => task.status === "queued" || task.status === "running",
@@ -270,6 +281,20 @@ export function SettingsClient({
       setMailMessage({ tone: result.ok ? "info" : "error", text: result.message });
     } finally {
       setMailTestBusy(false);
+    }
+  }
+
+  async function submitPolicy() {
+    setPolicyBusy(true);
+    setPolicyMessage(null);
+    try {
+      const result = await saveExperiencePolicyAction(policy);
+      setPolicyMessage({ tone: result.ok ? "info" : "error", text: result.message });
+      if (result.ok) {
+        router.refresh();
+      }
+    } finally {
+      setPolicyBusy(false);
     }
   }
 
@@ -677,6 +702,57 @@ export function SettingsClient({
             查看审计日志
           </Link>
         </div>
+      </SectionCard>
+
+      <SectionCard
+        title="经验沉淀策略"
+        desc="失败经验与验收备注的采集/提炼阈值。保存后新入队的 job 与新提炼立即使用新值；已产出的卡片不受影响。"
+        right={<span className={badge()}>仅 L1 可改</span>}
+      >
+        <div className={formGrid}>
+          {(Object.keys(EXPERIENCE_POLICY_LIMITS) as Array<keyof ExperiencePolicy>).map((key) => {
+            const limit = EXPERIENCE_POLICY_LIMITS[key];
+            return (
+              <Field key={key} label={`${limit.label}（${limit.min}–${limit.max}）`}>
+                <input
+                  type="number"
+                  min={limit.min}
+                  max={limit.max}
+                  className={input}
+                  value={policy[key]}
+                  onChange={(event) =>
+                    setPolicy({ ...policy, [key]: Number(event.target.value) })
+                  }
+                />
+              </Field>
+            );
+          })}
+        </div>
+
+        <div className={actions}>
+          <button type="button" className={btnBlue} disabled={policyBusy} onClick={submitPolicy}>
+            {policyBusy ? "保存中…" : "保存策略"}
+          </button>
+          <button
+            type="button"
+            className={btnGhost}
+            disabled={policyBusy}
+            onClick={() => {
+              setPolicy(experiencePolicy);
+              setPolicyMessage(null);
+            }}
+          >
+            还原为当前已保存值
+          </button>
+        </div>
+        {policyMessage ? (
+          <InlineMessage tone={policyMessage.tone}>{policyMessage.text}</InlineMessage>
+        ) : null}
+
+        <p className={`${meta} mt-3`}>
+          最短字数决定「值不值得入队」；截断上限只保留头 30% + 关键段 + 尾 30%，不会把长日志整份送进模型；
+          每日产卡上限命中时 job 会推迟到次日，不消耗模型额度。
+        </p>
       </SectionCard>
 
       <SectionCard

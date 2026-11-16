@@ -11,6 +11,7 @@
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
 import { requireContextPermission } from "@/lib/permissions/server";
+import { readMemoryContext } from "@/lib/runtime/memory";
 
 export type RuntimeRunKind = "chat" | "task" | "workflow_step" | "ingest" | "regression";
 
@@ -103,9 +104,13 @@ export async function acceptRun(context: UserContext, request: AcceptRunInput): 
       }
     }
 
+    // 会话记忆只注入当前会话，且只读创建者本人的条目
+    const memory = threadId ? await readMemoryContext(client, threadId, context.userId) : null;
+
     const input = {
       ...request.input,
       ...(employee ? { employee } : {}),
+      ...(memory ? { memory } : {}),
     };
     const clientTurnId = (request.clientTurnId ?? "").trim().slice(0, 100) || null;
 

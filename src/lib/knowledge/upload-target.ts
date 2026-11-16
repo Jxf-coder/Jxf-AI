@@ -15,7 +15,7 @@ import { withUserContext } from "@/lib/db/user-context";
 import {
   DEFAULT_DOCUMENT_FOLDER,
   folderLabel,
-  isFolderKey,
+  isUploadableFolder,
   type FolderKey,
 } from "@/lib/knowledge/folders";
 
@@ -61,7 +61,10 @@ export async function resolveUploadTarget(
 
   const requestedDept = (params.dept ?? "").trim();
   const roleKey = (params.role ?? "").trim().slice(0, 64);
-  const folderKey: FolderKey = isFolderKey(params.folder) ? params.folder : DEFAULT_DOCUMENT_FOLDER;
+  if (params.folder === "99-trash") {
+    return { ok: false, message: "99-回收站只能由删除产生，不能作为上传目录" };
+  }
+  const folderKey: FolderKey = isUploadableFolder(params.folder) ? params.folder : DEFAULT_DOCUMENT_FOLDER;
   const isShared = parseUploadScope(params.scope) === "shared";
 
   const departmentId = requestedDept || context.activeDepartmentId;

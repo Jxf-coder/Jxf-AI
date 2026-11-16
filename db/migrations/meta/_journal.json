@@ -274,6 +274,34 @@
       "when": 1794128400000,
       "tag": "0038_card_evidence_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1794132000000,
+      "tag": "0039_thread_memories",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1794135600000,
+      "tag": "0040_pipeline_archive_folder",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794139200000,
+      "tag": "0041_folder_route_stats_daily",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1794142800000,
+      "tag": "0042_experience_policies",
+      "breakpoints": true
     }
   ]
 }

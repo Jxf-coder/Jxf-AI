@@ -1,5 +1,5 @@
 /**
- * 通道适配：把产线终态整理成「来源文本」并入队。
+ * 通道适配：把产线终态与技能失败整理成「来源文本」并入队；人工复盘由 retro.ts 直接入队。
  *
  * 只读产线与工作项，不直接写卡；真正的提炼由 worker 异步完成。
  * 来源文本包含：产线名、触发方式、失败步骤、步骤定义、各工作项状态 / 验收备注 / 交付摘要，
@@ -194,4 +194,82 @@ export async function capturePipelineRunExperienceSafe(
       error: errorMessage(error),
     });
   }
+}
+
+export interface SkillSourceInput {
+  skillName: string | null;
+  skillKey: string;
+  error: string | null;
+  input: Record<string, unknown> | null;
+}
+
+export function buildSkillSourceText(input: SkillSourceInput): string {
+  const name = input.skillName?.trim() || input.skillKey;
+  const payload =
+    input.input && Object.keys(input.input).length > 0
+      ? JSON.stringify(input.input, null, 2)
+      : "（无输入）";
+  return [
+    `技能：${name}（${input.skillKey}）`,
+    "执行方式：提示词",
+    `失败原因：${input.error?.trim() || "未记录"}`,
+    "输入：",
+    payload,
+  ].join("\n");
+}
+
+interface SkillRunRow {
+  id: string;
+  tenant_id: string;
+  department_id: string;
+  skill_key: string;
+  error: string | null;
+  finished_at: Date | null;
+  skill_name: string | null;
+  input: Record<string, unknown> | null;
+}
+
+/**
+ * 采集一条失败的技能执行。
+ * - 只处理 status='failed'，成功执行默认不沉淀；
+ * - 来源文本包含技能名、失败原因与输入，供模型引用为逐字证据。
+ */
+export async function captureSkillRunExperience(
+  client: Queryable,
+  runId: string,
+): Promise<EnqueueResult | null> {
+  const result = await client.query(
+    `select r.id, r.tenant_id, r.department_id, r.skill_key, r.error, r.finished_at,
+            r.input, s.name as skill_name
+       from skill_runs r
+       left join skills s on s.id = r.skill_id
+      where r.id = $1 and r.status = 'failed'`,
+    [runId],
+  );
+  const run = result.rows[0] as unknown as SkillRunRow | undefined;
+  if (!run) {
+    return null;
+  }
+
+  const title = `${run.skill_name?.trim() || run.skill_key} · 技能执行失败`;
+  return enqueueExperience(client, {
+    tenantId: run.tenant_id,
+    departmentId: run.department_id,
+    channel: "skill",
+    sourceType: "skill_run",
+    sourceId: run.id,
+    sourceVersion: run.finished_at ? run.finished_at.toISOString() : "failed",
+    title,
+    text: buildSkillSourceText({
+      skillName: run.skill_name,
+      skillKey: run.skill_key,
+      error: run.error,
+      input: run.input,
+    }),
+    errorType: "skill_run_failed",
+    meta: {
+      skillKey: run.skill_key,
+      skillRunId: run.id,
+    },
+  });
 }

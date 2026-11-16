@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -127,4 +128,54 @@ export const folderRouteFeedback = pgTable(
       table.createdAt.desc(),
     ),
   ],
+);
+
+/**
+ * 目录路由纠偏日聚合（folder_route_stats_daily）。
+ * 只由 app.rollup_folder_route_stats 重算写入，页面只读；
+ * suggested_folder 允许为空，唯一索引按 NULLS NOT DISTINCT 建，避免空建议重复成多行。
+ */
+export const folderRouteStatsDaily = pgTable(
+  "folder_route_stats_daily",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull(),
+    day: date("day").notNull(),
+    channel: text("channel").notNull(),
+    action: text("action").notNull(),
+    suggestedFolder: text("suggested_folder"),
+    chosenFolder: text("chosen_folder").notNull(),
+    total: integer("total").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("folder_route_stats_daily_key").on(
+      table.tenantId,
+      table.day,
+      table.channel,
+      table.action,
+      table.suggestedFolder,
+      table.chosenFolder,
+    ),
+    index("folder_route_stats_daily_tenant_day_idx").on(table.tenantId, table.day),
+  ],
+);
+
+/**
+ * 经验沉淀策略（experience_policies）：每租户一行，缺行时由 app.experience_policy() 返回默认值。
+ * 采集侧（web）与提炼侧（worker）都通过该函数读同一份阈值。
+ */
+export const experiencePolicies = pgTable(
+  "experience_policies",
+  {
+    tenantId: uuid("tenant_id").primaryKey(),
+    minSourceChars: integer("min_source_chars").notNull().default(200),
+    maxSourceChars: integer("max_source_chars").notNull().default(12000),
+    hourlyJobLimit: integer("hourly_job_limit").notNull().default(20),
+    dailyCardLimit: integer("daily_card_limit").notNull().default(50),
+    maxCandidates: integer("max_candidates").notNull().default(3),
+    updatedBy: uuid("updated_by").references(() => users.id, { onDelete: "set null" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
 );

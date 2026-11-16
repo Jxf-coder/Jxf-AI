@@ -17,11 +17,12 @@ import { embedTexts } from "@/lib/ai/openai";
 import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
+import { loadEnv } from "@/lib/env";
 import { chunkPages, type TextChunk } from "@/lib/knowledge/chunk";
 import { mergeScannedPages } from "@/lib/knowledge/ocr";
 import {
   DEFAULT_DOCUMENT_FOLDER,
-  isFolderKey,
+  isUploadableFolder,
   type FolderKey,
 } from "@/lib/knowledge/folders";
 import { fileExtension, parseDocument, UnsupportedDocumentError } from "@/lib/knowledge/parse";
@@ -29,12 +30,22 @@ import { errorMessage, log } from "@/lib/logger";
 import { requireContextPermission } from "@/lib/permissions/server";
 import { putObject, uploadKey } from "@/lib/storage/local";
 
-export const MAX_FILE_BYTES = 20 * 1024 * 1024;
 export const MAX_FILES_PER_RUN = 20;
+
+/** 生效的单文件上限（默认值由 env 的 JXF_KNOWLEDGE_MAX_FILE_BYTES 决定）：解析会把整份文件读进内存 */
+export function maxFileBytes(): number {
+  return loadEnv().knowledge.maxFileBytes;
+}
+
+/** 供界面与报错复用的易读上限，如 "50MB" */
+export function formatFileSizeLimit(bytes: number): string {
+  return `${Math.round(bytes / (1024 * 1024))}MB`;
+}
 
 const ALLOWED_EXTENSIONS = new Set([
   "pdf",
   "docx",
+  "doc",
   "txt",
   "md",
   "markdown",
@@ -214,11 +225,13 @@ export async function ingestUpload(
   });
 
   const roleKey = scope.role;
-  const folderKey: FolderKey = isFolderKey(options.folderKey)
+  const folderKey: FolderKey = isUploadableFolder(options.folderKey)
     ? options.folderKey
     : DEFAULT_DOCUMENT_FOLDER;
 
   // 1. 规则筛 + 解析 + 分块 + 向量化（事务外）
+  const maxBytes = maxFileBytes();
+  const maxBytesLabel = formatFileSizeLimit(maxBytes);
   for (const input of inputs) {
     const extension = fileExtension(input.name);
 
@@ -230,8 +243,18 @@ export async function ingestUpload(
       results.push({ name: input.name, decision: "rule_skip", reason: "空文件" });
       continue;
     }
-    if (input.bytes.byteLength > MAX_FILE_BYTES) {
-      results.push({ name: input.name, decision: "rule_skip", reason: "文件超过 20MB" });
+    if (input.bytes.byteLength > maxBytes) {
+      // 记录一条 warn：便于运维区分「资料太大」与「系统故障」
+      log("warn", "knowledge_file_too_large", {
+        name: input.name,
+        bytes: input.bytes.byteLength,
+        limit: maxBytes,
+      });
+      results.push({
+        name: input.name,
+        decision: "rule_skip",
+        reason: `文件超过 ${maxBytesLabel}，请压缩或拆分后上传`,
+      });
       continue;
     }
 

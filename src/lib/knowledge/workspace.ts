@@ -14,7 +14,8 @@ import {
   type CardEvidenceView,
   type CardVersionView,
 } from "@/lib/knowledge/cards";
-import { folderLabel, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
+import { folderLabel, isFolderKey, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
+import { log } from "@/lib/logger";
 import { setShareState } from "@/lib/knowledge/share";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -28,6 +29,11 @@ export interface TreeItem {
   id: string;
   title: string;
   status: string;
+  /** 搜索结果的目录定位；目录树节点不填 */
+  folderKey?: string;
+  folderLabel?: string;
+  /** 搜索结果的位置摘要：部门 · 岗位 · 目录 */
+  location?: string;
 }
 
 export interface TreeFolder {
@@ -184,10 +190,20 @@ export async function loadWorkspaceTree(context: UserContext): Promise<Workspace
     }
 
     const pendingDocs: TreeItem[] = [];
+    /** 同一响应内已告警过的未知目录，避免逐条刷日志 */
+    const unknownFolders = new Set<string>();
 
     function addNode(row: NodeRow, kind: "card" | "document") {
       const item: TreeItem = { kind, id: row.id, title: row.title, status: row.status };
       const name = roleName(row.role_key);
+      if (!isFolderKey(row.folder_key) && !unknownFolders.has(row.folder_key)) {
+        unknownFolders.add(row.folder_key);
+        log("warn", "knowledge_unknown_folder", {
+          source: kind,
+          folder_key: row.folder_key,
+          department_id: row.department_id,
+        });
+      }
       // 回收站：软删文档 + 已作废卡片，一律落本部门「99-回收站」，
       // 不留在原目录、岗位层或共享区
       const trashed =
@@ -276,12 +292,22 @@ export async function loadWorkspaceTree(context: UserContext): Promise<Workspace
   });
 }
 
+export interface WorkspaceSearchOptions {
+  /** 限定目录；非法或空表示全库 */
+  folder?: string | null;
+}
+
 /** 全库标题搜索：绕开目录树单侧上限，只返回当前账号可读范围内的匹配项 */
-export async function searchWorkspace(context: UserContext, query: string): Promise<TreeItem[]> {
+export async function searchWorkspace(
+  context: UserContext,
+  query: string,
+  options: WorkspaceSearchOptions = {},
+): Promise<TreeItem[]> {
   const keyword = query.trim().slice(0, 60);
   if (keyword.length === 0) {
     return [];
   }
+  const folder = isFolderKey(options.folder) ? options.folder : null;
   const escaped = keyword.replace(/[\\%_]/g, (char) => `\\${char}`);
   const like = `%${escaped}%`;
 
@@ -291,25 +317,51 @@ export async function searchWorkspace(context: UserContext, query: string): Prom
       title: string;
       status: string;
       kind: string;
+      folder_key: string;
+      role_key: string | null;
+      department_name: string;
     }>(
-      `select id, title, status::text as status, 'document' as kind
-         from documents
-        where deleted_at is null and title ilike $1
+      `select d.id, d.title, d.status::text as status, 'document' as kind,
+              d.folder_key, d.role_key, dep.name as department_name
+         from documents d
+         join departments dep on dep.id = d.department_id
+        where d.deleted_at is null and d.title ilike $1
+          and ($2::text is null or d.folder_key = $2)
         union all
-       select id, title, status::text as status, 'card' as kind
-         from knowledge_cards
-        where status <> 'dropped' and title ilike $1
+       select c.id, c.title, c.status::text as status, 'card' as kind,
+              c.folder_key, c.role_key, dep.name as department_name
+         from knowledge_cards c
+         join departments dep on dep.id = c.department_id
+        where c.status <> 'dropped' and c.title ilike $1
+          and ($2::text is null or c.folder_key = $2)
         order by title
         limit 50`,
-      [like],
+      [like, folder],
     );
 
-    return rows.map((row) => ({
-      kind: row.kind === "card" ? ("card" as const) : ("document" as const),
-      id: row.id,
-      title: row.title,
-      status: row.status,
-    }));
+    const unknownFolders = new Set<string>();
+    return rows.map((row) => {
+      if (!isFolderKey(row.folder_key) && !unknownFolders.has(row.folder_key)) {
+        unknownFolders.add(row.folder_key);
+        log("warn", "knowledge_unknown_folder", {
+          source: "search",
+          folder_key: row.folder_key,
+        });
+      }
+      const label = folderLabel(row.folder_key);
+      const location = [row.department_name, row.role_key?.trim(), label]
+        .filter((part): part is string => Boolean(part && part.length > 0))
+        .join(" · ");
+      return {
+        kind: row.kind === "card" ? ("card" as const) : ("document" as const),
+        id: row.id,
+        title: row.title,
+        status: row.status,
+        folderKey: row.folder_key,
+        folderLabel: label,
+        location,
+      };
+    });
   });
 }
 
