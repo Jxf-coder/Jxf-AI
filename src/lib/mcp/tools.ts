@@ -15,11 +15,18 @@ import { embedTexts } from "@/lib/ai/openai";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
 import { loadEnv } from "@/lib/env";
+import { FACT_FOLDERS } from "@/lib/knowledge/folders";
 import type { PermissionKey } from "@/lib/permissions/catalog";
 import { requireContextPermission } from "@/lib/permissions/server";
 import { assignWork, listWorkItems } from "@/lib/work-items";
 
 export type McpToolAction = "read" | "write";
+
+/**
+ * 工具集版本：新增工具可要求更高的令牌版本，避免存量令牌自动获得新能力。
+ * 新签发令牌写入当前版本；存量 v1 需在令牌管理页显式升级。
+ */
+export const MCP_SCOPE_VERSION = 2;
 
 /** 技能维：工具所属能力域 */
 export type McpSkill = "knowledge" | "workitem" | "employee";
@@ -50,6 +57,8 @@ export interface McpToolDefinition {
   description: string;
   action: McpToolAction;
   skill: McpSkill;
+  /** 需要的最低工具集版本；缺省 1（存量令牌可见） */
+  minScopeVersion?: number;
   inputSchema: Record<string, unknown>;
   run: (args: Record<string, unknown>, context: UserContext) => Promise<unknown>;
 }
@@ -113,8 +122,8 @@ const searchTool: McpToolDefinition = {
         score: number;
       }>(
         `select card_id, title, body, score
-           from app.hybrid_search_cards($1, $2::vector, $3, 60)`,
-        [query, embedding ? `[${embedding.join(",")}]` : null, topK],
+           from app.hybrid_search_cards($1, $2::vector, $3, 60, $4::text[])`,
+        [query, embedding ? `[${embedding.join(",")}]` : null, topK, [...FACT_FOLDERS]],
       );
       return result.rows;
     });
@@ -128,6 +137,108 @@ const searchTool: McpToolDefinition = {
         excerpt: row.body.slice(0, 400),
         score: Number(row.score),
       })),
+    };
+  },
+};
+
+const experienceSearchTool: McpToolDefinition = {
+  name: "knowledge.experience.search",
+  title: "检索经验",
+  description:
+    "检索已确认的经验卡（05-经验蒸馏，可选 08-复盘归档）。结果是历史经验，不是已核实事实，引用时需说明来源。",
+  action: "read",
+  skill: "knowledge",
+  minScopeVersion: MCP_SCOPE_VERSION,
+  inputSchema: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "检索问题或关键词" },
+      topK: { type: "integer", minimum: 1, maximum: 20, description: "返回条数，默认 5" },
+      includeRetro: { type: "boolean", description: "是否同时检索 08-复盘归档，默认 false" },
+    },
+    required: ["query"],
+  },
+  async run(args, context) {
+    const query = readString(args, "query", 500);
+    if (query.length < 2) {
+      throw new Error("query 至少 2 个字符");
+    }
+    const requested = Number(args.topK ?? 5);
+    const topK = Number.isFinite(requested) ? Math.min(Math.max(Math.trunc(requested), 1), 20) : 5;
+    const includeRetro = args.includeRetro === true;
+
+    await assertDepartmentPermission(context, "knowledge:read");
+
+    const env = loadEnv();
+    const [embedding] = (await embedTexts([query])) ?? [];
+    const folders = includeRetro ? ["05-distill", "08-retro"] : ["05-distill"];
+
+    const results = await withUserContext(context, async (client) => {
+      const hits = await client.query<{
+        card_id: string;
+        title: string;
+        body: string;
+        score: number;
+      }>(
+        `select card_id, title, body, score
+           from app.hybrid_search_cards($1, $2::vector, $3, 60, $4::text[])`,
+        [query, embedding ? `[${embedding.join(",")}]` : null, topK, folders],
+      );
+      if (hits.rows.length === 0) {
+        return [];
+      }
+
+      const ids = hits.rows.map((row) => row.card_id);
+      const meta = await client.query<{
+        id: string;
+        source_channel: string | null;
+        source_ref: Record<string, unknown> | null;
+        folder_key: string;
+      }>(
+        `select id, source_channel, source_ref, folder_key
+           from knowledge_cards
+          where id = any($1::uuid[])`,
+        [ids],
+      );
+      const evidence = await client.query<{ card_id: string; quote: string }>(
+        `select card_id, quote
+           from card_evidence
+          where card_id = any($1::uuid[])
+            and verified
+          order by page_no nulls last, char_start`,
+        [ids],
+      );
+
+      const metaById = new Map(meta.rows.map((row) => [row.id, row]));
+      const quotesByCard = new Map<string, string[]>();
+      for (const row of evidence.rows) {
+        const list = quotesByCard.get(row.card_id) ?? [];
+        list.push(row.quote);
+        quotesByCard.set(row.card_id, list);
+      }
+
+      return hits.rows.map((row) => {
+        const info = metaById.get(row.card_id);
+        return {
+          cardId: row.card_id,
+          title: row.title,
+          body: row.body,
+          score: Number(row.score),
+          folder: info?.folder_key ?? null,
+          source: {
+            channel: info?.source_channel ?? null,
+            ref: info?.source_ref ?? null,
+          },
+          evidence: (quotesByCard.get(row.card_id) ?? []).slice(0, 3),
+        };
+      });
+    });
+
+    return {
+      query,
+      count: results.length,
+      notice: "以下是历史经验，不是已核实事实；引用时需说明来源。",
+      results,
     };
   },
 };
@@ -237,6 +348,7 @@ const assignWorkTool: McpToolDefinition = {
 
 export const MCP_TOOLS: readonly McpToolDefinition[] = [
   searchTool,
+  experienceSearchTool,
   workItemListTool,
   employeeListTool,
   assignWorkTool,
@@ -302,8 +414,15 @@ export function normalizeScope(raw: unknown): McpToolScope {
   return { skills, pipelines, tools, allowWrite: record.allowWrite === true, approvalTools, channels };
 }
 
-/** 动作 + 技能 + 直写三维：决定工具是否可见 / 可调用 */
-export function isToolAllowed(tool: McpToolDefinition, scope: McpToolScope): boolean {
+/** 动作 + 技能 + 直写 + 工具集版本：决定工具是否可见 / 可调用 */
+export function isToolAllowed(
+  tool: McpToolDefinition,
+  scope: McpToolScope,
+  tokenScopeVersion = 1,
+): boolean {
+  if ((tool.minScopeVersion ?? 1) > tokenScopeVersion) {
+    return false;
+  }
   if (scope.skills.length > 0 && !scope.skills.includes(tool.skill)) {
     return false;
   }
@@ -311,6 +430,24 @@ export function isToolAllowed(tool: McpToolDefinition, scope: McpToolScope): boo
     return false;
   }
   return tool.action === "read" || scope.allowWrite;
+}
+
+/**
+ * 拒绝原因：区分「版本太旧」与「未授权」，供审计与工具列表提示。
+ * 显式 tools 白名单优先于版本门槛。
+ */
+export function toolDenialReason(
+  tool: McpToolDefinition,
+  scope: McpToolScope,
+  tokenScopeVersion: number,
+): "scope_version_too_old" | "not_allowed" | null {
+  if (scope.tools.includes(tool.name)) {
+    return null;
+  }
+  if ((tool.minScopeVersion ?? 1) > tokenScopeVersion) {
+    return "scope_version_too_old";
+  }
+  return isToolAllowed(tool, scope, tokenScopeVersion) ? null : "not_allowed";
 }
 
 /** 审批维：写类工具是否必须转人工审批 */
@@ -355,8 +492,8 @@ export function channelAllowed(scope: McpToolScope, channel: string): boolean {
   return scope.channels.length === 0 || (channel.length > 0 && scope.channels.includes(channel));
 }
 
-export function visibleTools(scope: McpToolScope): McpToolDefinition[] {
-  return MCP_TOOLS.filter((tool) => isToolAllowed(tool, scope));
+export function visibleTools(scope: McpToolScope, tokenScopeVersion = 1): McpToolDefinition[] {
+  return MCP_TOOLS.filter((tool) => isToolAllowed(tool, scope, tokenScopeVersion));
 }
 
 export function findTool(name: string): McpToolDefinition | null {

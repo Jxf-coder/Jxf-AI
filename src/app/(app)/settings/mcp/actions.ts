@@ -21,6 +21,7 @@ import {
   issueMcpToken,
   renewMcpToken,
   revokeMcpToken,
+  upgradeMcpTokenScope,
   type McpClientKey,
 } from "@/lib/mcp/tokens";
 import { toPermissionMessage } from "@/lib/permissions/guard";
@@ -80,6 +81,16 @@ export async function renewMcpTokenAction(
     await renewMcpToken(await contextOf(), tokenId, input);
     revalidatePath("/settings/mcp");
     return { ok: true, message: input.reactivate ? "令牌已重新激活" : "有效期已更新" };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}
+
+export async function upgradeTokenScopeAction(tokenId: string): Promise<McpActionResult> {
+  try {
+    await upgradeMcpTokenScope(await contextOf(), tokenId);
+    revalidatePath("/settings/mcp");
+    return { ok: true, message: "工具集已升级，新工具立即可见" };
   } catch (error) {
     return { ok: false, message: toPermissionMessage(error) };
   }

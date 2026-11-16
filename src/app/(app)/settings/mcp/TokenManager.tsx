@@ -23,6 +23,7 @@ import {
   deleteMcpTokenAction,
   renewMcpTokenAction,
   revokeMcpTokenAction,
+  upgradeTokenScopeAction,
   type McpActionResult,
 } from "./actions";
 import { Drawer } from "./McpDrawer";
@@ -220,7 +221,12 @@ export function TokenManager({ tokens, query }: TokenManagerProps) {
                         {STATUS_LABEL[token.status]}
                       </span>
                     </td>
-                    <td className="text-[13px] text-zinc-900">{token.name}</td>
+                    <td className="text-[13px] text-zinc-900">
+                      {token.name}
+                      <span className={`${meta} block`}>
+                        工具集 v{token.scopeVersion}
+                      </span>
+                    </td>
                     <td className="text-[12px] text-zinc-600">
                       {token.client ? MCP_CLIENT_LABELS[token.client] : "通用"}
                     </td>
@@ -242,6 +248,16 @@ export function TokenManager({ tokens, query }: TokenManagerProps) {
                         >
                           {token.status === "active" ? "续期" : "续期 / 重新激活"}
                         </button>
+                        {token.scopeVersion < 2 ? (
+                          <button
+                            type="button"
+                            className={`${linkBtn} text-[12px]`}
+                            disabled={pending}
+                            onClick={() => run(() => upgradeTokenScopeAction(token.id))}
+                          >
+                            升级工具集
+                          </button>
+                        ) : null}
                         {token.status === "active" ? (
                           <button
                             type="button"

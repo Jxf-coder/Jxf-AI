@@ -19,6 +19,7 @@ import {
   needsApproval,
   requestChannel,
   scopeViolation,
+  toolDenialReason,
   visibleTools,
 } from "@/lib/mcp/tools";
 import { resolveMcpToken, type ResolvedMcpToken } from "@/lib/mcp/tokens";
@@ -117,7 +118,7 @@ async function handleMessage(
 
   if (method === "tools/list") {
     return rpcResult(id, {
-      tools: visibleTools(token.scope).map((tool) => ({
+      tools: visibleTools(token.scope, token.scopeVersion).map((tool) => ({
         name: tool.name,
         title: tool.title,
         description: tool.description,
@@ -136,10 +137,15 @@ async function handleMessage(
         : {};
 
     const tool = findTool(name);
-    if (!tool || !isToolAllowed(tool, token.scope)) {
-      await auditCall(token, name || "(unknown)", "denied", { reason: "tool_not_allowed" });
+    if (!tool || !isToolAllowed(tool, token.scope, token.scopeVersion)) {
+      const reason = tool ? toolDenialReason(tool, token.scope, token.scopeVersion) : "tool_not_allowed";
+      await auditCall(token, name || "(unknown)", "denied", { reason: reason ?? "tool_not_allowed" });
+      const message =
+        reason === "scope_version_too_old"
+          ? `工具需要更新令牌：${name}。请在令牌管理页升级工具集后重试。`
+          : `工具不可用或未授权：${name || "(空)"}`;
       return rpcResult(id, {
-        content: [{ type: "text", text: `工具不可用或未授权：${name || "(空)"}` }],
+        content: [{ type: "text", text: message }],
         isError: true,
       });
     }

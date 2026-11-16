@@ -16,7 +16,7 @@ import { resolveUserContextForMembership, withUserContext } from "@/lib/db/user-
 import { loadEnv } from "@/lib/env";
 import { log } from "@/lib/logger";
 import { normalizeMcpClient, type McpClientKey } from "@/lib/mcp/clients";
-import { normalizeScope, type McpToolScope } from "@/lib/mcp/tools";
+import { normalizeScope, MCP_SCOPE_VERSION, type McpToolScope } from "@/lib/mcp/tools";
 import { requireContextPermission } from "@/lib/permissions/server";
 
 export type { McpClientKey } from "@/lib/mcp/clients";
@@ -27,6 +27,8 @@ export interface McpTokenView {
   tokenPrefix: string;
   client: McpClientKey | null;
   scope: McpToolScope;
+  /** 工具集版本：新工具按 minScopeVersion 门槛控制可见性 */
+  scopeVersion: number;
   userName: string | null;
   departmentName: string | null;
   expiresAt: string | null;
@@ -128,8 +130,8 @@ export async function issueMcpToken(
     const inserted = await client.query<{ id: string }>(
       `insert into mcp_tokens
          (tenant_id, name, token_hash, token_prefix, membership_id, user_id, department_id,
-          client, scope, expires_at, created_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)
+          client, scope, scope_version, expires_at, created_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12)
        returning id`,
       [
         context.tenantId,
@@ -141,6 +143,7 @@ export async function issueMcpToken(
         row.department_id,
         clientKey,
         JSON.stringify(scope),
+        MCP_SCOPE_VERSION,
         expiresAt,
         context.userId,
       ],
@@ -163,6 +166,7 @@ export async function issueMcpToken(
         allow_write: scope.allowWrite,
         approval_tools: scope.approvalTools,
         channels: scope.channels,
+        scope_version: MCP_SCOPE_VERSION,
         expires_at: expiresAt?.toISOString() ?? null,
       },
     });
@@ -181,6 +185,7 @@ export async function listMcpTokens(context: UserContext): Promise<McpTokenView[
       token_prefix: string;
       client: string | null;
       scope: Record<string, unknown>;
+      scope_version: number;
       expires_at: Date | null;
       revoked_at: Date | null;
       last_used_at: Date | null;
@@ -188,7 +193,7 @@ export async function listMcpTokens(context: UserContext): Promise<McpTokenView[
       user_name: string | null;
       department_name: string | null;
     }>(
-      `select t.id, t.name, t.token_prefix, t.client, t.scope,
+      `select t.id, t.name, t.token_prefix, t.client, t.scope, t.scope_version,
               t.expires_at, t.revoked_at, t.last_used_at, t.created_at,
               u.name as user_name, d.name as department_name
          from mcp_tokens t
@@ -207,6 +212,7 @@ export async function listMcpTokens(context: UserContext): Promise<McpTokenView[
       tokenPrefix: row.token_prefix,
       client: normalizeMcpClient(row.client),
       scope: normalizeScope(row.scope),
+      scopeVersion: Number(row.scope_version ?? 1),
       userName: row.user_name,
       departmentName: row.department_name,
       expiresAt: toIso(row.expires_at),
@@ -353,6 +359,46 @@ export async function renewMcpToken(
   });
 }
 
+/** 升级工具集：把存量 v1 令牌升到当前版本，新工具随即可见 */
+export async function upgradeMcpTokenScope(context: UserContext, tokenId: string): Promise<void> {
+  await withUserContext(context, async (client) => {
+    await requireContextPermission(client, context, "token:issue");
+
+    const existing = await client.query<{
+      id: string;
+      department_id: string;
+      scope_version: number;
+      deleted_at: Date | null;
+    }>(
+      `select id, department_id, scope_version, deleted_at
+         from mcp_tokens
+        where id = $1 and tenant_id = $2`,
+      [tokenId, context.tenantId],
+    );
+    const row = existing.rows[0];
+    if (!row || row.deleted_at) {
+      throw new Error("令牌不存在或已删除");
+    }
+    if (Number(row.scope_version ?? 1) >= MCP_SCOPE_VERSION) {
+      return;
+    }
+
+    await client.query(`update mcp_tokens set scope_version = $2 where id = $1`, [
+      tokenId,
+      MCP_SCOPE_VERSION,
+    ]);
+
+    await auditInTx(client, context, {
+      actorUserId: context.userId,
+      action: "mcp.token_scope_version_upgraded",
+      targetType: "mcp_token",
+      targetId: tokenId,
+      departmentId: row.department_id,
+      payload: { from: Number(row.scope_version ?? 1), to: MCP_SCOPE_VERSION },
+    });
+  });
+}
+
 /** 删除令牌：软删除并同时关闭，保留审计痕迹（RLS 不开放物理 DELETE） */
 export async function deleteMcpToken(context: UserContext, tokenId: string): Promise<void> {
   await withUserContext(context, async (client) => {
@@ -420,6 +466,7 @@ export async function cleanupInvalidMcpTokens(context: UserContext): Promise<num
 export interface ResolvedMcpToken {
   tokenId: string;
   scope: McpToolScope;
+  scopeVersion: number;
   context: UserContext;
 }
 
@@ -438,9 +485,11 @@ export async function resolveMcpToken(rawToken: string): Promise<ResolvedMcpToke
     user_id: string;
     department_id: string;
     scope: Record<string, unknown>;
-  }>("select id, tenant_id, membership_id, user_id, department_id, scope from app.lookup_mcp_token($1)", [
-    hash,
-  ]);
+    scope_version: number;
+  }>(
+    "select id, tenant_id, membership_id, user_id, department_id, scope, scope_version from app.lookup_mcp_token($1)",
+    [hash],
+  );
   const row = rows[0];
   if (!row || row.tenant_id !== env.tenantId) {
     return null;
@@ -457,5 +506,10 @@ export async function resolveMcpToken(rawToken: string): Promise<ResolvedMcpToke
       log("warn", "mcp_token_touch_failed", { token_id: row.id, error: error instanceof Error ? error.message : String(error) });
     });
 
-  return { tokenId: row.id, scope: normalizeScope(row.scope), context };
+  return {
+    tokenId: row.id,
+    scope: normalizeScope(row.scope),
+    scopeVersion: Number(row.scope_version ?? 1),
+    context,
+  };
 }
