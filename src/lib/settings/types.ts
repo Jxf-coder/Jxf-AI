@@ -2,6 +2,8 @@
  * 设置面共享类型与常量（客户端可安全导入，不含 Node / 数据库依赖）。
  */
 
+import type { SubscriptionEventKey } from "@/lib/notifications/content";
+
 /** 前端清空已保存 Key 的显式指令，避免「空字符串 = 不修改」产生歧义 */
 export const CLEAR_API_KEY = "__clear__";
 
@@ -48,6 +50,29 @@ export interface NotificationSettings {
   passConfigured: boolean;
   passHint: string | null;
   to: string | null;
+  /** IM 群机器人（飞书 / 企微）：地址与签名密钥只回显脱敏提示 */
+  feishu: NotificationChannelView;
+  wecom: NotificationChannelView;
+  /** 最近投递记录（来自审计，倒序） */
+  recent: NotificationDeliveryView[];
+}
+
+export interface NotificationChannelView {
+  enabled: boolean;
+  webhookConfigured: boolean;
+  webhookHint: string | null;
+  /** 仅飞书有签名密钥 */
+  secretConfigured: boolean;
+  secretHint: string | null;
+  events: SubscriptionEventKey[];
+}
+
+export interface NotificationDeliveryView {
+  at: string;
+  channel: string;
+  event: string;
+  ok: boolean;
+  error: string | null;
 }
 
 export interface PlatformSettingsView {

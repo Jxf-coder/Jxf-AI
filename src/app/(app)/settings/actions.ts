@@ -16,16 +16,22 @@ import { OpsTaskError, createOpsTask } from "@/lib/ops/tasks";
 import type { OpsTaskKind, OpsTaskView } from "@/lib/ops/types";
 import { PermissionDeniedError, toPermissionMessage } from "@/lib/permissions/guard";
 import { requireContextPermission } from "@/lib/permissions/server";
-import { invalidateMailConfigCache, resolveMailConfig, sendNotification } from "@/lib/notifications/mailer";
+import { invalidateNotificationConfigCache, resolveChannelTargets, resolveMailConfig } from "@/lib/notifications/config";
+import { buildChannelTest } from "@/lib/notifications/content";
+import { dispatchNotification } from "@/lib/notifications/events";
+import { sendNotification } from "@/lib/notifications/mailer";
 import { testAiConnection, type AiTestResult } from "@/lib/settings/ai";
 import { refreshRuntimeSettings } from "@/lib/settings/runtime-server";
 import {
   saveAiSettings,
   saveAuditRetention,
   saveBranding,
+  saveChannelSettings,
   saveNotificationSettings,
   SettingsInputError,
   type BrandingSettings,
+  type ChannelSettingsInput,
+  type ImChannelKey,
   type NotificationSettingsInput,
 } from "@/lib/settings/store";
 
@@ -115,7 +121,7 @@ export async function saveNotificationAction(
 ): Promise<SettingsActionResult> {
   try {
     const saved = await saveNotificationSettings(await contextOf(), input);
-    invalidateMailConfigCache();
+    invalidateNotificationConfigCache();
     revalidatePath("/settings");
     return {
       ok: true,
@@ -163,6 +169,59 @@ export async function testNotificationAction(): Promise<SettingsActionResult> {
     return { ok: false, message: `发送失败：${result.error ?? "未知错误"}` };
   } catch (error) {
     return failure("test_notification", error);
+  }
+}
+
+export async function saveChannelAction(input: ChannelSettingsInput): Promise<SettingsActionResult> {
+  try {
+    const saved = await saveChannelSettings(await contextOf(), input);
+    invalidateNotificationConfigCache();
+    revalidatePath("/settings");
+    const label = input.channel === "feishu" ? "飞书" : "企业微信";
+    return {
+      ok: true,
+      message: saved.webhookConfigured
+        ? `${label}通知已保存（${saved.webhookHint ?? "已配置"}）`
+        : `${label}通知已保存（未配置 Webhook）`,
+      keyConfigured: saved.webhookConfigured,
+      keyHint: saved.webhookHint,
+    };
+  } catch (error) {
+    return failure("save_notification_channel", error);
+  }
+}
+
+export async function testChannelAction(channel: ImChannelKey): Promise<SettingsActionResult> {
+  try {
+    const context = await contextOf();
+    if (context.accessLevel !== "L1") {
+      return { ok: false, message: "只有 L1 可以测试通知" };
+    }
+    await withUserContext(context, (client) =>
+      requireContextPermission(client, context, "platform:settings"),
+    );
+    const targets = await resolveChannelTargets();
+    const target = channel === "feishu" ? targets.feishu : targets.wecom;
+    const label = channel === "feishu" ? "飞书" : "企业微信";
+    if (!target) {
+      return { ok: false, message: `${label}通知未就绪：未启用，或 Webhook 未配置/无法解密` };
+    }
+    const results = await dispatchNotification(buildChannelTest(label), {
+      targets: {
+        email: null,
+        emailReason: null,
+        feishu: channel === "feishu" ? target : null,
+        wecom: channel === "wecom" ? target : null,
+      },
+      audit: false,
+    });
+    const result = results[0];
+    if (result?.ok) {
+      return { ok: true, message: `${label}测试消息已发送，请查看群消息` };
+    }
+    return { ok: false, message: `${label}发送失败：${result?.error ?? "未知错误"}` };
+  } catch (error) {
+    return failure("test_notification_channel", error);
   }
 }
 

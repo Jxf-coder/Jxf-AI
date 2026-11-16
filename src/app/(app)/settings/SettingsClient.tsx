@@ -53,6 +53,7 @@ import {
   testAiConnectionAction,
   testNotificationAction,
 } from "./actions";
+import { NotifyChannels } from "./NotifyChannels";
 
 interface SettingsClientProps {
   settings: PlatformSettingsView;
@@ -697,6 +698,8 @@ export function SettingsClient({
           <code className="font-mono">NOTIFICATION_EMAIL_TO</code>。设置面保存过 SMTP_HOST 后以设置面为准。
         </p>
       </SectionCard>
+
+      <NotifyChannels settings={settings.notifications} />
 
       <SectionCard
         title="审计与留存"

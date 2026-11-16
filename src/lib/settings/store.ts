@@ -12,10 +12,11 @@ import type { PoolClient } from "pg";
 import { auditInTx } from "@/lib/audit";
 import { getPool } from "@/lib/db/pool";
 import { withUserContext, type UserContext } from "@/lib/db/user-context";
+import { SUBSCRIPTION_EVENTS, type SubscriptionEventKey } from "@/lib/notifications/content";
 import { requireContextPermission } from "@/lib/permissions/server";
 import type { PermissionResource } from "@/types/permission";
 
-import { encryptSecret, secretHint } from "./crypto";
+import { decryptSecret, encryptSecret, secretHint } from "./crypto";
 import {
   CLEAR_API_KEY,
   DEFAULT_BRANDING,
@@ -68,6 +69,16 @@ interface SettingsRow {
   smtp_pass_configured: boolean;
   smtp_pass_hint: string | null;
   notify_email_to: string | null;
+  notify_feishu_enabled: boolean;
+  feishu_webhook_configured: boolean;
+  feishu_webhook_hint: string | null;
+  feishu_secret_configured: boolean;
+  feishu_secret_hint: string | null;
+  notify_feishu_events: string[] | null;
+  notify_wecom_enabled: boolean;
+  wecom_webhook_configured: boolean;
+  wecom_webhook_hint: string | null;
+  notify_wecom_events: string[] | null;
   updated_at: Date | string;
 }
 
@@ -78,7 +89,15 @@ const SETTINGS_QUERY = `
          audit_retention_days,
          notify_email_enabled, smtp_host, smtp_port, smtp_user,
          smtp_pass_enc is not null as smtp_pass_configured, smtp_pass_hint,
-         notify_email_to, updated_at
+         notify_email_to,
+         notify_feishu_enabled,
+         feishu_webhook_enc is not null as feishu_webhook_configured, feishu_webhook_hint,
+         feishu_secret_enc is not null as feishu_secret_configured, feishu_secret_hint,
+         notify_feishu_events,
+         notify_wecom_enabled,
+         wecom_webhook_enc is not null as wecom_webhook_configured, wecom_webhook_hint,
+         notify_wecom_events,
+         updated_at
     from app_settings
    where id = 1
 `;
@@ -136,6 +155,33 @@ function normalizeText(value: unknown, fallback: string, max: number): string {
   return text ? text.slice(0, max) : fallback;
 }
 
+/** 数据库 text[] → 只保留已知事件，顺序固定；空数组保持为空（表示不接收业务事件） */
+function normalizeEventKeys(raw: unknown): SubscriptionEventKey[] {
+  if (!Array.isArray(raw)) {
+    return [...SUBSCRIPTION_EVENTS];
+  }
+  const set = new Set(raw.map((item) => String(item)));
+  return SUBSCRIPTION_EVENTS.filter((key) => set.has(key));
+}
+
+function channelView(
+  enabled: boolean,
+  webhookConfigured: boolean,
+  webhookHintValue: string | null,
+  secretConfigured: boolean,
+  secretHintValue: string | null,
+  events: unknown,
+) {
+  return {
+    enabled,
+    webhookConfigured,
+    webhookHint: webhookHintValue,
+    secretConfigured,
+    secretHint: secretHintValue,
+    events: normalizeEventKeys(events),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 读（用户上下文）
 // ---------------------------------------------------------------------------
@@ -149,6 +195,18 @@ export async function readPlatformSettings(context: UserContext): Promise<Platfo
 
     const auditStats = await client.query<{ total: number; earliest: Date | null }>(
       "select count(*)::int as total, min(created_at) as earliest from audit_events",
+    );
+
+    const deliveries = await client.query<{
+      created_at: Date;
+      action: string;
+      payload: Record<string, unknown> | null;
+    }>(
+      `select created_at, action, payload
+         from audit_events
+        where action in ('notification.sent', 'notification.failed')
+        order by created_at desc
+        limit 8`,
     );
 
     return {
@@ -185,6 +243,32 @@ export async function readPlatformSettings(context: UserContext): Promise<Platfo
         passConfigured: Boolean(row?.smtp_pass_configured),
         passHint: row?.smtp_pass_hint ?? null,
         to: row?.notify_email_to ?? null,
+        feishu: channelView(
+          Boolean(row?.notify_feishu_enabled),
+          Boolean(row?.feishu_webhook_configured),
+          row?.feishu_webhook_hint ?? null,
+          Boolean(row?.feishu_secret_configured),
+          row?.feishu_secret_hint ?? null,
+          row?.notify_feishu_events,
+        ),
+        wecom: channelView(
+          Boolean(row?.notify_wecom_enabled),
+          Boolean(row?.wecom_webhook_configured),
+          row?.wecom_webhook_hint ?? null,
+          false,
+          null,
+          row?.notify_wecom_events,
+        ),
+        recent: deliveries.rows.map((item) => {
+          const payload = item.payload ?? {};
+          return {
+            at: new Date(item.created_at).toISOString(),
+            channel: String(payload.channel ?? "—"),
+            event: String(payload.event ?? "—"),
+            ok: item.action === "notification.sent",
+            error: typeof payload.error === "string" ? payload.error : null,
+          };
+        }),
       },
       updatedAt: row?.updated_at ? new Date(row.updated_at).toISOString() : null,
     };
@@ -565,6 +649,214 @@ export async function saveNotificationSettings(
     });
 
     saved = { passConfigured: nextEnc !== null, passHint: nextHint };
+  });
+
+  return saved;
+}
+
+// ---------------------------------------------------------------------------
+// IM 群机器人（飞书 / 企微）
+// ---------------------------------------------------------------------------
+
+export type ImChannelKey = "feishu" | "wecom";
+
+interface ChannelColumns {
+  label: string;
+  enabled: string;
+  webhookEnc: string;
+  webhookHint: string;
+  /** 仅飞书有签名密钥 */
+  secretEnc: string | null;
+  secretHint: string | null;
+  events: string;
+}
+
+const CHANNEL_COLUMNS: Record<ImChannelKey, ChannelColumns> = {
+  feishu: {
+    label: "飞书",
+    enabled: "notify_feishu_enabled",
+    webhookEnc: "feishu_webhook_enc",
+    webhookHint: "feishu_webhook_hint",
+    secretEnc: "feishu_secret_enc",
+    secretHint: "feishu_secret_hint",
+    events: "notify_feishu_events",
+  },
+  wecom: {
+    label: "企业微信",
+    enabled: "notify_wecom_enabled",
+    webhookEnc: "wecom_webhook_enc",
+    webhookHint: "wecom_webhook_hint",
+    secretEnc: null,
+    secretHint: null,
+    events: "notify_wecom_events",
+  },
+};
+
+export interface ChannelSettingsInput {
+  channel: ImChannelKey;
+  enabled: boolean;
+  /** 空字符串 = 保留已保存地址；CLEAR_API_KEY = 清除 */
+  webhook: string;
+  /** 仅飞书：空字符串 = 保留；CLEAR_API_KEY = 清除 */
+  secret?: string;
+  events: string[];
+}
+
+export interface ChannelSettingsSaved {
+  webhookConfigured: boolean;
+  webhookHint: string | null;
+  secretConfigured: boolean;
+  secretHint: string | null;
+}
+
+function parseWebhookUrl(raw: string, label: string): URL {
+  if (raw.length > 2000) {
+    throw new SettingsInputError(`${label} Webhook 地址过长`);
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new SettingsInputError(`${label} Webhook 地址不是合法 URL`);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new SettingsInputError(`${label} Webhook 地址必须以 http:// 或 https:// 开头`);
+  }
+  if (!parsed.hostname) {
+    throw new SettingsInputError(`${label} Webhook 地址缺少主机名`);
+  }
+  return parsed;
+}
+
+function webhookHint(raw: string, parsed: URL): string {
+  return `${parsed.host} ····${raw.slice(-4)}`;
+}
+
+function normalizeInputEvents(raw: unknown): SubscriptionEventKey[] {
+  const list = Array.isArray(raw) ? raw.map((item) => String(item)) : [];
+  const set = new Set(list);
+  for (const key of set) {
+    if (!(SUBSCRIPTION_EVENTS as readonly string[]).includes(key)) {
+      throw new SettingsInputError(`未知的通知事件：${key.slice(0, 40)}`);
+    }
+  }
+  return SUBSCRIPTION_EVENTS.filter((key) => set.has(key));
+}
+
+export async function saveChannelSettings(
+  context: UserContext,
+  input: ChannelSettingsInput,
+): Promise<ChannelSettingsSaved> {
+  const spec = CHANNEL_COLUMNS[input.channel];
+  if (!spec) {
+    throw new SettingsInputError("未知的通知渠道");
+  }
+
+  const events = normalizeInputEvents(input.events);
+  if (input.enabled && events.length === 0) {
+    throw new SettingsInputError(`启用${spec.label}通知时至少选择一个事件`);
+  }
+
+  const rawWebhook = String(input.webhook ?? "").trim();
+  let parsedWebhook: URL | null = null;
+  if (rawWebhook && rawWebhook !== CLEAR_API_KEY) {
+    parsedWebhook = parseWebhookUrl(rawWebhook, spec.label);
+  }
+
+  const rawSecret = String(input.secret ?? "").trim();
+
+  let saved: ChannelSettingsSaved = {
+    webhookConfigured: false,
+    webhookHint: null,
+    secretConfigured: false,
+    secretHint: null,
+  };
+
+  await withUserContext(context, async (client) => {
+    await requireSettingsPermission(client, context);
+
+    const current = await client.query<{
+      webhook_enc: string | null;
+      webhook_hint: string | null;
+      secret_enc: string | null;
+      secret_hint: string | null;
+    }>(
+      `select ${spec.webhookEnc} as webhook_enc, ${spec.webhookHint} as webhook_hint` +
+        (spec.secretEnc
+          ? `, ${spec.secretEnc} as secret_enc, ${spec.secretHint} as secret_hint`
+          : ", null::text as secret_enc, null::text as secret_hint") +
+        " from app_settings where id = 1",
+    );
+    const existing = current.rows[0];
+
+    let nextWebhookEnc = existing?.webhook_enc ?? null;
+    let nextWebhookHint = existing?.webhook_hint ?? null;
+    if (rawWebhook === CLEAR_API_KEY) {
+      nextWebhookEnc = null;
+      nextWebhookHint = null;
+    } else if (parsedWebhook) {
+      nextWebhookEnc = encryptSecret(rawWebhook);
+      nextWebhookHint = webhookHint(rawWebhook, parsedWebhook);
+    }
+
+    if (input.enabled && !nextWebhookEnc) {
+      throw new SettingsInputError(`启用${spec.label}通知时必须填写 Webhook 地址`);
+    }
+    if (input.enabled && nextWebhookEnc && decryptSecret(nextWebhookEnc) === null) {
+      throw new SettingsInputError(
+        `已保存的${spec.label} Webhook 无法解密（加密密钥可能已轮换），请重新填写地址`,
+      );
+    }
+
+    let nextSecretEnc = existing?.secret_enc ?? null;
+    let nextSecretHint = existing?.secret_hint ?? null;
+    if (spec.secretEnc) {
+      if (rawSecret === CLEAR_API_KEY) {
+        nextSecretEnc = null;
+        nextSecretHint = null;
+      } else if (rawSecret) {
+        nextSecretEnc = encryptSecret(rawSecret);
+        nextSecretHint = secretHint(rawSecret);
+      }
+    }
+
+    const params: unknown[] = [input.enabled, nextWebhookEnc, nextWebhookHint, events];
+    let sql = `update app_settings
+                  set ${spec.enabled} = $1,
+                      ${spec.webhookEnc} = $2,
+                      ${spec.webhookHint} = $3,
+                      ${spec.events} = $4::text[]`;
+    if (spec.secretEnc) {
+      params.push(nextSecretEnc, nextSecretHint);
+      sql += `, ${spec.secretEnc} = $5, ${spec.secretHint} = $6`;
+    }
+    params.push(context.userId);
+    sql += `, updated_at = now(), updated_by_user_id = $${params.length} where id = 1`;
+    await client.query(sql, params);
+
+    await auditInTx(client, context, {
+      actorUserId: context.userId,
+      action: "settings.notification_channel_updated",
+      targetType: "app_settings",
+      targetId: null,
+      departmentId: context.activeDepartmentId,
+      payload: {
+        channel: input.channel,
+        enabled: input.enabled,
+        webhook_changed: parsedWebhook !== null || rawWebhook === CLEAR_API_KEY,
+        webhook_configured: nextWebhookEnc !== null,
+        webhook_host: parsedWebhook?.host ?? null,
+        secret_configured: nextSecretEnc !== null,
+        events,
+      },
+    });
+
+    saved = {
+      webhookConfigured: nextWebhookEnc !== null,
+      webhookHint: nextWebhookHint,
+      secretConfigured: nextSecretEnc !== null,
+      secretHint: nextSecretHint,
+    };
   });
 
   return saved;
