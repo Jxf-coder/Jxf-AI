@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-11-08T16:11:12Z",
-  "updated_at": "2026-11-16T07:38:15Z",
+  "updated_at": "2026-11-17T11:55:30Z",
   "files": {
     ".dockerignore": {
       "role": "index",
@@ -41,9 +41,9 @@
     },
     "aoci.code.txt": {
       "role": "index",
-      "sha256": "2951e2897634449509488205de0115cd6e03e2b52ad9acb95d5e7d5a638fc892",
-      "size": 191099,
-      "normalized_sha256": "2951e2897634449509488205de0115cd6e03e2b52ad9acb95d5e7d5a638fc892"
+      "sha256": "93e48f3e2b0a1d9e5c183cc92c6ab362c8d3d178d48afb1becce2715d7ed81d7",
+      "size": 194787,
+      "normalized_sha256": "93e48f3e2b0a1d9e5c183cc92c6ab362c8d3d178d48afb1becce2715d7ed81d7"
     },
     "aoci.database.txt": {
       "role": "index",
@@ -1071,6 +1071,24 @@
       "size": 19271,
       "normalized_sha256": "c029ac36b3a7920942c075fb0dc0005d7157bccdc6a2cb2d5e816af3a30d9396"
     },
+    "docs/architecture/crm/W0-01-字段字典与页面清单.md": {
+      "role": "index",
+      "sha256": "00a47e97d74779125f296ef633b3e7bf2a44d342eeeafdb2d33c5276fcea2bbd",
+      "size": 23974,
+      "normalized_sha256": "00a47e97d74779125f296ef633b3e7bf2a44d342eeeafdb2d33c5276fcea2bbd"
+    },
+    "docs/architecture/crm/W0-02-权限矩阵.md": {
+      "role": "index",
+      "sha256": "7b1926dd772861a5403d1b6259ee48f411c473b907d101569f3d8b81e4c7dc98",
+      "size": 15734,
+      "normalized_sha256": "7b1926dd772861a5403d1b6259ee48f411c473b907d101569f3d8b81e4c7dc98"
+    },
+    "docs/architecture/crm/W0-03-状态机与提醒规则.md": {
+      "role": "index",
+      "sha256": "99012f2c8be005d937499ed5407b019672fdb9d0f6809883fffe4e86bee89b48",
+      "size": 11524,
+      "normalized_sha256": "99012f2c8be005d937499ed5407b019672fdb9d0f6809883fffe4e86bee89b48"
+    },
     "docs/architecture/master-plan.md": {
       "role": "index",
       "sha256": "2f18bebafd29292087c3c22ad263a68f9d911a3bb2610d4cbfd3efa713d56c7f",
@@ -1088,6 +1106,12 @@
       "sha256": "c16d43697a4567af7f29e80bc862304454a9a727973f273c2034b086a72da45b",
       "size": 39038,
       "normalized_sha256": "c16d43697a4567af7f29e80bc862304454a9a727973f273c2034b086a72da45b"
+    },
+    "docs/architecture/外贸CRM与ERP-总体方案.md": {
+      "role": "index",
+      "sha256": "1920793ca3987f657aad409954724292e180781f3b1fd1ba40aa7ee93b614483",
+      "size": 48774,
+      "normalized_sha256": "1920793ca3987f657aad409954724292e180781f3b1fd1ba40aa7ee93b614483"
     },
     "docs/architecture/权限系统与UI落地实施计划.md": {
       "role": "index",
