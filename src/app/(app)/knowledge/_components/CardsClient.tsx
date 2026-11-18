@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/knowledge/EmptyState";
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { SectionCard } from "@/components/knowledge/SectionCard";
 import { btnBlue, btnGhost, input, inputInline } from "@/components/knowledge/tokens";
+import { Select } from "@/components/ui/select";
 import type { CardFacets, CardMetaPatch, CardView } from "@/lib/knowledge/cards";
 import { STANDARD_FOLDERS } from "@/lib/knowledge/folders";
 
@@ -150,45 +151,39 @@ export function CardsClient({ cards, facets, canWrite, canConfirm, filter }: Car
           apply({});
         }}
       >
-        <select
-          className={input}
+        <Select
+          className="w-full"
           value={filter.kind}
           aria-label="按类型筛选"
-          onChange={(event) => apply({ kind: event.target.value })}
-        >
-          <option value="">全部类型</option>
-          {Object.entries(CARD_KIND_LABEL).map(([value, text]) => (
-            <option key={value} value={value}>
-              {text}
-            </option>
-          ))}
-        </select>
-        <select
-          className={input}
+          onValueChange={(value) => apply({ kind: value })}
+          options={[
+            { value: "", label: "全部类型" },
+            ...Object.entries(CARD_KIND_LABEL).map(([value, text]) => ({ value, label: text })),
+          ]}
+        />
+        <Select
+          className="w-full"
           value={filter.category}
           aria-label="按分类筛选"
-          onChange={(event) => apply({ category: event.target.value })}
-        >
-          <option value="">全部分类</option>
-          {facets.categories.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.value}（{item.count}）
-            </option>
-          ))}
-        </select>
-        <select
-          className={input}
+          onValueChange={(value) => apply({ category: value })}
+          options={[
+            { value: "", label: "全部分类" },
+            ...facets.categories.map((item) => ({
+              value: item.value,
+              label: `${item.value}（${item.count}）`,
+            })),
+          ]}
+        />
+        <Select
+          className="w-full"
           value={filter.product}
           aria-label="按产品筛选"
-          onChange={(event) => apply({ product: event.target.value })}
-        >
-          <option value="">全部产品</option>
-          {facets.products.map((product) => (
-            <option key={product} value={product}>
-              {product}
-            </option>
-          ))}
-        </select>
+          onValueChange={(value) => apply({ product: value })}
+          options={[
+            { value: "", label: "全部产品" },
+            ...facets.products.map((product) => ({ value: product, label: product })),
+          ]}
+        />
         <input
           className={`${input} sm:col-span-2`}
           value={q}
@@ -210,21 +205,18 @@ export function CardsClient({ cards, facets, canWrite, canConfirm, filter }: Car
           </label>
           <span className="text-[12px] text-zinc-500">已选 {picked.size}</span>
 
-          <select
-            className={`${inputInline} w-auto`}
+          <Select
+            className="w-auto"
             value={bulk.category}
             aria-label="批量分类"
-            onChange={(event) => setBulk((current) => ({ ...current, category: event.target.value }))}
-          >
-            <option value="">分类不变</option>
-            {facets.categories
-              .filter((item) => item.value !== "未分类")
-              .map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.value}
-                </option>
-              ))}
-          </select>
+            onValueChange={(value) => setBulk((current) => ({ ...current, category: value }))}
+            options={[
+              { value: "", label: "分类不变" },
+              ...facets.categories
+                .filter((item) => item.value !== "未分类")
+                .map((item) => ({ value: item.value, label: item.value })),
+            ]}
+          />
           <input
             className={`${inputInline} w-[120px]`}
             value={bulk.product}
@@ -246,32 +238,36 @@ export function CardsClient({ cards, facets, canWrite, canConfirm, filter }: Car
             aria-label="批量有效期"
             onChange={(event) => setBulk((current) => ({ ...current, validUntil: event.target.value }))}
           />
-          <select
-            className={`${inputInline} w-auto`}
+          <Select
+            className="w-auto"
             value={bulk.external}
             aria-label="批量对外策略"
-            onChange={(event) =>
-              setBulk((current) => ({ ...current, external: event.target.value as "" | "yes" | "no" }))
+            onValueChange={(value) =>
+              setBulk((current) => ({
+                ...current,
+                external: value as "" | "yes" | "no",
+              }))
             }
-          >
-            <option value="">对外不变</option>
-            <option value="yes">可对外</option>
-            <option value="no">仅内部</option>
-          </select>
+            options={[
+              { value: "", label: "对外不变" },
+              { value: "yes", label: "可对外" },
+              { value: "no", label: "仅内部" },
+            ]}
+          />
 
-          <select
-            className={`${inputInline} w-auto`}
+          <Select
+            className="w-auto"
             value={bulk.folder}
             aria-label="批量目录"
-            onChange={(event) => setBulk((current) => ({ ...current, folder: event.target.value }))}
-          >
-            <option value="">目录不变</option>
-            {STANDARD_FOLDERS.filter((folder) => folder.key !== "99-trash").map((folder) => (
-              <option key={folder.key} value={folder.key}>
-                {folder.label}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => setBulk((current) => ({ ...current, folder: value }))}
+            options={[
+              { value: "", label: "目录不变" },
+              ...STANDARD_FOLDERS.filter((folder) => folder.key !== "99-trash").map((folder) => ({
+                value: folder.key,
+                label: folder.label,
+              })),
+            ]}
+          />
           <span className="ml-auto flex flex-wrap items-center gap-2">
             <button
               type="button"

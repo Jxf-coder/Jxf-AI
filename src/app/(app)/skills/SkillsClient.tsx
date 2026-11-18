@@ -22,6 +22,7 @@ import {
   pageWrap,
   headerRow,
 } from "@/components/knowledge/tokens";
+import { Select } from "@/components/ui/select";
 import type { SkillRunView, SkillView } from "@/lib/skills";
 
 import {
@@ -204,17 +205,13 @@ export function SkillsClient({ skills, canEdit, recentRuns }: SkillsClientProps)
                 />
               </Field>
               <Field label="分类">
-                <select
-                  className={input}
+                <Select
+                  className="w-full"
                   value={draft.category}
-                  onChange={(event) => setDraft({ ...draft, category: event.target.value })}
-                >
-                  {CATEGORY_OPTIONS.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                  aria-label="技能分类"
+                  onValueChange={(value) => setDraft({ ...draft, category: value })}
+                  options={CATEGORY_OPTIONS.map(([value, label]) => ({ value, label }))}
+                />
               </Field>
             </div>
             <div className="mt-3 grid gap-3.5">

@@ -5,7 +5,8 @@ import { useState, useTransition } from "react";
 
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { SectionCard } from "@/components/knowledge/SectionCard";
-import { actions, btnBlue, input } from "@/components/knowledge/tokens";
+import { actions, btnBlue } from "@/components/knowledge/tokens";
+import { Select } from "@/components/ui/select";
 
 import { recalcRouteStatsAction } from "./actions";
 
@@ -25,15 +26,17 @@ export function RouteStatsPanel() {
       <div className={actions}>
         <label className="flex items-center gap-2 text-[13px] text-zinc-700">
           统计窗口
-          <select
-            className={`${input} w-28`}
-            value={days}
-            onChange={(event) => setDays(Number(event.target.value))}
-          >
-            <option value={7}>7 天</option>
-            <option value={30}>30 天</option>
-            <option value={90}>90 天</option>
-          </select>
+          <Select
+            className="w-28"
+            value={String(days)}
+            aria-label="统计窗口"
+            onValueChange={(value) => setDays(Number(value))}
+            options={[
+              { value: "7", label: "7 天" },
+              { value: "30", label: "30 天" },
+              { value: "90", label: "90 天" },
+            ]}
+          />
         </label>
         <button
           type="button"

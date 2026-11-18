@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   ChevronRightIcon,
@@ -10,6 +10,7 @@ import {
   FolderIcon,
   LayersIcon,
 } from "@/components/ui/icons";
+import { Select } from "@/components/ui/select";
 import { folderLabel, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
 import type { TreeFolder, TreeItem, WorkspaceTree } from "@/lib/knowledge/workspace";
 
@@ -74,6 +75,7 @@ export function WorkspaceTree({ tree, selected, query, folder, matches, tab, tar
   const [emptyingFor, setEmptyingFor] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
   const [notice, setNotice] = useState("");
+  const searchFormRef = useRef<HTMLFormElement>(null);
 
   const isOpen = (key: string, fallback = false) => expanded[key] ?? fallback;
 
@@ -291,7 +293,7 @@ export function WorkspaceTree({ tree, selected, query, folder, matches, tab, tar
     >
       <p className="px-2 pb-1 pt-1 text-[11px] font-medium text-zinc-500">知识库目录</p>
 
-      <form action="/knowledge" method="get" className="px-1 pb-2">
+      <form ref={searchFormRef} action="/knowledge" method="get" className="px-1 pb-2">
         <input type="hidden" name="tab" value={tab} />
         <input
           name="treeQ"
@@ -301,20 +303,17 @@ export function WorkspaceTree({ tree, selected, query, folder, matches, tab, tar
           aria-label="搜索知识库标题"
           className="w-full rounded-lg border border-black/[0.06] bg-white px-2 py-1.5 text-[12px] text-zinc-800 outline-none placeholder:text-zinc-400 focus:border-black/20"
         />
-        <select
+        <Select
+          className="mt-1.5 w-full"
           name="treeFolder"
           defaultValue={folder}
           aria-label="限定搜索目录"
-          onChange={(event) => event.currentTarget.form?.requestSubmit()}
-          className="mt-1.5 w-full rounded-lg border border-black/[0.06] bg-white px-2 py-1.5 text-[12px] text-zinc-700 outline-none focus:border-black/20"
-        >
-          <option value="">全部目录</option>
-          {STANDARD_FOLDERS.map((item) => (
-            <option key={item.key} value={item.key}>
-              {item.label}
-            </option>
-          ))}
-        </select>
+          onValueChange={() => searchFormRef.current?.requestSubmit()}
+          options={[
+            { value: "", label: "全部目录" },
+            ...STANDARD_FOLDERS.map((item) => ({ value: item.key, label: item.label })),
+          ]}
+        />
       </form>
 
       {query ? (

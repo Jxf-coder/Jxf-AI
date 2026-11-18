@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Field } from "@/components/knowledge/Field";
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { SectionCard } from "@/components/knowledge/SectionCard";
+import { Select } from "@/components/ui/select";
 import {
   actions,
   badge,
@@ -528,15 +529,16 @@ export function SettingsClient({
 
         <div className={formGrid}>
           <Field label="启用 AI 生成">
-            <select
-              className={input}
+            <Select
+              className="w-full"
               value={aiMode}
-              onChange={(event) => setAiMode(event.target.value as "inherit" | "on" | "off")}
-            >
-              <option value="inherit">跟随环境变量（JXF_AI_ENABLED）</option>
-              <option value="on">强制开启</option>
-              <option value="off">强制关闭（只做检索）</option>
-            </select>
+              onValueChange={(value) => setAiMode(value as "inherit" | "on" | "off")}
+              options={[
+                { value: "inherit", label: "跟随环境变量（JXF_AI_ENABLED）" },
+                { value: "on", label: "强制开启" },
+                { value: "off", label: "强制关闭（只做检索）" },
+              ]}
+            />
           </Field>
           <Field label="Base URL">
             <input
@@ -607,14 +609,15 @@ export function SettingsClient({
       >
         <div className={formGrid}>
           <Field label="启用邮件通知">
-            <select
-              className={input}
+            <Select
+              className="w-full"
               value={mailEnabled ? "on" : "off"}
-              onChange={(event) => setMailEnabled(event.target.value === "on")}
-            >
-              <option value="off">关闭</option>
-              <option value="on">开启</option>
-            </select>
+              onValueChange={(value) => setMailEnabled(value === "on")}
+              options={[
+                { value: "off", label: "关闭" },
+                { value: "on", label: "开启" },
+              ]}
+            />
           </Field>
           <Field label="SMTP_HOST">
             <input
@@ -782,29 +785,28 @@ export function SettingsClient({
             },
           )}
           <Field label="模型档位">
-            <select
-              className={input}
+            <Select
+              className="w-full"
               value={policy.modelTier}
-              onChange={(event) => setPolicy({ ...policy, modelTier: event.target.value })}
-            >
-              {EXPERIENCE_MODEL_TIERS.map((tier) => (
-                <option key={tier} value={tier}>
-                  {tier === "pro" ? "pro · 深度模型" : "fast · 轻量模型"}
-                </option>
-              ))}
-            </select>
+              onValueChange={(value) => setPolicy({ ...policy, modelTier: value })}
+              options={EXPERIENCE_MODEL_TIERS.map((tier) => ({
+                value: tier,
+                label: tier === "pro" ? "pro · 深度模型" : "fast · 轻量模型",
+              }))}
+            />
           </Field>
           <Field label="成功后自动沉淀">
-            <select
-              className={input}
+            <Select
+              className="w-full"
               value={policy.autoCaptureSuccess ? "on" : "off"}
-              onChange={(event) =>
-                setPolicy({ ...policy, autoCaptureSuccess: event.target.value === "on" })
+              onValueChange={(value) =>
+                setPolicy({ ...policy, autoCaptureSuccess: value === "on" })
               }
-            >
-              <option value="off">关闭（只采失败/退回/复盘）</option>
-              <option value="on">开启（产线成功也入队）</option>
-            </select>
+              options={[
+                { value: "off", label: "关闭（只采失败/退回/复盘）" },
+                { value: "on", label: "开启（产线成功也入队）" },
+              ]}
+            />
           </Field>
         </div>
 

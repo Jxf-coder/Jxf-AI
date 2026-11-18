@@ -5,6 +5,7 @@ import { useEffect, useState, useTransition } from "react";
 
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { btnBlue, btnGhost, fieldLabel, input, linkBtn } from "@/components/knowledge/tokens";
+import { Select } from "@/components/ui/select";
 import type { EvidenceChunkOption, EvidenceDocumentOption } from "@/lib/knowledge/card-evidence";
 import type { CardConflictInfo } from "@/lib/knowledge/cards";
 import type { CardDetail, DocumentContent } from "@/lib/knowledge/workspace";
@@ -672,43 +673,48 @@ export function WorkspaceEditor(props: WorkspaceEditorProps) {
             <div className="mt-3 grid gap-2 border-t border-black/[0.05] pt-3">
               <label className="block">
                 <span className={fieldLabel}>来源文档</span>
-                <select
-                  className={input}
+                <Select
+                  className="w-full"
                   value={evidenceDocId}
+                  aria-label="来源文档"
                   disabled={evidenceBusy}
-                  onChange={(event) => void chooseEvidenceDocument(event.target.value)}
-                >
-                  {evidenceDocs.length === 0 ? <option value="">没有可用文档</option> : null}
-                  {evidenceDocs.map((doc) => (
-                    <option key={doc.id} value={doc.id}>
-                      {doc.title}（{doc.departmentName} · {doc.chunkCount} 个切片）
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={(value) => void chooseEvidenceDocument(value)}
+                  options={
+                    evidenceDocs.length === 0
+                      ? [{ value: "", label: "没有可用文档" }]
+                      : evidenceDocs.map((doc) => ({
+                          value: doc.id,
+                          label: `${doc.title}（${doc.departmentName} · ${doc.chunkCount} 个切片）`,
+                        }))
+                  }
+                />
               </label>
 
               <label className="block">
                 <span className={fieldLabel}>切片</span>
-                <select
-                  className={input}
+                <Select
+                  className="w-full"
                   value={evidenceChunkId}
+                  aria-label="引用切片"
                   disabled={evidenceBusy || evidenceChunks.length === 0}
-                  onChange={(event) => {
-                    const chunk = evidenceChunks.find((item) => item.id === event.target.value);
-                    setEvidenceChunkId(event.target.value);
+                  onValueChange={(value) => {
+                    const chunk = evidenceChunks.find((item) => item.id === value);
+                    setEvidenceChunkId(value);
                     if (chunk) {
                       setEvidenceQuote(chunk.text.slice(0, 600));
                     }
                   }}
-                >
-                  {evidenceChunks.length === 0 ? <option value="">该文档没有切片</option> : null}
-                  {evidenceChunks.map((chunk) => (
-                    <option key={chunk.id} value={chunk.id}>
-                      {chunk.pageNo ? `第 ${chunk.pageNo} 页` : `切片 ${chunk.ord + 1}`} ·{" "}
-                      {chunk.text.replace(/\s+/g, " ").slice(0, 36)}
-                    </option>
-                  ))}
-                </select>
+                  options={
+                    evidenceChunks.length === 0
+                      ? [{ value: "", label: "该文档没有切片" }]
+                      : evidenceChunks.map((chunk) => ({
+                          value: chunk.id,
+                          label: `${
+                            chunk.pageNo ? `第 ${chunk.pageNo} 页` : `切片 ${chunk.ord + 1}`
+                          } · ${chunk.text.replace(/\s+/g, " ").slice(0, 36)}`,
+                        }))
+                  }
+                />
               </label>
 
               <label className="block">

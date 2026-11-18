@@ -18,6 +18,7 @@ import {
   meta,
   type Tone,
 } from "@/components/knowledge/tokens";
+import { Select } from "@/components/ui/select";
 import type { PipelineRunStatus, PipelineRunView, PipelineView } from "@/lib/pipelines";
 import { ARCHIVE_FOLDERS, folderLabel } from "@/lib/knowledge/folders";
 
@@ -300,18 +301,19 @@ export function PipelinesClient({
                 />
               </Field>
               <Field label="收口归档目录（可选）">
-                <select
-                  className={input}
+                <Select
+                  className="w-full"
                   value={archiveFolder}
-                  onChange={(event) => setArchiveFolder(event.target.value)}
-                >
-                  <option value="">不归档</option>
-                  {ARCHIVE_FOLDERS.map((folder) => (
-                    <option key={folder} value={folder}>
-                      {folderLabel(folder)}
-                    </option>
-                  ))}
-                </select>
+                  aria-label="收口归档目录"
+                  onValueChange={setArchiveFolder}
+                  options={[
+                    { value: "", label: "不归档" },
+                    ...ARCHIVE_FOLDERS.map((folder) => ({
+                      value: folder,
+                      label: folderLabel(folder),
+                    })),
+                  ]}
+                />
               </Field>
             </div>
 
@@ -343,18 +345,19 @@ export function PipelinesClient({
                       />
                     </Field>
                     <Field label="执行员工">
-                      <select
-                        className={input}
+                      <Select
+                        className="w-full"
                         value={step.aiEmployeeId}
-                        onChange={(event) => updateStep(index, { aiEmployeeId: event.target.value })}
-                      >
-                        <option value="">请选择 AI 员工</option>
-                        {employees.map((employee) => (
-                          <option key={employee.id} value={employee.id}>
-                            {employee.name}
-                          </option>
-                        ))}
-                      </select>
+                        aria-label="执行员工"
+                        onValueChange={(value) => updateStep(index, { aiEmployeeId: value })}
+                        options={[
+                          { value: "", label: "请选择 AI 员工" },
+                          ...employees.map((employee) => ({
+                            value: employee.id,
+                            label: employee.name,
+                          })),
+                        ]}
+                      />
                     </Field>
                   </div>
                   <Field label="工作说明">
@@ -475,20 +478,20 @@ export function PipelinesClient({
                   <div className="mt-2 grid gap-2 rounded-xl bg-apple-canvas px-3 py-2.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={meta}>收口归档</span>
-                      <select
-                        className={`${input} w-auto !py-1 text-[11px]`}
+                      <Select
+                        className="w-auto"
                         value={pipeline.archiveFolder ?? ""}
                         aria-label="产线收口归档目录"
                         disabled={busy === pipeline.id}
-                        onChange={(event) => changeArchiveFolder(pipeline.id, event.target.value)}
-                      >
-                        <option value="">不归档</option>
-                        {ARCHIVE_FOLDERS.map((folder) => (
-                          <option key={folder} value={folder}>
-                            {folderLabel(folder)}
-                          </option>
-                        ))}
-                      </select>
+                        onValueChange={(value) => changeArchiveFolder(pipeline.id, value)}
+                        options={[
+                          { value: "", label: "不归档" },
+                          ...ARCHIVE_FOLDERS.map((folder) => ({
+                            value: folder,
+                            label: folderLabel(folder),
+                          })),
+                        ]}
+                      />
                       <span className={meta}>收口后把交付物归档为待确认卡片</span>
                     </div>
 

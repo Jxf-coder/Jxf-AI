@@ -10,6 +10,7 @@ import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { Pill } from "@/components/knowledge/Pill";
 import { SectionCard } from "@/components/knowledge/SectionCard";
 import { badge, btnBlue, btnGhost, formGrid, input, linkBtn, meta } from "@/components/knowledge/tokens";
+import { Select } from "@/components/ui/select";
 import { DEFAULT_DOCUMENT_FOLDER, folderLabel, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
 import type { NeedsOcrDocument } from "@/lib/knowledge/ocr";
 import type { ShareRequestView } from "@/lib/knowledge/share";
@@ -320,18 +321,16 @@ export function ScoutTab({
             {canPickSharedDept ? (
               <label className="inline-flex items-center gap-1 rounded-full bg-apple-canvas px-2.5 py-1">
                 <span className="text-[10px] text-zinc-500">归属部门</span>
-                <select
+                <Select
+                  className="max-w-[14rem]"
                   aria-label="共享资料归属部门"
-                  className="max-w-[14rem] cursor-pointer truncate bg-transparent text-[12px] font-medium text-zinc-900 outline-none"
                   value={uploadDeptId ?? ""}
-                  onChange={(event) => setSharedDeptId(event.target.value)}
-                >
-                  {departments.map((department) => (
-                    <option key={department.id} value={department.id}>
-                      {department.name}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={setSharedDeptId}
+                  options={departments.map((department) => ({
+                    value: department.id,
+                    label: department.name,
+                  }))}
+                />
               </label>
             ) : (
               <TargetChip label="部门" value={activeTarget.departmentName} />
@@ -445,17 +444,16 @@ export function ScoutTab({
                 />
               </Field>
               <Field label="目标目录">
-                <select
-                  className={input}
+                <Select
+                  className="w-full"
                   value={folder}
-                  onChange={(event) => setFolder(event.target.value)}
-                >
-                  {STANDARD_FOLDERS.filter((item) => item.key !== "99-trash").map((item) => (
-                    <option key={item.key} value={item.key}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
+                  aria-label="目标目录"
+                  onValueChange={setFolder}
+                  options={STANDARD_FOLDERS.filter((item) => item.key !== "99-trash").map((item) => ({
+                    value: item.key,
+                    label: item.label,
+                  }))}
+                />
               </Field>
               <Field label="本次最多上传">
                 <input

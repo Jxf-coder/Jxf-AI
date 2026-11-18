@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
+import { Select } from "@/components/ui/select";
+
 import {
   actions,
   badge,
@@ -478,36 +480,35 @@ export function McpClient({
                 </label>
                 <label className="block">
                   <span className={fieldLabel}>绑定任用</span>
-                  <select
-                    className={input}
+                  <Select
+                    className="w-full"
                     value={membershipId}
-                    onChange={(event) => setMembershipId(event.target.value)}
-                  >
-                    {candidates.map((candidate) => (
-                      <option key={candidate.membershipId} value={candidate.membershipId}>
-                        {candidate.userName ?? candidate.userId} · {candidate.departmentName} ·{" "}
-                        {candidate.title || candidate.level}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={setMembershipId}
+                    options={candidates.map((candidate) => ({
+                      value: candidate.membershipId,
+                      label: `${candidate.userName ?? candidate.userId} · ${candidate.departmentName} · ${
+                        candidate.title || candidate.level
+                      }`,
+                    }))}
+                  />
                 </label>
               </div>
 
               <div className={formGrid}>
                 <label className="block">
                   <span className={fieldLabel}>客户端（用于连接状态）</span>
-                  <select
-                    className={input}
+                  <Select
+                    className="w-full"
                     value={client}
-                    onChange={(event) => setClient(event.target.value as McpClientKey | "")}
-                  >
-                    <option value="">不指定</option>
-                    {(Object.keys(MCP_CLIENT_LABELS) as McpClientKey[]).map((key) => (
-                      <option key={key} value={key}>
-                        {MCP_CLIENT_LABELS[key]}
-                      </option>
-                    ))}
-                  </select>
+                    onValueChange={(value) => setClient(value as McpClientKey | "")}
+                    options={[
+                      { value: "", label: "不指定" },
+                      ...(Object.keys(MCP_CLIENT_LABELS) as McpClientKey[]).map((key) => ({
+                        value: key,
+                        label: MCP_CLIENT_LABELS[key],
+                      })),
+                    ]}
+                  />
                 </label>
                 <label className="block">
                   <span className={fieldLabel}>过期时间（可选）</span>

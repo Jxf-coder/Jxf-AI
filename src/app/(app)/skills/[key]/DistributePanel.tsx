@@ -16,6 +16,7 @@ import {
   input,
   meta,
 } from "@/components/knowledge/tokens";
+import { Select } from "@/components/ui/select";
 import type { DistributeView } from "@/lib/skills/distribute";
 
 import {
@@ -155,30 +156,25 @@ export function DistributePanel({ view, canManage }: DistributePanelProps) {
       <SectionCard title="账号" count={`${view.accounts.length} 个`}>
         <div className={formGrid}>
           <Field label="所属分组">
-            <select
-              className={input}
+            <Select
+              className="w-full"
               value={account.groupId}
-              onChange={(event) => setAccount({ ...account, groupId: event.target.value })}
-            >
-              {view.groups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
+              aria-label="所属分组"
+              onValueChange={(value) => setAccount({ ...account, groupId: value })}
+              options={view.groups.map((group) => ({ value: group.id, label: group.name }))}
+            />
           </Field>
           <Field label="平台">
-            <select
-              className={input}
+            <Select
+              className="w-full"
               value={account.platform}
-              onChange={(event) => setAccount({ ...account, platform: event.target.value })}
-            >
-              {PLATFORMS.map((platform) => (
-                <option key={platform.id} value={platform.id}>
-                  {platform.label}
-                </option>
-              ))}
-            </select>
+              aria-label="平台"
+              onValueChange={(value) => setAccount({ ...account, platform: value })}
+              options={PLATFORMS.map((platform) => ({
+                value: platform.id,
+                label: platform.label,
+              }))}
+            />
           </Field>
           <Field label="账号名称">
             <input

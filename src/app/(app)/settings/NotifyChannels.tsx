@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Field } from "@/components/knowledge/Field";
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { SectionCard } from "@/components/knowledge/SectionCard";
+import { Select } from "@/components/ui/select";
 import {
   actions,
   badge,
@@ -136,14 +137,15 @@ function ChannelEditor({
 
       <div className={formGrid}>
         <Field label="启用">
-          <select
-            className={input}
+          <Select
+            className="w-full"
             value={enabled ? "on" : "off"}
-            onChange={(event) => setEnabled(event.target.value === "on")}
-          >
-            <option value="off">关闭</option>
-            <option value="on">开启</option>
-          </select>
+            onValueChange={(value) => setEnabled(value === "on")}
+            options={[
+              { value: "off", label: "关闭" },
+              { value: "on", label: "开启" },
+            ]}
+          />
         </Field>
         <Field label="Webhook 地址">
           <input

@@ -13,11 +13,11 @@ import {
   evidenceList,
   fieldLabel,
   input,
-  inputInline,
   linkBtn,
   meta,
   quote,
 } from "@/components/knowledge/tokens";
+import { Select } from "@/components/ui/select";
 import type { CardView } from "@/lib/knowledge/cards";
 import { folderLabel, STANDARD_FOLDERS } from "@/lib/knowledge/folders";
 
@@ -221,19 +221,17 @@ export function CardItem({ card, selected, onToggle, canWrite, canConfirm }: Car
 
       <div className="flex shrink-0 flex-col items-end gap-1.5">
         {canWrite ? (
-          <select
-            className={`${inputInline} w-auto`}
+          <Select
+            className="w-auto"
             value={card.folderKey}
             aria-label="调整知识卡目录"
             disabled={pending}
-            onChange={(event) => run(() => changeCardFolderAction(card.id, event.target.value))}
-          >
-            {STANDARD_FOLDERS.filter((folder) => folder.key !== "99-trash").map((folder) => (
-              <option key={folder.key} value={folder.key}>
-                {folder.label}
-              </option>
-            ))}
-          </select>
+            onValueChange={(value) => run(() => changeCardFolderAction(card.id, value))}
+            options={STANDARD_FOLDERS.filter((folder) => folder.key !== "99-trash").map((folder) => ({
+              value: folder.key,
+              label: folder.label,
+            }))}
+          />
         ) : null}
         {!editing && canWrite ? (
           <button type="button" className={linkBtn} onClick={() => setEditing(true)}>

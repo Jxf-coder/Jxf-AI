@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import { Field } from "@/components/knowledge/Field";
 import { InlineMessage } from "@/components/knowledge/InlineMessage";
 import { actions, btnDark, formGrid, input } from "@/components/knowledge/tokens";
+import { Select } from "@/components/ui/select";
 
 import { createCardAction } from "../cards/actions";
 import { CARD_KIND_LABEL } from "./card-labels";
@@ -50,13 +51,16 @@ export function NewCardPanel() {
 
       <div className={`${formGrid} mt-3`}>
         <Field label="类型">
-          <select className={input} value={kind} onChange={(event) => setKind(event.target.value)}>
-            {Object.entries(CARD_KIND_LABEL).map(([value, text]) => (
-              <option key={value} value={value}>
-                {text}
-              </option>
-            ))}
-          </select>
+          <Select
+            className="w-full"
+            value={kind}
+            aria-label="知识卡类型"
+            onValueChange={setKind}
+            options={Object.entries(CARD_KIND_LABEL).map(([value, text]) => ({
+              value,
+              label: text,
+            }))}
+          />
         </Field>
         <Field label="标题">
           <input

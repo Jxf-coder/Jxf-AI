@@ -21,6 +21,7 @@ import {
   linkBtn,
   meta,
 } from "@/components/knowledge/tokens";
+import { Select } from "@/components/ui/select";
 import type { AiEmployeeDetail, AiEmployeeGrantCandidates, AiEmployeeStatus, AiEmployeeView } from "@/lib/ai-employees";
 import type { McpToolOptionView } from "@/lib/mcp/connectors";
 import type { SkillOptionView } from "@/lib/skills";
@@ -627,27 +628,33 @@ export function AiEmployeesClient({
 
                 <label className="block sm:w-[200px]">
                   <span className={fieldLabel}>模型档位</span>
-                  <select
-                    className={input}
+                  <Select
+                    className="w-full"
                     value={editTier}
-                    onChange={(event) => setEditTier(event.target.value as "deep" | "fast")}
-                  >
-                    <option value="deep">深度推理（pro）</option>
-                    <option value="fast">轻量快速（flash）</option>
-                  </select>
+                    aria-label="模型档位"
+                    onValueChange={(value) => setEditTier(value as "deep" | "fast")}
+                    options={[
+                      { value: "deep", label: "深度推理（pro）" },
+                      { value: "fast", label: "轻量快速（flash）" },
+                    ]}
+                  />
                 </label>
 
                 <div className="grid gap-2 sm:grid-cols-2">
                   <label className="block">
                     <span className={fieldLabel}>验收方式</span>
-                    <select
-                      className={input}
+                    <Select
+                      className="w-full"
                       value={editReviewMode}
-                      onChange={(event) => setEditReviewMode(event.target.value as "manual" | "auto")}
-                    >
-                      <option value="manual">人工验收（默认）</option>
-                      <option value="auto">自动验收（满足门槛直接完成）</option>
-                    </select>
+                      aria-label="验收方式"
+                      onValueChange={(value) =>
+                        setEditReviewMode(value as "manual" | "auto")
+                      }
+                      options={[
+                        { value: "manual", label: "人工验收（默认）" },
+                        { value: "auto", label: "自动验收（满足门槛直接完成）" },
+                      ]}
+                    />
                   </label>
                   {editReviewMode === "auto" ? (
                     <label className="block">
@@ -788,17 +795,15 @@ export function AiEmployeesClient({
                     <div className="flex flex-wrap items-end gap-2">
                       <label className="block w-[120px]">
                         <span className={fieldLabel}>优先级</span>
-                        <select
-                          className={input}
+                        <Select
+                          className="w-full"
                           value={workPriority}
-                          onChange={(event) => setWorkPriority(event.target.value as WorkPriority)}
-                        >
-                          {(["low", "normal", "high", "urgent"] as WorkPriority[]).map((priority) => (
-                            <option key={priority} value={priority}>
-                              {PRIORITY_LABEL[priority]}
-                            </option>
-                          ))}
-                        </select>
+                          aria-label="优先级"
+                          onValueChange={(value) => setWorkPriority(value as WorkPriority)}
+                          options={(["low", "normal", "high", "urgent"] as WorkPriority[]).map(
+                            (priority) => ({ value: priority, label: PRIORITY_LABEL[priority] }),
+                          )}
+                        />
                       </label>
                       <label className="block w-[170px]">
                         <span className={fieldLabel}>截止时间</span>
@@ -1008,19 +1013,20 @@ export function AiEmployeesClient({
 
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="w-full sm:w-[260px]">
-                    <select
-                      className={input}
+                    <Select
+                      className="w-full"
                       value={departmentId}
+                      aria-label="选择部门"
                       disabled={pending}
-                      onChange={(event) => setDepartmentId(event.target.value)}
-                    >
-                      <option value="">选择部门…</option>
-                      {candidates.departments.map((department) => (
-                        <option key={department.id} value={department.id}>
-                          {department.name}
-                        </option>
-                      ))}
-                    </select>
+                      onValueChange={setDepartmentId}
+                      options={[
+                        { value: "", label: "选择部门…" },
+                        ...candidates.departments.map((department) => ({
+                          value: department.id,
+                          label: department.name,
+                        })),
+                      ]}
+                    />
                   </div>
                   <button
                     type="button"
@@ -1039,19 +1045,20 @@ export function AiEmployeesClient({
 
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="w-full sm:w-[260px]">
-                    <select
-                      className={input}
+                    <Select
+                      className="w-full"
                       value={userId}
+                      aria-label="选择成员"
                       disabled={pending}
-                      onChange={(event) => setUserId(event.target.value)}
-                    >
-                      <option value="">选择成员…</option>
-                      {candidates.users.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.name}（{user.email}）
-                        </option>
-                      ))}
-                    </select>
+                      onValueChange={setUserId}
+                      options={[
+                        { value: "", label: "选择成员…" },
+                        ...candidates.users.map((user) => ({
+                          value: user.id,
+                          label: `${user.name}（${user.email}）`,
+                        })),
+                      ]}
+                    />
                   </div>
                   <button
                     type="button"

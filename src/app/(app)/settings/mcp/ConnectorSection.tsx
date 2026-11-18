@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
+import { Select } from "@/components/ui/select";
+
 import {
   badge,
   btnBlue,
@@ -259,15 +261,16 @@ export function ConnectorSection({
 
                 <label className="block">
                   <span className={fieldLabel}>传输协议</span>
-                  <select
-                    className={input}
+                  <Select
+                    className="w-full"
                     value={transport}
-                    onChange={(event) => setTransport(event.target.value as McpTransport)}
-                  >
-                    <option value="stdio">stdio（本地进程）</option>
-                    <option value="http">http（Streamable HTTP）</option>
-                    <option value="sse">sse（Server-Sent Events）</option>
-                  </select>
+                    onValueChange={(value) => setTransport(value as McpTransport)}
+                    options={[
+                      { value: "stdio", label: "stdio（本地进程）" },
+                      { value: "http", label: "http（Streamable HTTP）" },
+                      { value: "sse", label: "sse（Server-Sent Events）" },
+                    ]}
+                  />
                 </label>
 
                 <label className="block">
