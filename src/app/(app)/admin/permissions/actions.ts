@@ -294,3 +294,71 @@ export async function saveTemplateGrants(input: {
     return { ok: false, message: toPermissionMessage(error) };
   }
 }
+
+/** W1-03b：为成员套用 / 移除专用角色模板（仅 L1，经由 SECURITY DEFINER 函数写 memberships） */
+export async function setMemberRoleTemplate(input: {
+  userId: string;
+  templateKey: string;
+}): Promise<ActionResult> {
+  const session = await requireSession();
+
+  try {
+    const userId = String(input?.userId ?? "").trim();
+    if (!userId) {
+      throw new Error("成员 ID 缺失");
+    }
+    const templateKey = String(input?.templateKey ?? "").trim();
+
+    const requestId = (await headers()).get("x-request-id") ?? undefined;
+    const context = await resolveUserContext(session.userId, requestId);
+
+    const result = await withUserContext(context, async (client) => {
+      const actor = await resolveContextPermissions(client, context);
+      requireProtectedCapability(actor, "protected:permission_grant");
+
+      const target = await loadTargetMembership(client, userId);
+      if (target.level === "L1") {
+        throw new Error("L1 固定使用全量权限，无需套用模板");
+      }
+
+      await client.query("select app.set_member_role_template($1, $2)", [
+        target.membership_id,
+        templateKey || null,
+      ]);
+      await client.query("select app.bump_permission_revision($1)", [target.user_id]);
+
+      const template = templateKey
+        ? await client.query<{ name: string }>("select name from role_templates where id = $1", [
+            templateKey,
+          ])
+        : null;
+
+      await auditInTx(client, context, {
+        actorUserId: context.userId,
+        departmentId: target.department_id,
+        action: "permission.member_template_updated",
+        targetType: "membership",
+        targetId: target.membership_id,
+        payload: {
+          targetUserId: target.user_id,
+          targetName: target.name,
+          targetPhone: target.phone,
+          level: target.level,
+          departmentName: target.department_name,
+          templateKey: templateKey || null,
+          templateName: template?.rows[0]?.name ?? null,
+        },
+      });
+
+      return { templateName: template?.rows[0]?.name ?? null };
+    });
+
+    refreshPermissionViews();
+    return {
+      ok: true,
+      message: result.templateName ? `已套用模板「${result.templateName}」` : "已恢复为等级默认模板",
+    };
+  } catch (error) {
+    return { ok: false, message: toPermissionMessage(error) };
+  }
+}

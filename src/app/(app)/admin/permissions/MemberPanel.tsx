@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { CollapsibleSection } from "@/components/ui/collapsible";
 import { Select, type SelectOption } from "@/components/ui/select";
 import { PERMISSION_SCOPE_LABEL } from "@/lib/permissions/scope";
-import type { AdminGrantMap, AdminMember, AdminModule } from "@/types/permission-admin";
+import type { AdminGrantMap, AdminMember, AdminModule, AdminTemplate } from "@/types/permission-admin";
 import type { PermissionKey, PermissionScope } from "@/types/permission";
 import type { AccessLevel } from "@/types/profile";
 
@@ -18,11 +18,14 @@ export function MemberPanel({
   ceilings,
   members,
   templates,
+  roleTemplates,
   selectedMemberId,
   draft,
   onSelectMember,
   onModeChange,
   onScopeChange,
+  onTemplateChange,
+  templateSaving,
   onReset,
   resetting,
 }: {
@@ -30,11 +33,14 @@ export function MemberPanel({
   ceilings: Record<AccessLevel, readonly PermissionKey[]>;
   members: AdminMember[];
   templates: Record<AccessLevel, AdminGrantMap>;
+  roleTemplates: AdminTemplate[];
   selectedMemberId: string;
   draft: AdminGrantMap;
   onSelectMember: (userId: string) => void;
   onModeChange: (key: PermissionKey, mode: MemberMode) => void;
   onScopeChange: (key: PermissionKey, scope: PermissionScope) => void;
+  onTemplateChange: (templateKey: string) => void;
+  templateSaving: boolean;
   onReset: () => void;
   resetting: boolean;
 }) {
@@ -134,6 +140,28 @@ export function MemberPanel({
                   placeholder="搜索权限点、Key"
                   aria-label="搜索成员权限点"
                 />
+                {selected.level !== "L1" ? (
+                  <label className="flex items-center gap-2 whitespace-nowrap text-[12px] text-zinc-500">
+                    <span>专用模板</span>
+                    <Select
+                      className="perm-mode-select"
+                      value={selected.roleTemplateKey ?? ""}
+                      disabled={templateSaving}
+                      aria-label="专用角色模板"
+                      options={[
+                        { value: "", label: `等级默认（${selected.level}）` },
+                        ...roleTemplates
+                          .filter(
+                            (template) =>
+                              template.level === selected.level &&
+                              template.id !== selected.level.toLowerCase(),
+                          )
+                          .map((template) => ({ value: template.id, label: template.name })),
+                      ]}
+                      onValueChange={onTemplateChange}
+                    />
+                  </label>
+                ) : null}
                 <button
                   type="button"
                   className="button button-secondary"

@@ -27,6 +27,7 @@ interface MemberListRow {
   hire_date: Date | string | null;
   position: string | null;
   birthday: Date | string | null;
+  manager_user_id: string | null;
   status: "active" | "removed";
   removed_at: Date | null;
   name: string | null;
@@ -104,7 +105,7 @@ export default async function OrganizationPage({
           `select m.id as membership_id, m.user_id, m.department_id,
                   d.name as department_name, m.access_level, m.title, m.status, m.removed_at,
                   m.employee_no, m.hire_date, m.position,
-                  u.name, u.phone, u.email, u.birthday
+                  u.name, u.phone, u.email, u.birthday, u.manager_user_id
              from memberships m
              join departments d on d.id = m.department_id
              join users u on u.id = m.user_id
@@ -126,6 +127,7 @@ export default async function OrganizationPage({
       hireDate: toDateOnly(row.hire_date),
       birthday: toDateOnly(row.birthday),
       position: row.position ?? "",
+      managerUserId: row.manager_user_id ?? "",
       level: row.access_level,
       status: row.status,
       removedAt: row.removed_at ? DATE_FORMATTER.format(row.removed_at) : null,

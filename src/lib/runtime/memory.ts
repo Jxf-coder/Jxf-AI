@@ -10,6 +10,7 @@
 import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
+import { requireContextPermission } from "@/lib/permissions/server";
 
 export const MAX_MEMORY_ITEMS = 10;
 export const MAX_MEMORY_CHARS = 500;
@@ -72,14 +73,21 @@ export async function addThreadMemory(
   }
 
   return withUserContext(context, async (client) => {
-    const thread = await client.query<{ id: string }>(
-      `select id from threads
+    const thread = await client.query<{ id: string; department_id: string; created_by: string }>(
+      `select id, department_id, created_by from threads
         where id = $1 and created_by = $2 and archived_at is null`,
       [threadId, context.userId],
     );
-    if (!thread.rows[0]) {
+    const threadRow = thread.rows[0];
+    if (!threadRow) {
       throw new Error("会话不存在、已归档或无权操作");
     }
+    await requireContextPermission(client, context, "skill:use", {
+      kind: "thread",
+      id: threadRow.id,
+      departmentId: threadRow.department_id,
+      ownerUserId: threadRow.created_by,
+    });
 
     const count = await client.query<{ count: number }>(
       `select count(*)::int as count from thread_memories where thread_id = $1 and user_id = $2`,
@@ -115,6 +123,28 @@ export async function addThreadMemory(
 
 export async function deleteThreadMemory(context: UserContext, memoryId: string): Promise<void> {
   await withUserContext(context, async (client) => {
+    const found = await client.query<{
+      thread_id: string;
+      department_id: string;
+      created_by: string;
+    }>(
+      `select m.thread_id, t.department_id, t.created_by
+         from thread_memories m
+         join threads t on t.id = m.thread_id
+        where m.id = $1 and m.user_id = $2`,
+      [memoryId, context.userId],
+    );
+    const memory = found.rows[0];
+    if (!memory) {
+      return;
+    }
+    await requireContextPermission(client, context, "skill:use", {
+      kind: "thread",
+      id: memory.thread_id,
+      departmentId: memory.department_id,
+      ownerUserId: memory.created_by,
+    });
+
     const deleted = await client.query<{ id: string; thread_id: string }>(
       `delete from thread_memories where id = $1 and user_id = $2 returning id, thread_id`,
       [memoryId, context.userId],

@@ -7,6 +7,7 @@
 
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
+import { PermissionDeniedError } from "@/lib/permissions/guard";
 
 export interface RouteStatsRow {
   day: string;
@@ -260,8 +261,14 @@ export async function loadRouteStats(context: UserContext, days = 30): Promise<R
   });
 }
 
-/** 重算最近 p_days 天的聚合行；函数内部只允许 L1，非 L1 会抛 42501 */
+/** 重算最近 p_days 天的聚合行；仅 L1 可执行，非 L1 直接拒绝 */
 export async function recalcRouteStats(context: UserContext, days = 30): Promise<number> {
+  if (context.accessLevel !== "L1") {
+    throw new PermissionDeniedError({
+      allowed: false,
+      reason: "只有 L1 可以重算目录纠偏统计",
+    });
+  }
   const window = clampDays(days);
   return withUserContext(context, async (client) => {
     const { rows } = await client.query<{ rows: number }>(

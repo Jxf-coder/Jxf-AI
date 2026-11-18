@@ -28,6 +28,7 @@ export interface MemberTableRow {
   hireDate: string | null;
   birthday: string | null;
   position: string;
+  managerUserId: string;
   level: "L1" | "L2" | "L3";
   status: "active" | "removed";
   removedAt: string | null;
@@ -234,6 +235,7 @@ export function MembersTab({
         hireDate: String(formData.get("hireDate") ?? ""),
         birthday: String(formData.get("birthday") ?? ""),
         position: String(formData.get("position") ?? ""),
+        managerUserId: String(formData.get("managerUserId") ?? ""),
       });
       setNotice({ kind: result.ok ? "info" : "error", text: result.message });
       if (result.ok) {
@@ -659,6 +661,23 @@ export function MembersTab({
               <label>
                 岗位/职位（选填）
                 <input name="position" maxLength={40} placeholder="例如：交付经理、HRBP" />
+              </label>
+              <label>
+                直属主管（选填）
+                <Select
+                  className="form-select-block"
+                  name="managerUserId"
+                  defaultValue={editing?.managerUserId ?? ""}
+                  options={[
+                    { value: "", label: "不设置（由部门范围决定）" },
+                    ...rows
+                      .filter((row) => row.status === "active" && row.userId !== editing?.userId)
+                      .map((row) => ({
+                        value: row.userId,
+                        label: `${row.name || "未命名"} · ${row.departmentName}`,
+                      })),
+                  ]}
+                />
               </label>
               <label>
                 工号（选填）

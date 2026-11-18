@@ -508,6 +508,7 @@ export async function updateMemberBasics(input: {
   hireDate: string;
   birthday: string;
   position: string;
+  managerUserId: string;
 }): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
   try {
     const session = await requireSession();
@@ -517,6 +518,7 @@ export async function updateMemberBasics(input: {
     const name = input.name.trim();
     const position = input.position.trim();
     const employeeNo = input.employeeNo.trim();
+    const managerUserId = input.managerUserId.trim();
     const phone = normalizePhone(input.phone);
     if (!name || name.length > 40) {
       throw new Error("姓名必填且不超过 40 字符");
@@ -579,6 +581,31 @@ export async function updateMemberBasics(input: {
         throw error;
       }
 
+      // 汇报线：一人一主管，由 L1 维护；空字符串表示清除
+      if (managerUserId) {
+        if (managerUserId === row.user_id) {
+          throw new Error("直属主管不能是本人");
+        }
+        const manager = await client.query(
+          "select 1 from memberships where user_id = $1 and tenant_id = $2 and status = 'active'",
+          [managerUserId, context.tenantId],
+        );
+        if (manager.rowCount === 0) {
+          throw new Error("直属主管必须是本租户在岗成员");
+        }
+        const cycle = await client.query<{ cycle: boolean }>(
+          "select $1 = any(app.manager_subtree_user_ids($2)) as cycle",
+          [row.user_id, managerUserId],
+        );
+        if (cycle.rows[0]?.cycle) {
+          throw new Error("不能把该成员的下级设为其主管");
+        }
+      }
+      await client.query(
+        "update users set manager_user_id = nullif($1, '')::uuid where id = $2",
+        [managerUserId, row.user_id],
+      );
+
       // 复用数据库函数：仅 L1 可改所属部门；岗位 / 工号 / 入职日期走 HR 档案函数
       await client.query("select app.update_membership_profile($1, null, $2, null)", [
         input.membershipId,
@@ -617,6 +644,7 @@ export async function updateMemberBasics(input: {
           hireDate,
           birthday,
           position,
+          managerUserId: managerUserId || null,
         },
       });
     });

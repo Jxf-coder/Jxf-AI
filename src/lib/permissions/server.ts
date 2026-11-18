@@ -38,6 +38,7 @@ export async function resolveContextPermissions(
     tenantId: context.tenantId,
     userId: context.userId,
     level,
+    membershipId,
   });
 
   return resolveEffectivePermissions({
@@ -49,6 +50,7 @@ export async function resolveContextPermissions(
     templateGrants: loaded.templateGrants,
     userGrants: loaded.userGrants,
     version: loaded.version,
+    allowBeyondCeiling: loaded.beyondCeiling,
   });
 }
 

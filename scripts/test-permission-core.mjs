@@ -47,6 +47,20 @@ function resolve(level, userGrants = [], overrides = {}) {
   });
 }
 
+function resolveWith(level, templateGrants, allowBeyondCeiling) {
+  return resolveEffectivePermissions({
+    userId: "actor-1",
+    level,
+    activeMembershipId: `membership-${level}`,
+    activeDepartmentId: "dept-a",
+    subtreeDepartmentIds: ["dept-a", "dept-a-child"],
+    templateGrants,
+    userGrants: [],
+    version: 1,
+    allowBeyondCeiling,
+  });
+}
+
 function expectDenied(name, result, matcher) {
   check(
     name,
@@ -73,11 +87,19 @@ check(
 );
 
 const l2 = resolve("L2");
-check("L2 模板解析为 12 个节点", l2.grants.size === 12, String(l2.grants.size));
+check(
+  "L2 模板解析与等级上限一致",
+  l2.grants.size === LEVEL_CEILING.L2.length,
+  `${l2.grants.size} vs ${LEVEL_CEILING.L2.length}`,
+);
 check("L2 member:view 为 DEPT_TREE", l2.grants.get("member:view") === "DEPT_TREE");
 
 const l3 = resolve("L3");
-check("L3 模板解析为 7 个节点", l3.grants.size === 7, String(l3.grants.size));
+check(
+  "L3 模板解析与等级上限一致",
+  l3.grants.size === LEVEL_CEILING.L3.length,
+  `${l3.grants.size} vs ${LEVEL_CEILING.L3.length}`,
+);
 check("L3 member:view 为 SELF", l3.grants.get("member:view") === "SELF");
 
 const l3OverCeiling = resolve("L3", [
@@ -85,6 +107,13 @@ const l3OverCeiling = resolve("L3", [
 ]);
 check("L3 越级授权被忽略", !l3OverCeiling.grants.has("skill:publish"));
 check("L3 越级授权记录 ignoredKeys", l3OverCeiling.ignoredKeys.includes("skill:publish"));
+
+// 专用模板（Finance_Director）：允许突破等级上限，但保护区仍然不可达
+const fd = resolveWith("L2", [{ permissionKey: "trade:price_read", scope: "ALL", effect: "allow" }], true);
+check("专用模板可突破等级上限", fd.grants.get("trade:price_read") === "ALL");
+const l2Blocked = resolveWith("L2", [{ permissionKey: "trade:price_read", scope: "ALL", effect: "allow" }], false);
+check("普通 L2 被等级上限拦截", !l2Blocked.grants.has("trade:price_read"));
+check("突破上限仍不能触达保护区", !fd.grants.has("protected:permission_grant"));
 
 const l3Unknown = resolve("L3", [
   { permissionKey: "finance:export", scope: "ALL", effect: "allow" },
@@ -301,7 +330,7 @@ expectDenied(
 // 目录一致性
 // ---------------------------------------------------------------------------
 
-check("目录节点数固定为 25", PERMISSION_NODES.length === 25, String(PERMISSION_NODES.length));
+check("目录节点数固定为 64", PERMISSION_NODES.length === 64, String(PERMISSION_NODES.length));
 
 console.log(`\n[permission-core] passed=${passed} failed=${failed}`);
 if (failed > 0) {

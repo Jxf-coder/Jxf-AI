@@ -73,16 +73,18 @@ revoke insert, update, delete on permission_revisions from jxf_app;
 -- 系统模板：L1 / L2 / L3
 -- 说明：这里只写系统默认模板；成员级覆盖写 user_permission_grants。
 -- ---------------------------------------------------------------------------
-insert into role_templates (id, name, level, is_system, sort_order)
+insert into role_templates (id, name, level, is_system, sort_order, beyond_level_ceiling)
 values
-  ('l1', 'L1 老板', 'L1', true, 10),
-  ('l2', 'L2 部门管理者', 'L2', true, 20),
-  ('l3', 'L3 普通成员', 'L3', true, 30)
+  ('l1', 'L1 老板', 'L1', true, 10, false),
+  ('l2', 'L2 部门管理者', 'L2', true, 20, false),
+  ('l3', 'L3 普通成员', 'L3', true, 30, false),
+  ('fd', 'Finance_Director 财务总监', 'L2', true, 40, true)
 on conflict (id) do update
   set name = excluded.name,
       level = excluded.level,
       is_system = excluded.is_system,
-      sort_order = excluded.sort_order;
+      sort_order = excluded.sort_order,
+      beyond_level_ceiling = excluded.beyond_level_ceiling;
 
 -- L1：全部非保护区节点
 insert into role_template_grants (template_id, permission_key, scope_type, effect)
@@ -111,7 +113,46 @@ values
   ('l1', 'platform:settings', 'ALL', 'allow'),
   ('l1', 'platform:tenant', 'ALL', 'allow'),
   ('l1', 'profile:view_self', 'SELF', 'allow'),
-  ('l1', 'profile:edit_self', 'SELF', 'allow')
+  ('l1', 'profile:edit_self', 'SELF', 'allow'),
+  ('l1', 'crm:read', 'ALL', 'allow'),
+  ('l1', 'crm:write', 'DEPT', 'allow'),
+  ('l1', 'crm:assign', 'DEPT', 'allow'),
+  ('l1', 'crm:claim', 'SELF', 'allow'),
+  ('l1', 'crm:merge', 'DEPT', 'allow'),
+  ('l1', 'crm:import', 'DEPT', 'allow'),
+  ('l1', 'crm:export', 'DEPT', 'allow'),
+  ('l1', 'crm:pool_policy', 'DEPT', 'allow'),
+  ('l1', 'crm:holder_cap', 'DEPT', 'allow'),
+  ('l1', 'crm:dict_manage', 'DEPT', 'allow'),
+  ('l1', 'crm:reminder_read', 'ALL', 'allow'),
+  ('l1', 'crm:reminder_urge', 'DEPT', 'allow'),
+  ('l1', 'crm:reminder_manage', 'DEPT', 'allow'),
+  ('l1', 'crm:alert_close', 'ALL', 'allow'),
+  ('l1', 'crm:complaint_manage', 'DEPT', 'allow'),
+  ('l1', 'trade:product_read', 'ALL', 'allow'),
+  ('l1', 'trade:product_write', 'DEPT', 'allow'),
+  ('l1', 'trade:quote_read', 'ALL', 'allow'),
+  ('l1', 'trade:quote_write', 'DEPT', 'allow'),
+  ('l1', 'trade:contract_read', 'ALL', 'allow'),
+  ('l1', 'trade:contract_write', 'DEPT', 'allow'),
+  ('l1', 'trade:contract_approve', 'DEPT', 'allow'),
+  ('l1', 'trade:receivable_read', 'ALL', 'allow'),
+  ('l1', 'trade:receivable_write', 'DEPT', 'allow'),
+  ('l1', 'trade:export', 'DEPT', 'allow'),
+  ('l1', 'trade:sample_read', 'ALL', 'allow'),
+  ('l1', 'trade:sample_write', 'DEPT', 'allow'),
+  ('l1', 'trade:price_read', 'ALL', 'allow'),
+  ('l1', 'trade:credit_read', 'ALL', 'allow'),
+  ('l1', 'trade:floor_price_read', 'ALL', 'allow'),
+  ('l1', 'trade:fx_lock_read', 'ALL', 'allow'),
+  ('l1', 'trade:credit_policy', 'ALL', 'allow'),
+  ('l1', 'mail:account_read', 'ALL', 'allow'),
+  ('l1', 'mail:account_manage', 'DEPT', 'allow'),
+  ('l1', 'mail:send', 'DEPT', 'allow'),
+  ('l1', 'mail:distribute', 'DEPT', 'allow'),
+  ('l1', 'mail:campaign', 'DEPT', 'allow'),
+  ('l1', 'mail:suppression_manage', 'DEPT', 'allow'),
+  ('l1', 'mail:archive_export', 'ALL', 'allow')
 on conflict (template_id, permission_key) do update
   set scope_type = excluded.scope_type,
       effect = excluded.effect,
@@ -131,7 +172,37 @@ values
   ('l2', 'knowledge:confirm', 'DEPT', 'allow'),
   ('l2', 'audit:read', 'DEPT_TREE', 'allow'),
   ('l2', 'profile:view_self', 'SELF', 'allow'),
-  ('l2', 'profile:edit_self', 'SELF', 'allow')
+  ('l2', 'profile:edit_self', 'SELF', 'allow'),
+  ('l2', 'crm:read', 'DEPT_TREE', 'allow'),
+  ('l2', 'crm:write', 'DEPT', 'allow'),
+  ('l2', 'crm:assign', 'DEPT', 'allow'),
+  ('l2', 'crm:claim', 'SELF', 'allow'),
+  ('l2', 'crm:merge', 'DEPT', 'allow'),
+  ('l2', 'crm:import', 'DEPT', 'allow'),
+  ('l2', 'crm:export', 'DEPT', 'allow'),
+  ('l2', 'crm:pool_policy', 'DEPT', 'allow'),
+  ('l2', 'crm:holder_cap', 'DEPT', 'allow'),
+  ('l2', 'crm:reminder_read', 'DEPT_TREE', 'allow'),
+  ('l2', 'crm:reminder_urge', 'DEPT', 'allow'),
+  ('l2', 'crm:complaint_manage', 'DEPT', 'allow'),
+  ('l2', 'trade:product_read', 'DEPT_TREE', 'allow'),
+  ('l2', 'trade:product_write', 'DEPT', 'allow'),
+  ('l2', 'trade:quote_read', 'DEPT_TREE', 'allow'),
+  ('l2', 'trade:quote_write', 'DEPT', 'allow'),
+  ('l2', 'trade:contract_read', 'DEPT_TREE', 'allow'),
+  ('l2', 'trade:contract_write', 'DEPT', 'allow'),
+  ('l2', 'trade:contract_approve', 'DEPT', 'allow'),
+  ('l2', 'trade:receivable_read', 'DEPT_TREE', 'allow'),
+  ('l2', 'trade:receivable_write', 'DEPT', 'allow'),
+  ('l2', 'trade:export', 'DEPT', 'allow'),
+  ('l2', 'trade:sample_read', 'DEPT_TREE', 'allow'),
+  ('l2', 'trade:sample_write', 'DEPT', 'allow'),
+  ('l2', 'mail:account_read', 'DEPT_TREE', 'allow'),
+  ('l2', 'mail:account_manage', 'DEPT', 'allow'),
+  ('l2', 'mail:send', 'DEPT', 'allow'),
+  ('l2', 'mail:distribute', 'DEPT', 'allow'),
+  ('l2', 'mail:campaign', 'DEPT', 'allow'),
+  ('l2', 'mail:suppression_manage', 'DEPT', 'allow')
 on conflict (template_id, permission_key) do update
   set scope_type = excluded.scope_type,
       effect = excluded.effect,
@@ -146,15 +217,47 @@ values
   ('l3', 'pipeline:use', 'ALL', 'allow'),
   ('l3', 'knowledge:read', 'DEPT', 'allow'),
   ('l3', 'profile:view_self', 'SELF', 'allow'),
-  ('l3', 'profile:edit_self', 'SELF', 'allow')
+  ('l3', 'profile:edit_self', 'SELF', 'allow'),
+  ('l3', 'crm:read', 'DEPT', 'allow'),
+  ('l3', 'crm:write', 'SELF', 'allow'),
+  ('l3', 'crm:claim', 'SELF', 'allow'),
+  ('l3', 'crm:reminder_read', 'SELF', 'allow'),
+  ('l3', 'trade:product_read', 'DEPT', 'allow'),
+  ('l3', 'trade:quote_read', 'SELF', 'allow'),
+  ('l3', 'trade:quote_write', 'SELF', 'allow'),
+  ('l3', 'trade:contract_read', 'SELF', 'allow'),
+  ('l3', 'trade:contract_write', 'SELF', 'allow'),
+  ('l3', 'trade:sample_read', 'SELF', 'allow'),
+  ('l3', 'trade:sample_write', 'SELF', 'allow'),
+  ('l3', 'mail:account_read', 'SELF', 'allow'),
+  ('l3', 'mail:send', 'SELF', 'allow')
 on conflict (template_id, permission_key) do update
   set scope_type = excluded.scope_type,
       effect = excluded.effect,
       updated_at = now();
 
--- 清理模板中可能残留的未启用模块节点（财务 / 教学 / CRM）
+-- Finance_Director：财务视角，可突破 L2 天花板，但不含底价/锁汇与任何 protected:*
+insert into role_template_grants (template_id, permission_key, scope_type, effect)
+values
+  ('fd', 'crm:read', 'ALL', 'allow'),
+  ('fd', 'crm:reminder_read', 'ALL', 'allow'),
+  ('fd', 'trade:product_read', 'ALL', 'allow'),
+  ('fd', 'trade:quote_read', 'ALL', 'allow'),
+  ('fd', 'trade:contract_read', 'ALL', 'allow'),
+  ('fd', 'trade:contract_approve', 'DEPT', 'allow'),
+  ('fd', 'trade:receivable_read', 'ALL', 'allow'),
+  ('fd', 'trade:receivable_write', 'DEPT', 'allow'),
+  ('fd', 'trade:export', 'DEPT', 'allow'),
+  ('fd', 'trade:price_read', 'ALL', 'allow'),
+  ('fd', 'trade:credit_read', 'ALL', 'allow'),
+  ('fd', 'trade:credit_policy', 'ALL', 'allow')
+on conflict (template_id, permission_key) do update
+  set scope_type = excluded.scope_type,
+      effect = excluded.effect,
+      updated_at = now();
+
+-- 清理模板中可能残留的未启用模块节点（财务 / 教学 / 投放）
 delete from role_template_grants
  where permission_key like 'finance:%'
     or permission_key like 'teaching:%'
-    or permission_key like 'crm:%'
     or permission_key like 'ads:%';

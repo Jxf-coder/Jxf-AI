@@ -8,6 +8,7 @@
 import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
+import { requireContextPermission } from "@/lib/permissions/server";
 
 export interface ExperienceJobFailure {
   id: string;
@@ -71,6 +72,21 @@ export async function retryExperienceJob(
   jobId: string,
 ): Promise<void> {
   return withUserContext(context, async (client) => {
+    const job = await client.query<{ department_id: string }>(
+      `select department_id from experience_jobs
+        where id = $1 and status in ('dead', 'failed')`,
+      [jobId],
+    );
+    const target = job.rows[0];
+    if (!target) {
+      throw new Error("任务不存在、已被处理或不在当前可写范围");
+    }
+    await requireContextPermission(client, context, "knowledge:write", {
+      kind: "experience_job",
+      id: jobId,
+      departmentId: target.department_id,
+    });
+
     const { rowCount } = await client.query(
       `update experience_jobs
           set status = 'queued',

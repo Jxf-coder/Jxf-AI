@@ -39,6 +39,7 @@ interface MemberRow {
   level: AccessLevel;
   name: string | null;
   phone: string | null;
+  role_template_key: string | null;
 }
 
 export function buildModules(): AdminModule[] {
@@ -92,7 +93,7 @@ export async function loadRoleTemplatesAndMembers(
   const memberRows = await client.query<MemberRow>(
     `select m.user_id, m.id as membership_id, m.department_id,
             d.name as department_name, m.access_level as level,
-            u.name, u.phone
+            m.role_template_key, u.name, u.phone
        from memberships m
        join departments d on d.id = m.department_id
        join users u on u.id = m.user_id
@@ -138,6 +139,7 @@ export async function loadRoleTemplatesAndMembers(
     membershipId: row.membership_id,
     level: row.level,
     grants: toGrantMap(grantsByUser.get(row.user_id) ?? []),
+    roleTemplateKey: row.role_template_key,
   }));
 
   return { templates, members };

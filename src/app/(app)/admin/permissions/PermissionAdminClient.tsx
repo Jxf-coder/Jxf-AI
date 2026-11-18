@@ -18,7 +18,7 @@ import type { AccessLevel } from "@/types/profile";
 import { MemberPanel } from "./MemberPanel";
 import { TemplatePanel } from "./TemplatePanel";
 import { defaultScope } from "./parts";
-import { resetMemberGrants, saveMemberGrants, saveTemplateGrants } from "./actions";
+import { resetMemberGrants, saveMemberGrants, saveTemplateGrants, setMemberRoleTemplate } from "./actions";
 
 type AdminMode = "roles" | "grants";
 
@@ -96,6 +96,10 @@ export function PermissionAdminClient({
 
   const [pending, setPending] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [templateKeys, setTemplateKeys] = useState<Record<string, string | null>>(() =>
+    Object.fromEntries(members.map((member) => [member.userId, member.roleTemplateKey])),
+  );
   const [confirming, setConfirming] = useState<PendingConfirm>(null);
   const [notice, setNotice] = useState<{ kind: "info" | "error"; text: string } | null>(null);
 
@@ -327,6 +331,29 @@ export function PermissionAdminClient({
     }
   }
 
+  async function changeMemberTemplate(templateKey: string) {
+    if (!selectedMember || selectedMember.level === "L1" || templateSaving || pending) {
+      return;
+    }
+    setTemplateSaving(true);
+    try {
+      const result = await setMemberRoleTemplate({
+        userId: selectedMember.userId,
+        templateKey,
+      });
+      setNotice({ kind: result.ok ? "info" : "error", text: result.message });
+      if (result.ok) {
+        setTemplateKeys((current) => ({
+          ...current,
+          [selectedMember.userId]: templateKey || null,
+        }));
+        router.refresh();
+      }
+    } finally {
+      setTemplateSaving(false);
+    }
+  }
+
   function discardChanges() {
     if (mode === "roles") {
       setTemplateDrafts((current) => ({
@@ -447,17 +474,24 @@ export function PermissionAdminClient({
         <MemberPanel
           modules={modules}
           ceilings={ceilings}
-          members={members.map((member) =>
-            member.userId === currentUserId
-              ? { ...member, name: `${member.name || member.phone || "我"}（我）` }
-              : member,
-          )}
+          members={members.map((member) => {
+            const withTemplate = {
+              ...member,
+              roleTemplateKey: templateKeys[member.userId] ?? member.roleTemplateKey,
+            };
+            return member.userId === currentUserId
+              ? { ...withTemplate, name: `${member.name || member.phone || "我"}（我）` }
+              : withTemplate;
+          })}
           templates={savedTemplates}
+          roleTemplates={templates}
           selectedMemberId={selectedMemberId}
           draft={memberDraft}
           onSelectMember={selectMember}
           onModeChange={changeMemberMode}
           onScopeChange={changeMemberScope}
+          onTemplateChange={changeMemberTemplate}
+          templateSaving={templateSaving}
           onReset={requestResetMember}
           resetting={resetting}
         />

@@ -11,6 +11,7 @@
 import { auditInTx } from "@/lib/audit";
 import type { UserContext } from "@/lib/db/user-context";
 import { withUserContext } from "@/lib/db/user-context";
+import { requireContextPermission } from "@/lib/permissions/server";
 
 import type { Queryable } from "./capture";
 import {
@@ -76,6 +77,7 @@ export async function saveExperiencePolicy(
   const policy = normalizePolicy(input);
 
   return withUserContext(context, async (client) => {
+    await requireContextPermission(client, context, "platform:settings");
     await client.query(
       "select app.save_experience_policy($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
       [
@@ -164,6 +166,7 @@ export async function saveChannelPolicies(
   }
 
   return withUserContext(context, async (client) => {
+    await requireContextPermission(client, context, "platform:settings");
     for (const input of list) {
       await client.query("select app.save_experience_channel_policy($1, $2, $3)", [
         input.departmentId,

@@ -42,12 +42,16 @@ export interface ResolvePermissionsInput {
   templateGrants: readonly GrantRule[];
   userGrants: readonly GrantRule[];
   version?: number;
+  /** 专用角色模板（如 Finance_Director）可突破等级上限；保护区仍然不可达 */
+  allowBeyondCeiling?: boolean;
 }
 
 export interface LoadedGrantRules {
   templateGrants: GrantRule[];
   userGrants: GrantRule[];
   version: number;
+  /** 该成员所用模板是否允许突破等级上限 */
+  beyondCeiling: boolean;
 }
 
 interface TemplateGrantRow {
@@ -115,7 +119,7 @@ export function resolveEffectivePermissions(input: ResolvePermissionsInput): Res
 
     const key = rule.permissionKey;
 
-    if (!ceiling.has(key)) {
+    if (!ceiling.has(key) && !input.allowBeyondCeiling) {
       ignored.add(key);
       return;
     }
@@ -177,14 +181,34 @@ export function resolveEffectivePermissions(input: ResolvePermissionsInput): Res
 /** 读取模板授权 + 用户授权 + 版本号；调用方必须已在用户上下文事务内。 */
 export async function loadGrantRules(
   client: PoolClient,
-  input: { tenantId: string; userId: string; level: AccessLevel },
+  input: { tenantId: string; userId: string; level: AccessLevel; membershipId?: string | null },
 ): Promise<LoadedGrantRules> {
+  // 成员可挂专用模板（如 fd）；未挂时沿用等级默认模板（l1/l2/l3）
+  let templateId = input.level.toLowerCase();
+  if (input.membershipId) {
+    const membership = await client.query<{ role_template_key: string | null }>(
+      `select role_template_key
+         from memberships
+        where id = $1 and tenant_id = $2`,
+      [input.membershipId, input.tenantId],
+    );
+    const key = membership.rows[0]?.role_template_key;
+    if (key) {
+      templateId = key;
+    }
+  }
+
+  const templateMeta = await client.query<{ beyond: boolean }>(
+    "select coalesce(beyond_level_ceiling, false) as beyond from role_templates where id = $1",
+    [templateId],
+  );
+
   const template = await client.query<TemplateGrantRow>(
     `select g.permission_key, g.scope_type, g.effect
        from role_template_grants g
        join role_templates t on t.id = g.template_id
-      where t.level = $1`,
-    [input.level],
+      where t.id = $1`,
+    [templateId],
   );
 
   const user = await client.query<UserGrantRow>(
@@ -213,5 +237,6 @@ export async function loadGrantRules(
       expiresAt: row.expires_at ? row.expires_at.toISOString() : null,
     })),
     version: Number(revision.rows[0]?.version ?? 0),
+    beyondCeiling: Boolean(templateMeta.rows[0]?.beyond ?? false),
   };
 }

@@ -11,10 +11,11 @@ import { AuditTab } from "./AuditTab";
 import { GrantsTab } from "./GrantsTab";
 import { MineTab } from "./MineTab";
 import { RolesTab } from "./RolesTab";
+import { ScopeGrantsTab } from "./ScopeGrantsTab";
 
 export const dynamic = "force-dynamic";
 
-type TabKey = "mine" | "roles" | "grants" | "audit";
+type TabKey = "mine" | "roles" | "grants" | "scope" | "audit";
 type AuditLogType = "all" | "permission" | "system";
 type AuditOrder = "asc" | "desc";
 
@@ -22,10 +23,11 @@ const TAB_LABEL: Record<TabKey, string> = {
   mine: "我的权限",
   roles: "角色管理",
   grants: "成员授权",
+  scope: "数据范围例外",
   audit: "审计日志",
 };
 
-const TAB_ORDER: readonly TabKey[] = ["mine", "roles", "grants", "audit"];
+const TAB_ORDER: readonly TabKey[] = ["mine", "roles", "grants", "scope", "audit"];
 
 export default async function PermissionsPage({
   searchParams,
@@ -94,6 +96,8 @@ export default async function PermissionsPage({
           <RolesTab />
         ) : active === "grants" ? (
           <GrantsTab />
+        ) : active === "scope" ? (
+          <ScopeGrantsTab />
         ) : active === "audit" ? (
           <AuditTab logType={logType} order={auditOrder} />
         ) : (

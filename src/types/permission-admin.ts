@@ -57,6 +57,8 @@ export interface AdminMember {
   membershipId: string;
   level: AccessLevel;
   grants: AdminGrantMap;
+  /** 专用角色模板；null 表示沿用等级默认模板 */
+  roleTemplateKey: string | null;
 }
 
 export interface AdminPayloadGrant {

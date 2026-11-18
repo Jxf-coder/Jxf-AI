@@ -64,6 +64,10 @@ const WHITELIST = new Map([
     "原始文件只读下载：RLS 校验可见性，越权与不存在统一 404",
   ],
   [
+    "src/app/api/crm/documents/[id]/route.ts::GET",
+    "客户附件只读下载：RLS 跟随 crm_accounts 判可见性，越权与不存在统一 404",
+  ],
+  [
     "src/app/api/mcp/route.ts::POST",
     "MCP 端点：Bearer 令牌按 hash 反查并绑定在岗任用，工具 scope 与权限点均在工具内校验",
   ],
