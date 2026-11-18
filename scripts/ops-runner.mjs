@@ -48,6 +48,8 @@ const HEALTH_INTERVAL_MS =
   Number.parseInt(process.env.MCP_HEALTH_INTERVAL_MS ?? "300000", 10) || 300_000;
 const PIPELINE_TICK_MS =
   Number.parseInt(process.env.PIPELINE_TICK_MS ?? "60000", 10) || 60_000;
+const AUDIT_PARTITION_INTERVAL_MS =
+  Number.parseInt(process.env.AUDIT_PARTITION_INTERVAL_MS ?? "86400000", 10) || 86_400_000;
 
 let stopping = false;
 
@@ -251,6 +253,19 @@ async function runPipelineTick(client) {
   }
 }
 
+async function ensureAuditPartitions(client) {
+  try {
+    const result = await client.query("select app.ensure_audit_partitions(4) as created");
+    const created = Number(result.rows[0]?.created ?? 0);
+    if (created > 0) {
+      log("已预建审计分区", { created });
+    }
+  } catch (error) {
+    // 分区预建失败不阻断 runner 的其他职责；迁移未完成时函数尚不存在
+    log("审计分区预建失败", { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!DB || !process.env.JXF_OWNER_USER || !process.env.JXF_OWNER_PASSWORD) {
@@ -259,6 +274,8 @@ async function main() {
 
   const client = new Client({ connectionString: OWNER_URL, application_name: "jxf-ops-runner" });
   await client.connect();
+
+  await ensureAuditPartitions(client);
 
   // 上一个 runner 异常退出时，running 任务不会自己结束，启动时统一收口
   const swept = await client.query(
@@ -297,6 +314,7 @@ async function main() {
   const pipelineEnabled = args["no-pipelines"] !== true;
   let lastHealthAt = args.once === true ? Date.now() : 0;
   let lastPipelineAt = args.once === true ? Date.now() : 0;
+  let lastAuditPartitionAt = Date.now();
 
   log("已启动", {
     once: args.once === true,
@@ -305,10 +323,16 @@ async function main() {
     health_interval_ms: HEALTH_INTERVAL_MS,
     pipelines_enabled: pipelineEnabled,
     pipeline_tick_ms: PIPELINE_TICK_MS,
+    audit_partition_interval_ms: AUDIT_PARTITION_INTERVAL_MS,
   });
 
   try {
     while (!stopping) {
+      if (Date.now() - lastAuditPartitionAt >= AUDIT_PARTITION_INTERVAL_MS) {
+        lastAuditPartitionAt = Date.now();
+        await ensureAuditPartitions(client);
+      }
+
       if (healthEnabled && Date.now() - lastHealthAt >= HEALTH_INTERVAL_MS) {
         lastHealthAt = Date.now();
         await runHealthSweep(client);

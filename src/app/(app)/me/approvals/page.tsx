@@ -7,6 +7,7 @@ import { resolveContextPermissions } from "@/lib/permissions/server";
 import type { ResolvedPermissions } from "@/types/permission";
 
 import { ApprovalsClient, type PendingApproval, type DecidedApproval } from "./ApprovalsClient";
+import { ClaimApprovals, type ClaimApprovalItem } from "./ClaimApprovals";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,17 @@ interface HandoverRow {
   asset_id: string;
   asset_label: string;
   to_name: string | null;
+}
+
+interface ClaimQueryRow {
+  id: string;
+  account_id: string;
+  account_code: string;
+  account_name: string;
+  department_name: string | null;
+  requester_name: string | null;
+  requester_level: string | null;
+  created_at: Date;
 }
 
 const TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
@@ -83,8 +95,48 @@ export default async function ApprovalsPage() {
         }).allowed
       : false;
 
+    const claimRows = await client.query<ClaimQueryRow>(
+      `select r.id, r.account_id, a.code as account_code, a.name as account_name,
+              d.name as department_name, u.name as requester_name,
+              app.effective_access_level(r.requester_user_id) as requester_level,
+              r.created_at
+         from crm_claim_requests r
+         join crm_accounts a
+           on a.id = r.account_id
+          and a.pool_status = 'public'
+          and a.archived_at is null
+         left join users u on u.id = r.requester_user_id
+         left join departments d on d.id = r.department_id
+        where r.tenant_id = $1
+          and r.status = 'pending'
+          and r.requester_user_id <> app.current_user_id()
+          and (
+            app.current_access_level() = 'L1'
+            or (app.current_access_level() = 'L2'
+                and app.can_write(r.department_id)
+                and app.effective_access_level(r.requester_user_id) = 'L3')
+          )
+        order by r.created_at`,
+      [context.tenantId],
+    );
+
+    const claims: ClaimApprovalItem[] = claimRows.rows.map((row) => ({
+      id: row.id,
+      accountId: row.account_id,
+      accountLabel: `${row.account_name}（${row.account_code}）`,
+      departmentName: row.department_name ?? "未知部门",
+      requesterName: row.requester_name?.trim() || "未命名成员",
+      requesterLevel: row.requester_level ?? "L3",
+      submittedAt: formatTime(row.created_at),
+    }));
+
     if (!canApprove) {
-      return { canApprove, pending: [] as PendingApproval[], decided: [] as DecidedApproval[] };
+      return {
+        canApprove,
+        claims,
+        pending: [] as PendingApproval[],
+        decided: [] as DecidedApproval[],
+      };
     }
 
     const pendingRows = await client.query<ApprovalRow>(
@@ -144,6 +196,7 @@ export default async function ApprovalsPage() {
 
     return {
       canApprove,
+      claims,
       pending: pendingRows.rows.map(toPending),
       decided: decidedRows.rows.map(toDecided),
     };
@@ -155,13 +208,16 @@ export default async function ApprovalsPage() {
         <div>
           <h1 className="page-title">审批中心</h1>
           <p className="page-subtitle">
-            离职交接审批：通过后资产完成转移并停用账号，驳回或撤回则恢复在职。
+            客户领用申请与离职交接审批统一在这里处理；处理结果立即生效，其他审批人的列表同步消失。
           </p>
         </div>
       </header>
 
+      {/* 常驻挂载：处理完最后一条后列表会清空，成功提示仍需展示 */}
+      <ClaimApprovals requests={data.claims} />
+
       {!data.canApprove ? (
-        <p className="hint">当前账号没有审批权限，仅 L1 可处理离职交接申请。</p>
+        data.claims.length === 0 ? <p className="hint">当前账号没有待处理的审批。</p> : null
       ) : (
         <ApprovalsClient pending={data.pending} decided={data.decided} />
       )}

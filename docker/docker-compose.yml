@@ -157,7 +157,8 @@ services:
       args:
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     image: jxf-ai/web:0.1.0
-    restart: unless-stopped
+    # 由使用者手动启停：不随 Docker 守护进程自动拉起
+    restart: "no"
     init: true
     environment: &app-env
       NODE_ENV: production
@@ -240,6 +241,9 @@ services:
         condition: service_completed_successfully
     expose:
       - "3000"
+    ports:
+      # 工作台直连入口：宿主机 3000 → 容器 3000；仅本机可连，公网走临时隧道
+      - "127.0.0.1:${JXF_WEB_PORT:-3000}:3000"
     volumes:
       # 知识库原件落盘目录：必须独立于容器可写层，否则重建容器即丢文件
       - uploads:/app/public/uploads
@@ -252,8 +256,29 @@ services:
       retries: 5
       start_period: 30s
     networks:
+      edge:
+        # 容器网络内的稳定别名：隧道等旁路服务用 jxf-ai:3000 访问工作台
+        aliases:
+          - jxf-ai
+      internal:
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Cloudflare Quick Tunnel：临时公网入口
+  #   - 目标固定为容器网络别名 jxf-ai:3000（即 web 服务）
+  #   - 访问地址在日志里：docker compose logs jxf-ai-tunnel | grep trycloudflare
+  #   - 临时隧道每次启动都会换域名，仅供联调演示；需要固定域名请改用命名隧道
+  # ---------------------------------------------------------------------------
+  jxf-ai-tunnel:
+    image: cloudflare/cloudflared:latest
+    # 与工作台一致：不自动重启，由使用者手动控制
+    restart: "no"
+    command: ["tunnel", "--no-autoupdate", "--url", "http://jxf-ai:3000"]
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
       - edge
-      - internal
     logging: *default-logging
 
   # ---------------------------------------------------------------------------
@@ -293,8 +318,8 @@ services:
       # Caddyfile 中 localhost → 127.0.0.1 的跳转需要带上宿主机端口
       JXF_HOST_PORT: "${JXF_HTTP_PORT:-3000}"
     ports:
-      # 默认只开放本机 3000：宿主机 3000 → Caddy 80 → web:3000
-      - "127.0.0.1:${JXF_HTTP_PORT:-3000}:80"
+      # web 已直占宿主机 3000；Caddy 边缘入口改到 3080 避免端口冲突
+      - "127.0.0.1:${JXF_EDGE_PORT:-3080}:80"
       # 默认不开放 443；启用 TLS（JXF_SITE_ADDRESS 设为域名）时再放开
       # - "${JXF_HTTPS_PORT:-443}:443"
     volumes:

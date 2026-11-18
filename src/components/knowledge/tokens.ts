@@ -16,6 +16,28 @@ export const tabActive =
 export const tabIdle =
   "whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] font-medium text-zinc-600 transition-colors hover:text-zinc-900 sm:px-4";
 
+/** 板块级导航（外贸CRM 下的客户 / 产品 / …）：下划线式，与页内控件拉开层级 */
+export const sectionNav = "flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-black/[0.06]";
+export const sectionNavActive =
+  "relative -mb-px border-b-2 border-apple-blue pb-2.5 text-[14px] font-semibold text-zinc-900";
+export const sectionNavIdle =
+  "relative -mb-px border-b-2 border-transparent pb-2.5 text-[14px] font-medium text-zinc-500 transition-colors hover:text-zinc-900";
+
+/** 页内视图切换：分段控件（灰底容器 + 白底高亮），刻意区别于页签 */
+export const segmented = "inline-flex items-center gap-1 rounded-xl bg-apple-canvas p-1";
+export const segmentedActive =
+  "rounded-lg bg-white px-3.5 py-1.5 text-[12px] font-semibold text-zinc-900 shadow-sm";
+export const segmentedIdle =
+  "rounded-lg px-3.5 py-1.5 text-[12px] font-medium text-zinc-500 transition-colors hover:text-zinc-900";
+
+/** 详情页内页签：小号下划线 + 横向滚动，页签多时只滚动不换行 */
+export const subNavScroll = "mt-5 overflow-x-auto [scrollbar-width:none]";
+export const subNavTrack = "flex min-w-max items-center gap-5 border-b border-black/[0.06]";
+export const subNavActive =
+  "-mb-px whitespace-nowrap border-b-2 border-zinc-900 pb-2.5 text-[13px] font-semibold text-zinc-900";
+export const subNavIdle =
+  "-mb-px whitespace-nowrap border-b-2 border-transparent pb-2.5 text-[13px] font-medium text-zinc-500 transition-colors hover:text-zinc-900";
+
 export const card = "mb-4 rounded-2xl border border-hairline bg-white p-4 shadow-card sm:p-6";
 export const cardHead = "mb-3 flex items-baseline justify-between gap-4";
 export const cardTitle = "text-base font-semibold tracking-tight text-zinc-900";
@@ -56,6 +78,19 @@ const badgeTones: Record<Tone, string> = {
 };
 export function badge(tone: Tone = "muted"): string {
   return `${badgeBase} ${badgeTones[tone]}`;
+}
+
+/** 客户等级色阶：A 紫 / B 蓝 / C 灰 / D 常规黑，与 L1/L2/L3 的视觉约定一致 */
+export function gradeBadge(grade: string): string {
+  const tone =
+    grade === "A"
+      ? "border-purple-100 bg-purple-50 text-purple-600"
+      : grade === "B"
+        ? "border-blue-100 bg-blue-50 text-blue-600"
+        : grade === "C"
+          ? "border-slate-200 bg-slate-100 text-slate-600"
+          : "border-black/[0.04] bg-apple-canvas text-zinc-900";
+  return `${badgeBase} ${tone}`;
 }
 export const badgeActive =
   "inline-flex items-center whitespace-nowrap rounded-full border border-apple-blue/15 bg-apple-blue-soft px-2.5 py-0.5 text-[11px] font-semibold text-apple-blue";

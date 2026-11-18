@@ -21,6 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let memberships: ActiveMembership[] = [];
   let snapshot: PermissionSnapshot | null = null;
   let pendingApprovals = 0;
+  let pendingClaimApprovals = 0;
   let pendingWorkReviews = 0;
 
   try {
@@ -38,6 +39,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             "select app.pending_approval_count() as count",
           );
           pendingApprovals = countResult.rows[0]?.count ?? 0;
+          // 客户领用申请：L1 全部、L2 只看本部门 L3 的申请，排除自己提交的
+          const claimCount = await client.query<{ count: number }>(
+            `select count(*)::int as count
+               from crm_claim_requests r
+               join crm_accounts a
+                 on a.id = r.account_id
+                and a.pool_status = 'public'
+                and a.archived_at is null
+              where r.tenant_id = $1
+                and r.status = 'pending'
+                and r.requester_user_id <> app.current_user_id()
+                and (
+                  app.current_access_level() = 'L1'
+                  or (app.current_access_level() = 'L2'
+                      and app.can_write(r.department_id)
+                      and app.effective_access_level(r.requester_user_id) = 'L3')
+                )`,
+            [context.tenantId],
+          );
+          pendingClaimApprovals = claimCount.rows[0]?.count ?? 0;
           // AI 员工「待验收」数字：工作项表未建时降级为 0
           const workCount = await client.query<{ count: number }>(
             `select case when to_regclass('public.work_items') is null then 0
@@ -72,6 +93,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           level: membership.level,
         }))}
         pendingApprovals={pendingApprovals}
+        pendingClaimApprovals={pendingClaimApprovals}
         pendingWorkReviews={pendingWorkReviews}
       >
         {children}

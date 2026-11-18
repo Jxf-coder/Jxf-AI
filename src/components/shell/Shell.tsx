@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { usePermission } from "@/components/permissions/usePermission";
 import { BrandMark } from "@/components/brand/BrandMark";
-import { AiIcon, BellIcon, ChatIcon, CloseIcon, KnowledgeIcon, LayersIcon, MenuIcon, PlugIcon, SearchIcon, SkillIcon } from "@/components/ui/icons";
+import { AiIcon, BellIcon, ChatIcon, CloseIcon, KnowledgeIcon, LayersIcon, MenuIcon, PlugIcon, SearchIcon, SkillIcon, UserIcon } from "@/components/ui/icons";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { DepartmentSwitcher, type DepartmentOption } from "@/components/shell/DepartmentSwitcher";
 import { ProfileMenu } from "@/components/shell/ProfileMenu";
@@ -19,6 +19,7 @@ interface ShellProps {
   activeDepartmentId: string | null;
   memberships: DepartmentOption[];
   pendingApprovals: number;
+  pendingClaimApprovals: number;
   pendingWorkReviews: number;
   children: ReactNode;
 }
@@ -31,6 +32,7 @@ export function Shell({
   activeDepartmentId,
   memberships,
   pendingApprovals,
+  pendingClaimApprovals,
   pendingWorkReviews,
   children,
 }: ShellProps) {
@@ -75,6 +77,19 @@ export function Shell({
         <KnowledgeIcon size={18} />
       </span>
       <span className="nav-label">知识库</span>
+    </Link>
+  ) : null;
+
+  const crmLink = can("crm:read") ? (
+    <Link
+      href="/crm/accounts"
+      className={`nav-item${pathname.startsWith("/crm") ? " is-active" : ""}`}
+      aria-current={pathname.startsWith("/crm") ? "page" : undefined}
+    >
+      <span className="nav-icon">
+        <UserIcon size={18} />
+      </span>
+      <span className="nav-label">外贸CRM</span>
     </Link>
   ) : null;
 
@@ -124,6 +139,12 @@ export function Shell({
     <>
       {chatLink}
       {mcpLink}
+      {crmLink ? (
+        <div className="nav-section">
+          <p className="nav-section-label">Business</p>
+          {crmLink}
+        </div>
+      ) : null}
       <div className="nav-section">
         <p className="nav-section-label">Workspace</p>
         {knowledgeLink}
@@ -205,19 +226,31 @@ export function Shell({
               </kbd>
             </button>
 
-            {can("member:manage") ? (
+            {can("member:manage") || pendingClaimApprovals > 0 ? (
               <Link
-                href="/me/approvals"
+                href={
+                  pendingApprovals > 0 || can("member:manage")
+                    ? "/me/approvals"
+                    : "/crm/accounts?view=pool"
+                }
                 className="topbar-bell"
                 aria-label={
-                  pendingApprovals > 0 ? `审批中心，${pendingApprovals} 条待审批` : "审批中心"
+                  pendingApprovals + pendingClaimApprovals > 0
+                    ? `审批提醒，${pendingApprovals + pendingClaimApprovals} 条待处理`
+                    : "审批中心"
                 }
-                title="审批中心"
+                title={
+                  pendingClaimApprovals > 0
+                    ? `审批中心 · 含 ${pendingClaimApprovals} 条客户领用申请`
+                    : "审批中心"
+                }
               >
                 <BellIcon size={18} />
-                {pendingApprovals > 0 ? (
+                {pendingApprovals + pendingClaimApprovals > 0 ? (
                   <span className="topbar-bell-count">
-                    {pendingApprovals > 99 ? "99+" : pendingApprovals}
+                    {pendingApprovals + pendingClaimApprovals > 99
+                      ? "99+"
+                      : pendingApprovals + pendingClaimApprovals}
                   </span>
                 ) : null}
               </Link>
