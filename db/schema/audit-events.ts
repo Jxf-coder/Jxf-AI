@@ -4,6 +4,7 @@ import {
   index,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -13,12 +14,13 @@ import { users } from "./auth";
 
 /**
  * 审计事件：insert-only。
+ * 表按 created_at 按月分区（migration 0045），因此主键必须带上分区键，为 (id, created_at)。
  * 不做 UPDATE / DELETE 策略，并显式撤销 jxf_app 的更新与删除权限。
  */
 export const auditEvents = pgTable(
   "audit_events",
   {
-    id: bigserial("id", { mode: "number" }).primaryKey(),
+    id: bigserial("id", { mode: "number" }).notNull(),
     tenantId: uuid("tenant_id").notNull(),
     actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
     /** 事件发生的部门上下文：用于 L2 的「本部门及下级」审计可见性；顶层/登录事件可为空 */
@@ -32,6 +34,10 @@ export const auditEvents = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, precision: 3 }).notNull().defaultNow(),
   },
   (table) => [
+    primaryKey({
+      name: "audit_events_pkey",
+      columns: [table.id, table.createdAt],
+    }),
     index("audit_events_tenant_created_idx").on(table.tenantId, table.createdAt),
     index("audit_events_actor_idx").on(table.actorUserId),
     index("audit_events_department_idx").on(table.departmentId),

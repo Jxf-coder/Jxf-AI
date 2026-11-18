@@ -316,6 +316,90 @@
       "when": 1794232800000,
       "tag": "0044_notification_channels",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1794236400000,
+      "tag": "0045_audit_partitioning",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1794240000000,
+      "tag": "0046_role_template_decoupling",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1794243600000,
+      "tag": "0047_user_manager_line",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1794247200000,
+      "tag": "0048_exception_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1794250800000,
+      "tag": "0049_trade_dictionaries",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1794254400000,
+      "tag": "0050_crm_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1794258000000,
+      "tag": "0051_crm_pool",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1794261600000,
+      "tag": "0052_crm_merges",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1794265200000,
+      "tag": "0053_crm_interactions",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1794268800000,
+      "tag": "0054_crm_claim_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1794272400000,
+      "tag": "0055_crm_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1794276000000,
+      "tag": "0056_trade_code_rules",
+      "breakpoints": true
     }
   ]
 }
