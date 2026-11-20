@@ -6,10 +6,19 @@ public/uploads/
 out/
 *.tsbuildinfo
 
-# 环境变量：仅保留模板
+# 环境变量：仅保留模板（含任意子目录）
 .env
 .env.*
+**/.env
+**/.env.*
 !.env.example
+!**/.env.example
+
+# 私钥与证书
+*.pem
+*.key
+*.p12
+*.pfx
 
 # 运行时数据与日志
 data/
@@ -30,12 +39,9 @@ backups/
 .DS_Store
 Thumbs.db
 
+# 项目文档：只保留在工作区，不进入版本库与远程仓库
+docs/
+doc/
+
 # AOCI 项目级 MCP 配置：含本机绝对路径与数据库连接串，只保留在本地
 .trae/mcp.json
-
-# 本地评审资料：只保留在工作区，不进入版本库
-docs/architecture/MCP工具能力梳理报告.md
-docs/architecture/WorkBuddy连接器清单.md
-docs/architecture/原项目技能盘点报告.md
-docs/architecture/知识库十目录与蒸馏对标报告.md
-docs/architecture/知识库经验沉淀融合方案.md
